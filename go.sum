@@ -58,6 +58,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/quay/claircore v1.5.22 h1:xvnLnRYsEQzbFHFYO0YH6MfeB7eDOi+ulC+uJx9SIUc=
 github.com/quay/claircore v1.5.22/go.mod h1:G4xRjAxqs+um0MMeMGR+vDY70tFPmCRnJjoUxCz79no=
+github.com/quay/claircore v1.5.24 h1:xuih0QEP6QL/eejgujOYG4Cy8Ny5DpEDT6zAc9L1mh4=
+github.com/quay/claircore v1.5.24/go.mod h1:G4xRjAxqs+um0MMeMGR+vDY70tFPmCRnJjoUxCz79no=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.1 h1:Ou41VVR3nMWWmTiEUnj0OlsgOSCUFgsPAOl6jRIcVtQ=
