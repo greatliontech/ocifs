@@ -36,13 +36,18 @@ func main() {
 }
 
 func rootCmdRunE(cmd *cobra.Command, args []string) error {
-	ofs, err := ocifs.New()
+	ofs, err := ocifs.New("/tmp/ocifs")
+	if err != nil {
+		return err
+	}
+
+	h, err := ofs.Pull(rootFlags.ImageRef)
 	if err != nil {
 		return err
 	}
 
 	// Create a FUSE server
-	server, err := ofs.Mount(rootFlags.ImageRef, rootFlags.MountPoint)
+	server, err := ofs.Mount(h, rootFlags.MountPoint)
 	if err != nil {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}

@@ -8,71 +8,33 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
-type Store struct {
-	workDir string
-	lp      layout.Path
-}
-
-type LayerIndex struct {
+type layerIndex struct {
 	files map[string]*tar.Header
 	h     v1.Hash
 }
 
-func (l *LayerIndex) Hash() v1.Hash {
+func (l *layerIndex) Hash() v1.Hash {
 	return l.h
 }
 
-func (l *LayerIndex) Files() map[string]*tar.Header {
+func (l *layerIndex) Files() map[string]*tar.Header {
 	return l.files
 }
 
-func NewStore(workDir string) (*Store, error) {
-	workDir = filepath.Clean(workDir)
-
-	// if dir does not exist, create it
-	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(workDir, 0755); err != nil {
-			return nil, err
-		}
-		// create index.json
-		idxFilePath := filepath.Join(workDir, "index.json")
-		if err := os.WriteFile(idxFilePath, []byte("{}"), 0644); err != nil {
-			return nil, err
-		}
-	} else if err != nil {
-		return nil, err
-	}
-
-	// at this point, if the directory exists, it should be a valid layout
-	lp, err := layout.FromPath(workDir)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Store{
-		workDir: workDir,
-		lp:      lp,
-	}, nil
+func (s *OCIFS) unpackedPath(h v1.Hash) string {
+	return filepath.Join(string(s.lp), "unpacked", h.Algorithm, h.Hex)
 }
 
-func (s *Store) Path() string {
-	return s.workDir
-}
-
-func (s *Store) UnpackedPath(h v1.Hash) string {
-	return filepath.Join(s.workDir, "unpacked", h.Algorithm, h.Hex)
-}
-
-func (s *Store) Index(h v1.Hash) ([]*LayerIndex, error) {
+func (s *OCIFS) getLayerIndexes(h *v1.Hash) ([]*layerIndex, error) {
 	// get image by hash
-	img, err := s.lp.Image(h)
+	img, err := s.lp.Image(*h)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +46,7 @@ func (s *Store) Index(h v1.Hash) ([]*LayerIndex, error) {
 		return nil, err
 	}
 
-	slog.Info("image len layers", "layers", len(layers))
-
-	idx := make([]*LayerIndex, len(layers))
+	idx := make([]*layerIndex, len(layers))
 
 	for i, layer := range layers {
 		lh, err := layer.Digest()
@@ -96,7 +56,7 @@ func (s *Store) Index(h v1.Hash) ([]*LayerIndex, error) {
 		}
 		slog.Info("layer digest", "digest", lh)
 
-		targetDir := filepath.Join(s.workDir, "unpacked", h.Algorithm, lh.Hex)
+		targetDir := filepath.Join(string(s.lp), "unpacked", h.Algorithm, lh.Hex)
 		idxName := targetDir + ".json"
 
 		data, err := os.ReadFile(idxName)
@@ -104,7 +64,7 @@ func (s *Store) Index(h v1.Hash) ([]*LayerIndex, error) {
 			return nil, err
 		}
 
-		lidx := &LayerIndex{
+		lidx := &layerIndex{
 			files: map[string]*tar.Header{},
 			h:     lh,
 		}
@@ -118,7 +78,21 @@ func (s *Store) Index(h v1.Hash) ([]*LayerIndex, error) {
 	return idx, nil
 }
 
-func (s *Store) Pull(imageRef string) (*v1.Hash, error) {
+func (s *OCIFS) ConfigFile(h *v1.Hash) (*v1.ConfigFile, error) {
+	img, err := s.lp.Image(*h)
+	if err != nil {
+		return nil, err
+	}
+
+	return img.ConfigFile()
+}
+
+func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
+	// look in cache first
+	if ce, ok := s.cache[imageRef]; ok && ce.exp.After(time.Now()) {
+		return ce.hash, nil
+	}
+
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
 		slog.Error("parse reference", "error", err)
@@ -170,17 +144,23 @@ func (s *Store) Pull(imageRef string) (*v1.Hash, error) {
 		}
 	}
 
+	// add to cache
+	s.cache[imageRef] = &cacheEntry{
+		hash: h,
+		exp:  time.Now().Add(s.exp),
+	}
+
 	return h, nil
 }
 
-func (s *Store) unpackLayer(layer v1.Layer) error {
+func (s *OCIFS) unpackLayer(layer v1.Layer) error {
 	h, err := layer.Digest()
 	if err != nil {
 		slog.Error("get layer digest", "error", err)
 		return err
 	}
 
-	targetDir := filepath.Join(s.workDir, "unpacked", h.Algorithm, h.Hex)
+	targetDir := filepath.Join(string(s.lp), "unpacked", h.Algorithm, h.Hex)
 
 	if _, err := os.Stat(targetDir); err == nil {
 		// if index file exists, we assume the layer has already been unpacked
@@ -209,8 +189,8 @@ func (s *Store) unpackLayer(layer v1.Layer) error {
 	}
 
 	idxName := targetDir + ".json"
-	// marshal index to json pretty
-	data, err := json.MarshalIndent(idx, "", "  ")
+	// marshal index to json
+	data, err := json.Marshal(idx)
 	if err != nil {
 		slog.Error("marshal index", "error", err)
 		return err

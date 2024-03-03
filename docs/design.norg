@@ -1,4 +1,0 @@
-- ( ) download image and cache
-- ( ) unpack and create descriptor json file
-- ( ) unify fs and mount
-- ( ) capture Ctrl+C and unmount
