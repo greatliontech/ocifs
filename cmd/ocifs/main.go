@@ -36,7 +36,7 @@ func main() {
 }
 
 func rootCmdRunE(cmd *cobra.Command, args []string) error {
-	ofs, err := ocifs.New("/tmp/ocifs")
+	ofs, err := ocifs.New()
 	if err != nil {
 		return err
 	}

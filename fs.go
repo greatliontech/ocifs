@@ -193,6 +193,23 @@ func (f *ociFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrO
 	return fs.OK
 }
 
+var _ = (fs.NodeReleaser)((*ociFile)(nil))
+
+func (f *ociFile) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
+	slog.Info("Release", "path", f.path)
+	ofh, ok := fh.(*ociFileHandle)
+	if !ok {
+		slog.Error("Error getting file handle", "path", f.path)
+		return syscall.EIO
+	}
+	err := ofh.f.Close()
+	if err != nil {
+		slog.Error("Error closing file", "path", f.path, "error", err)
+		return syscall.EIO
+	}
+	return fs.OK
+}
+
 type unionFile struct {
 	entry *tar.Header
 	root  string

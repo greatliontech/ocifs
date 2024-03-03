@@ -15,21 +15,32 @@ type cacheEntry struct {
 }
 
 type OCIFS struct {
-	cache map[string]*cacheEntry
-	lp    layout.Path
-	exp   time.Duration
+	cache   map[string]*cacheEntry
+	workDir string
+	lp      layout.Path
+	exp     time.Duration
 }
 
-func New(workDir string) (*OCIFS, error) {
-	workDir = filepath.Clean(workDir)
+func New(opts ...Option) (*OCIFS, error) {
+	// default values
+	ofs := &OCIFS{
+		workDir: filepath.Join(os.TempDir(), "ocifs"),
+		cache:   make(map[string]*cacheEntry),
+		exp:     24 * time.Hour,
+	}
+
+	// apply options
+	for _, opt := range opts {
+		opt(ofs)
+	}
 
 	// if dir does not exist, create it
-	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(workDir, 0755); err != nil {
+	if _, err := os.Stat(ofs.workDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(ofs.workDir, 0755); err != nil {
 			return nil, err
 		}
 		// create index.json
-		idxFilePath := filepath.Join(workDir, "index.json")
+		idxFilePath := filepath.Join(ofs.workDir, "index.json")
 		if err := os.WriteFile(idxFilePath, []byte("{}"), 0644); err != nil {
 			return nil, err
 		}
@@ -38,13 +49,26 @@ func New(workDir string) (*OCIFS, error) {
 	}
 
 	// at this point, if the directory exists, it should be a valid layout
-	lp, err := layout.FromPath(workDir)
+	lp, err := layout.FromPath(ofs.workDir)
 	if err != nil {
 		return nil, err
 	}
 
-	return &OCIFS{
-		cache: make(map[string]*cacheEntry),
-		lp:    lp,
-	}, nil
+	ofs.lp = lp
+
+	return ofs, nil
+}
+
+type Option func(*OCIFS)
+
+var WithWorkDir = func(workDir string) Option {
+	return func(o *OCIFS) {
+		o.workDir = filepath.Clean(workDir)
+	}
+}
+
+var WithCacheExpiration = func(exp time.Duration) Option {
+	return func(o *OCIFS) {
+		o.exp = exp
+	}
 }
