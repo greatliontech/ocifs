@@ -36,8 +36,8 @@ func NewOciFS(store *Store, h v1.Hash) (fs.InodeEmbedder, error) {
 
 var _ = (fs.NodeOnAdder)((*ociFS)(nil))
 
-// HeaderToFileInfo fills a fuse.Attr struct from a tar.Header.
-func HeaderToFileInfo(out *fuse.Attr, h *tar.Header) {
+// headerToFileInfo fills a fuse.Attr struct from a tar.Header.
+func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
 	out.Mode = uint32(h.Mode)
 	out.Size = uint64(h.Size)
 	out.Uid = uint32(h.Uid)
@@ -64,24 +64,72 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			}
 			p = ch
 		}
-		attr := &fuse.Attr{}
-		HeaderToFileInfo(attr, entry.entry)
-		ch := p.NewPersistentInode(ctx, &ociFile{
-			path:      f,
-			attr:      attr,
-			layerPath: entry.root,
-		}, fs.StableAttr{})
-		slog.Info("Added file", "path", f, "layer", entry.layer)
-		p.AddChild(base, ch, true)
+
+		attr := fuse.Attr{}
+		headerToFileInfo(&attr, entry.entry)
+
+		hdr := entry.entry
+
+		switch hdr.Typeflag {
+
+		case tar.TypeSymlink:
+			l := &fs.MemSymlink{
+				Data: []byte(hdr.Linkname),
+			}
+			l.Attr = attr
+			p.AddChild(base, p.NewPersistentInode(ctx, l, fs.StableAttr{Mode: syscall.S_IFLNK}), false)
+
+		// for hardlinks we create an inode pointing to the link file in it's layer whith it's size
+		case tar.TypeLink:
+			linkEntry, ok := ofs.files[hdr.Linkname]
+			if !ok {
+				log.Printf("entry %q: hardlink %q not found", hdr.Name, hdr.Linkname)
+				continue
+			}
+			attr.Size = uint64(linkEntry.entry.Size)
+			ch := p.NewPersistentInode(ctx, &ociFile{
+				path:      hdr.Linkname,
+				attr:      attr,
+				layerPath: linkEntry.root,
+			}, fs.StableAttr{})
+			slog.Info("Added hardlink", "path", f, "link", hdr.Linkname, "layer", entry.layer)
+			p.AddChild(base, ch, true)
+
+		case tar.TypeChar:
+			rf := &fs.MemRegularFile{}
+			rf.Attr = attr
+			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFCHR}), false)
+
+		case tar.TypeBlock:
+			rf := &fs.MemRegularFile{}
+			rf.Attr = attr
+			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFBLK}), false)
+
+		case tar.TypeFifo:
+			rf := &fs.MemRegularFile{}
+			rf.Attr = attr
+			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFIFO}), false)
+
+		case tar.TypeReg:
+			ch := p.NewPersistentInode(ctx, &ociFile{
+				path:      f,
+				attr:      attr,
+				layerPath: entry.root,
+			}, fs.StableAttr{})
+			slog.Info("Added file", "path", f, "layer", entry.layer)
+			p.AddChild(base, ch, true)
+		default:
+			log.Printf("entry %q: unsupported type '%c'", hdr.Name, hdr.Typeflag)
+		}
 
 	}
 }
 
 type ociFile struct {
 	fs.Inode
-	attr      *fuse.Attr
 	path      string
 	layerPath string
+	attr      fuse.Attr
 }
 
 var (
@@ -90,7 +138,7 @@ var (
 )
 
 func (of *ociFile) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	slog.Info("Open", "path", of.path)
+	slog.Info("Open", "path", of.path, "layer", of.layerPath)
 
 	filePath := filepath.Join(of.layerPath, of.path)
 
@@ -128,6 +176,6 @@ func (gf *ociFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 var _ = (fs.NodeGetattrer)((*ociFile)(nil))
 
 func (f *ociFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	out.Attr = *f.attr
+	out.Attr = f.attr
 	return fs.OK
 }

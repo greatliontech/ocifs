@@ -247,11 +247,16 @@ func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error)
 		// Handle different file types
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetFilePath, os.FileMode(header.Mode)); err != nil {
+			if err := os.MkdirAll(targetFilePath, 0755); err != nil {
 				return nil, err
 			}
 
 		case tar.TypeReg:
+			slog.Info("file", "name", header.Name)
+			dir := filepath.Dir(targetFilePath)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, err
+			}
 			outFile, err := os.Create(targetFilePath)
 			if err != nil {
 				return nil, err
@@ -267,6 +272,8 @@ func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error)
 
 		case tar.TypeLink:
 			slog.Info("hardlink", "linkname", header.Linkname, "target", targetFilePath)
+
+		case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
 
 		default:
 			fmt.Printf("Unsupported file type: %c in %s\n", header.Typeflag, header.Name)
