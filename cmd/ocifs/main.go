@@ -2,10 +2,11 @@ package main
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/greatliontech/ocifs/internal/fuseinterface"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/greatliontech/ocifs"
 	"github.com/spf13/cobra"
 )
 
@@ -35,24 +36,26 @@ func main() {
 }
 
 func rootCmdRunE(cmd *cobra.Command, args []string) error {
-	// Initialize GitFS
-	root, err := fuseinterface.NewOciFS(rootFlags.ImageRef)
+	ofs, err := ocifs.New()
 	if err != nil {
-		log.Fatalf("Failed to initialize OciFS: %v", err)
+		return err
 	}
 
 	// Create a FUSE server
-	server, err := fs.Mount(rootFlags.MountPoint, root, &fs.Options{
-		MountOptions: fuse.MountOptions{
-			Debug: false, // Set to true for debugging
-		},
-	})
+	server, err := ofs.Mount(rootFlags.ImageRef, rootFlags.MountPoint)
 	if err != nil {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		server.Unmount()
+	}()
+
 	// Serve the filesystem until unmounted
-	server.Serve()
+	server.Wait()
 
 	return nil
 }
