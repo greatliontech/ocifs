@@ -137,6 +137,12 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 		}
 
 	}
+
+	p := &ofs.Inode
+	dirs := []string{"dev", "proc", "sys", "tmp"}
+	for _, d := range dirs {
+		p.AddChild(d, p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR}), true)
+	}
 }
 
 type ociFile struct {
