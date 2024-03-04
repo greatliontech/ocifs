@@ -138,10 +138,20 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 	}
 
-	p := &ofs.Inode
-	dirs := []string{"dev", "proc", "sys", "tmp"}
+	dirs := []string{"dev", "proc", "sys", "tmp/ocifs"}
 	for _, d := range dirs {
-		p.AddChild(d, p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR}), true)
+		p := &ofs.Inode
+		for _, part := range strings.Split(d, "/") {
+			if len(part) == 0 {
+				continue
+			}
+			ch := p.GetChild(part)
+			if ch == nil {
+				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
+				p.AddChild(part, ch, true)
+			}
+			p = ch
+		}
 	}
 }
 
