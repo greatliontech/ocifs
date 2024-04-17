@@ -165,15 +165,16 @@ type ociFile struct {
 var _ = (fs.NodeOpener)((*ociFile)(nil))
 
 func (of *ociFile) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	slog.Info("Open", "path", of.path, "layer", of.layerPath)
-
 	filePath := filepath.Join(of.layerPath, of.path)
+
+	slog.Debug("Open", "path", filePath, "flags", openFlags, "filepath", filePath, "layerPath", of.layerPath, "size", of.attr.Size)
 
 	f, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("Error opening file: %v", err)
 		return nil, 0, syscall.EIO
 	}
+
 	return &ociFileHandle{f: f, size: of.attr.Size}, fuse.FOPEN_KEEP_CACHE, fs.OK
 }
 
@@ -185,7 +186,7 @@ type ociFileHandle struct {
 var _ = (fs.NodeReader)((*ociFile)(nil))
 
 func (gf *ociFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	slog.Info("Read", "path", gf.path, "offset", off)
+	slog.Debug("Read", "path", gf.path, "offset", off, "lendest", len(dest))
 
 	ofh, ok := fh.(*ociFileHandle)
 	if !ok {
@@ -193,11 +194,13 @@ func (gf *ociFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 		return nil, syscall.EIO
 	}
 
-	_, err := ofh.f.ReadAt(dest, off)
+	n, err := ofh.f.ReadAt(dest, off)
 	if err != nil && err != io.EOF {
 		slog.Error("Error reading file", "path", gf.path, "offset", off, "error", err)
 		return nil, syscall.EIO
 	}
+
+	slog.Debug("Read", "path", gf.path, "offset", off, "n", n)
 
 	return fuse.ReadResultData(dest), fs.OK
 }
@@ -212,7 +215,7 @@ func (f *ociFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrO
 var _ = (fs.NodeReleaser)((*ociFile)(nil))
 
 func (f *ociFile) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
-	slog.Info("Release", "path", f.path)
+	slog.Debug("Release", "path", f.path)
 	ofh, ok := fh.(*ociFileHandle)
 	if !ok {
 		slog.Error("Error getting file handle", "path", f.path)
