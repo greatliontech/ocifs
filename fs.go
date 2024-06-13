@@ -26,7 +26,7 @@ func (o *OCIFS) Mount(h *v1.Hash, path string) (*fuse.Server, error) {
 	// Create a FUSE server
 	return fs.Mount(path, root, &fs.Options{
 		MountOptions: fuse.MountOptions{
-			AllowOther:  true,
+			AllowOther:  false,
 			Name:        "ocifs",
 			DirectMount: true,
 			Debug:       false, // Set to true for debugging

@@ -90,6 +90,7 @@ func (s *OCIFS) ConfigFile(h *v1.Hash) (*v1.ConfigFile, error) {
 func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
 	// look in cache first
 	if ce, ok := s.cache[imageRef]; ok && ce.exp.After(time.Now()) {
+		slog.Debug("cache hit", "image", imageRef, "hash", ce.hash)
 		return ce.hash, nil
 	}
 
@@ -99,31 +100,30 @@ func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
 		return nil, err
 	}
 
-	head, err := remote.Head(ref)
+	rmtImg, err := remote.Image(ref)
 	if err != nil {
-		slog.Error("get remote head", "error", err)
+		slog.Error("get remote image", "error", err)
 		return nil, err
 	}
 
-	slog.Info("head", "digest", head.Digest)
+	dgst, err := rmtImg.Digest()
+	if err != nil {
+		slog.Error("get image digest", "error", err)
+		return nil, err
+	}
 
 	h := &v1.Hash{}
-	*h = head.Digest
-	var img v1.Image
+	*h = dgst
 
-	img, err = s.lp.Image(*h)
+	img, err := s.lp.Image(*h)
 	if err != nil {
-		slog.Info("local image not found, pulling", "digest", h, "error", err)
-		rmtImg, err := remote.Image(ref)
-		if err != nil {
-			slog.Error("get remote image", "error", err)
-			return nil, err
-		}
 
 		if err := s.lp.AppendImage(rmtImg); err != nil {
 			slog.Error("append image", "error", err)
 			return nil, err
 		}
+
+		slog.Info("getting local image", "hash", h)
 		img, err = s.lp.Image(*h)
 		if err != nil {
 			slog.Error("get local image", "error", err)
