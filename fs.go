@@ -18,7 +18,7 @@ import (
 )
 
 func (o *OCIFS) Mount(h *v1.Hash, path string) (*fuse.Server, error) {
-	root, err := o.initFS(h)
+	root, err := o.initFS(h, o.extraDirs)
 	if err != nil {
 		return nil, err
 	}
@@ -38,9 +38,10 @@ type ociFS struct {
 	fs.Inode
 	files     map[string]unionFile
 	fileNames []string
+	extraDirs []string
 }
 
-func (o *OCIFS) initFS(h *v1.Hash) (fs.InodeEmbedder, error) {
+func (o *OCIFS) initFS(h *v1.Hash, extraDirs []string) (fs.InodeEmbedder, error) {
 	fls, unf, err := o.unify(h)
 	if err != nil {
 		return nil, err
@@ -49,6 +50,7 @@ func (o *OCIFS) initFS(h *v1.Hash) (fs.InodeEmbedder, error) {
 	return &ociFS{
 		files:     unf,
 		fileNames: fls,
+		extraDirs: extraDirs,
 	}, nil
 }
 
@@ -99,7 +101,7 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 		case tar.TypeLink:
 			linkEntry, ok := ofs.files[hdr.Linkname]
 			if !ok {
-				slog.Info("Missing link", "path", hdr.Linkname, "layer", entry.layer)
+				slog.Debug("Missing link", "path", hdr.Linkname, "layer", entry.layer)
 				continue
 			}
 			attr.Size = uint64(linkEntry.entry.Size)
@@ -133,13 +135,12 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 		default:
-			slog.Info("Unsupported file type", "path", f, "type", hdr.Typeflag)
+			slog.Debug("Unsupported file type", "path", f, "type", hdr.Typeflag)
 		}
 
 	}
 
-	dirs := []string{"dev", "proc", "sys", "tmp/ocifs"}
-	for _, d := range dirs {
+	for _, d := range ofs.extraDirs {
 		p := &ofs.Inode
 		for _, part := range strings.Split(d, "/") {
 			if len(part) == 0 {

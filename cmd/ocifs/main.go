@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/greatliontech/ocifs"
@@ -19,6 +20,8 @@ var rootCmd = &cobra.Command{
 type rootCmdFlags struct {
 	MountPoint string
 	ImageRef   string
+	ExtraDirs  []string
+	WorkDir    string
 }
 
 var rootFlags = &rootCmdFlags{}
@@ -29,6 +32,11 @@ func main() {
 	rootCmd.MarkFlagRequired("mountpoint")
 	rootCmd.Flags().StringVarP(&rootFlags.ImageRef, "image", "i", "", "Image to mount")
 	rootCmd.MarkFlagRequired("image")
+	rootCmd.Flags().StringVarP(&rootFlags.WorkDir, "workdir", "w", filepath.Join(os.TempDir(), "ocifs"), "Work directory")
+	extraDirs := rootCmd.Flags().StringSliceP("extra-dirs", "e", nil, "Extra directories to include in the mount")
+	if extraDirs != nil {
+		rootFlags.ExtraDirs = *extraDirs
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Failed to execute root command: %v", err)
@@ -36,7 +44,14 @@ func main() {
 }
 
 func rootCmdRunE(cmd *cobra.Command, args []string) error {
-	ofs, err := ocifs.New()
+	opts := []ocifs.Option{
+		ocifs.WithWorkDir(rootFlags.WorkDir),
+	}
+	if len(rootFlags.ExtraDirs) > 0 {
+		opts = append(opts, ocifs.WithExtraDirs(rootFlags.ExtraDirs))
+	}
+
+	ofs, err := ocifs.New(opts...)
 	if err != nil {
 		return err
 	}

@@ -15,10 +15,11 @@ type cacheEntry struct {
 }
 
 type OCIFS struct {
-	cache   map[string]*cacheEntry
-	workDir string
-	lp      layout.Path
-	exp     time.Duration
+	cache     map[string]*cacheEntry
+	workDir   string
+	lp        layout.Path
+	exp       time.Duration
+	extraDirs []string
 }
 
 func New(opts ...Option) (*OCIFS, error) {
@@ -70,5 +71,11 @@ var WithWorkDir = func(workDir string) Option {
 var WithCacheExpiration = func(exp time.Duration) Option {
 	return func(o *OCIFS) {
 		o.exp = exp
+	}
+}
+
+var WithExtraDirs = func(extraDirs []string) Option {
+	return func(o *OCIFS) {
+		o.extraDirs = extraDirs
 	}
 }

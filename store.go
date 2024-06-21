@@ -54,7 +54,7 @@ func (s *OCIFS) getLayerIndexes(h *v1.Hash) ([]*layerIndex, error) {
 			slog.Error("get layer digest", "error", err)
 			return nil, err
 		}
-		slog.Info("layer digest", "digest", lh)
+		slog.Debug("layer digest", "digest", lh)
 
 		targetDir := filepath.Join(string(s.lp), "unpacked", h.Algorithm, lh.Hex)
 		idxName := targetDir + ".json"
@@ -123,7 +123,7 @@ func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
 			return nil, err
 		}
 
-		slog.Info("getting local image", "hash", h)
+		slog.Debug("getting local image", "hash", h)
 		img, err = s.lp.Image(*h)
 		if err != nil {
 			slog.Error("get local image", "error", err)
@@ -232,7 +232,7 @@ func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error)
 			}
 
 		case tar.TypeReg:
-			slog.Info("file", "name", header.Name)
+			slog.Debug("file", "name", header.Name)
 			dir := filepath.Dir(targetFilePath)
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return nil, err
@@ -248,10 +248,10 @@ func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error)
 			}
 
 		case tar.TypeSymlink:
-			slog.Info("symlink", "linkname", header.Linkname, "target", targetFilePath)
+			slog.Debug("symlink", "linkname", header.Linkname, "target", targetFilePath)
 
 		case tar.TypeLink:
-			slog.Info("hardlink", "linkname", header.Linkname, "target", targetFilePath)
+			slog.Debug("hardlink", "linkname", header.Linkname, "target", targetFilePath)
 
 		case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
 
