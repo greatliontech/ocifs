@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -39,7 +40,8 @@ func main() {
 	}
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Failed to execute root command: %v", err)
+		slog.Error("Failed to execute", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -67,11 +69,20 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	sigtermHandler := func() chan os.Signal {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		return c
+	}
 	go func() {
-		<-c
-		server.Unmount()
+		for {
+			<-sigtermHandler()
+			err := server.Unmount()
+			if err == nil {
+				break
+			}
+			slog.Error("Failed to unmount", "error", err)
+		}
 	}()
 
 	// Serve the filesystem until unmounted
