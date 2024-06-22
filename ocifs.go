@@ -18,8 +18,8 @@ type OCIFS struct {
 	cache     map[string]*cacheEntry
 	workDir   string
 	lp        layout.Path
-	exp       time.Duration
 	extraDirs []string
+	exp       time.Duration
 }
 
 func New(opts ...Option) (*OCIFS, error) {

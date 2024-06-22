@@ -5,7 +5,6 @@ go 1.22.0
 require (
 	github.com/google/go-containerregistry v0.19.0
 	github.com/hanwen/go-fuse/v2 v2.5.0
-	github.com/quay/claircore v1.5.22
 	github.com/spf13/cobra v1.8.0
 )
 
@@ -15,6 +14,7 @@ require (
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v24.0.0+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect

@@ -7,8 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"sort"
+	"path"
 	"strings"
 	"syscall"
 
@@ -36,20 +35,23 @@ func (o *OCIFS) Mount(h *v1.Hash, path string) (*fuse.Server, error) {
 
 type ociFS struct {
 	fs.Inode
-	files     map[string]unionFile
-	fileNames []string
+	ut        *unifiedTree
 	extraDirs []string
 }
 
 func (o *OCIFS) initFS(h *v1.Hash, extraDirs []string) (fs.InodeEmbedder, error) {
-	fls, unf, err := o.unify(h)
+	layers, err := o.getUnpackedLayers(h)
 	if err != nil {
 		return nil, err
 	}
 
+	ut := newUnifiedTree()
+	for _, l := range layers {
+		ut.AddLayer(l.Path(), l.Files())
+	}
+
 	return &ociFS{
-		files:     unf,
-		fileNames: fls,
+		ut:        ut,
 		extraDirs: extraDirs,
 	}, nil
 }
@@ -66,9 +68,8 @@ func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
 var _ = (fs.NodeOnAdder)((*ociFS)(nil))
 
 func (ofs *ociFS) OnAdd(ctx context.Context) {
-	for _, f := range ofs.fileNames {
-		dir, base := filepath.Split(filepath.Clean(f))
-		entry := ofs.files[f]
+	ofs.ut.Traverse(func(utn *unifiedTreeNode, f string) bool {
+		dir, base := path.Split(f)
 
 		p := &ofs.Inode
 		for _, part := range strings.Split(dir, "/") {
@@ -83,10 +84,10 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			p = ch
 		}
 
-		attr := fuse.Attr{}
-		headerToFileInfo(&attr, entry.entry)
+		hdr := utn.Header()
 
-		hdr := entry.entry
+		attr := fuse.Attr{}
+		headerToFileInfo(&attr, hdr)
 
 		switch hdr.Typeflag {
 
@@ -99,16 +100,16 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 		// for hardlinks we create an inode pointing to the link file in it's layer whith it's size
 		case tar.TypeLink:
-			linkEntry, ok := ofs.files[hdr.Linkname]
+			linkEntry, ok := ofs.ut.Get(hdr.Linkname)
 			if !ok {
-				slog.Debug("Missing link", "path", hdr.Linkname, "layer", entry.layer)
-				continue
+				slog.Debug("Missing link", "path", hdr.Linkname, "filepath", utn.Path())
+				return true
 			}
-			attr.Size = uint64(linkEntry.entry.Size)
+			attr.Size = uint64(linkEntry.Header().Size)
 			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:      hdr.Linkname,
-				attr:      attr,
-				layerPath: linkEntry.root,
+				path:     hdr.Linkname,
+				attr:     attr,
+				fullPath: linkEntry.Path(),
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 
@@ -129,16 +130,17 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 		case tar.TypeReg:
 			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:      f,
-				attr:      attr,
-				layerPath: entry.root,
+				path:     f,
+				attr:     attr,
+				fullPath: utn.Path(),
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 		default:
 			slog.Debug("Unsupported file type", "path", f, "type", hdr.Typeflag)
 		}
 
-	}
+		return true
+	})
 
 	for _, d := range ofs.extraDirs {
 		p := &ofs.Inode
@@ -158,19 +160,17 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 type ociFile struct {
 	fs.Inode
-	path      string
-	layerPath string
-	attr      fuse.Attr
+	path     string
+	fullPath string
+	attr     fuse.Attr
 }
 
 var _ = (fs.NodeOpener)((*ociFile)(nil))
 
 func (of *ociFile) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	filePath := filepath.Join(of.layerPath, of.path)
+	slog.Debug("Open", "path", of.path, "flags", openFlags, "layerPath", of.fullPath, "size", of.attr.Size)
 
-	slog.Debug("Open", "path", filePath, "flags", openFlags, "filepath", filePath, "layerPath", of.layerPath, "size", of.attr.Size)
-
-	f, err := os.Open(filePath)
+	f, err := os.Open(of.fullPath)
 	if err != nil {
 		log.Printf("Error opening file: %v", err)
 		return nil, 0, syscall.EIO
@@ -228,82 +228,4 @@ func (f *ociFile) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 		return syscall.EIO
 	}
 	return fs.OK
-}
-
-type unionFile struct {
-	entry *tar.Header
-	root  string
-	layer int
-}
-
-func (o *OCIFS) unify(dgst *v1.Hash) ([]string, map[string]unionFile, error) {
-	layers, err := o.getLayerIndexes(dgst)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var filesList []string
-	unifiedMap := make(map[string]unionFile)
-	whiteoutRecords := make(map[string]bool) // Record paths marked by whiteout
-
-	// Process from the last layer to the first
-	for layerIndex := len(layers) - 1; layerIndex >= 0; layerIndex-- {
-		for _, e := range layers[layerIndex].Files() {
-			// Determine the original path affected by a whiteout marker, if any
-			fileName := filepath.Base(e.Name)
-			// is whiteout file
-			if strings.HasPrefix(fileName, ".wh.") {
-				originalPath := strings.TrimPrefix(fileName, ".wh.")
-				originalFullPath := filepath.Join(filepath.Dir(e.Name), originalPath)
-				whiteoutRecords[originalFullPath] = true
-
-				// Remove affected paths from unifiedMap and filesList
-				delete(unifiedMap, originalFullPath)
-				for i, filePath := range filesList {
-					if filePath == originalFullPath {
-						filesList = append(filesList[:i], filesList[i+1:]...)
-						break
-					}
-				}
-				continue
-			}
-
-			// Check if path or any parent path has been marked by a whiteout
-			if _, marked := whiteoutRecords[e.Name]; marked {
-				continue // Skip adding this path as it's marked for deletion
-			}
-
-			// Check for directories in the path that may have been marked by a whiteout
-			if isPathOrParentMarked(e.Name, whiteoutRecords) {
-				continue
-			}
-
-			// For regular files not marked by a whiteout, add them to the map and list
-			if e.Typeflag != tar.TypeDir {
-				unifiedMap[e.Name] = unionFile{
-					entry: e,
-					layer: layerIndex,
-					root:  o.unpackedPath(layers[layerIndex].Hash()),
-				}
-				filesList = append(filesList, e.Name)
-			}
-		}
-	}
-	sort.Strings(filesList)
-	return filesList, unifiedMap, nil
-}
-
-// Checks if the file or any of its parent directories have been marked by a whiteout
-func isPathOrParentMarked(path string, whiteoutRecords map[string]bool) bool {
-	for {
-		if _, exists := whiteoutRecords[path]; exists {
-			return true
-		}
-		parentPath := filepath.Dir(path)
-		if parentPath == path { // Reached the root without finding a whiteout marker
-			break
-		}
-		path = parentPath
-	}
-	return false
 }

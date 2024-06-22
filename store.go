@@ -10,29 +10,31 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
-type layerIndex struct {
-	files map[string]*tar.Header
-	h     v1.Hash
+type unpackedLayer struct {
+	hash  v1.Hash
+	path  string
+	files []*tar.Header
 }
 
-func (l *layerIndex) Hash() v1.Hash {
-	return l.h
+func (l *unpackedLayer) Hash() v1.Hash {
+	return l.hash
 }
 
-func (l *layerIndex) Files() map[string]*tar.Header {
+func (l *unpackedLayer) Files() []*tar.Header {
 	return l.files
 }
 
-func (s *OCIFS) unpackedPath(h v1.Hash) string {
-	return filepath.Join(string(s.lp), "unpacked", h.Algorithm, h.Hex)
+func (l *unpackedLayer) Path() string {
+	return l.path
 }
 
-func (s *OCIFS) getLayerIndexes(h *v1.Hash) ([]*layerIndex, error) {
+func (s *OCIFS) getUnpackedLayers(h *v1.Hash) ([]*unpackedLayer, error) {
 	// get image by hash
 	img, err := s.lp.Image(*h)
 	if err != nil {
@@ -46,7 +48,7 @@ func (s *OCIFS) getLayerIndexes(h *v1.Hash) ([]*layerIndex, error) {
 		return nil, err
 	}
 
-	idx := make([]*layerIndex, len(layers))
+	idx := make([]*unpackedLayer, len(layers))
 
 	for i, layer := range layers {
 		lh, err := layer.Digest()
@@ -64,9 +66,10 @@ func (s *OCIFS) getLayerIndexes(h *v1.Hash) ([]*layerIndex, error) {
 			return nil, err
 		}
 
-		lidx := &layerIndex{
-			files: map[string]*tar.Header{},
-			h:     lh,
+		lidx := &unpackedLayer{
+			files: []*tar.Header{},
+			hash:  lh,
+			path:  targetDir,
 		}
 		if err := json.Unmarshal(data, &lidx.files); err != nil {
 			return nil, err
@@ -100,7 +103,7 @@ func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
 		return nil, err
 	}
 
-	rmtImg, err := remote.Image(ref)
+	rmtImg, err := remote.Image(ref, remote.WithAuthFromKeychain(authn.DefaultKeychain))
 	if err != nil {
 		slog.Error("get remote image", "error", err)
 		return nil, err
@@ -204,12 +207,12 @@ func (s *OCIFS) unpackLayer(layer v1.Layer) error {
 	return nil
 }
 
-func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error) {
+func extractTar(rc io.ReadCloser, target string) ([]*tar.Header, error) {
 	// Create a tar reader
 	tarReader := tar.NewReader(rc)
 
 	// Create a map to store the headers
-	idx := make(map[string]*tar.Header)
+	idx := []*tar.Header{}
 
 	// Iterate through entries in the tar archive
 	for {
@@ -261,7 +264,7 @@ func extractTar(rc io.ReadCloser, target string) (map[string]*tar.Header, error)
 		}
 
 		// Add the header to the index
-		idx[header.Name] = header
+		idx = append(idx, header)
 	}
 
 	return idx, nil
