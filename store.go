@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -81,16 +80,7 @@ func (s *OCIFS) getUnpackedLayers(h *v1.Hash) ([]*unpackedLayer, error) {
 	return idx, nil
 }
 
-func (s *OCIFS) ConfigFile(h *v1.Hash) (*v1.ConfigFile, error) {
-	img, err := s.lp.Image(*h)
-	if err != nil {
-		return nil, err
-	}
-
-	return img.ConfigFile()
-}
-
-func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
+func (s *OCIFS) pullImage(imageRef string) (*v1.Hash, error) {
 	// look in cache first
 	if ce, ok := s.cache[imageRef]; ok && ce.exp.After(time.Now()) {
 		slog.Debug("cache hit", "image", imageRef, "hash", ce.hash)
@@ -103,7 +93,7 @@ func (s *OCIFS) Pull(imageRef string) (*v1.Hash, error) {
 		return nil, err
 	}
 
-	rmtImg, err := remote.Image(ref, remote.WithAuthFromKeychain(authn.DefaultKeychain))
+	rmtImg, err := remote.Image(ref, remote.WithAuthFromKeychain(s.authn))
 	if err != nil {
 		slog.Error("get remote image", "error", err)
 		return nil, err

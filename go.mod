@@ -4,6 +4,7 @@ go 1.22.0
 
 require (
 	github.com/google/go-containerregistry v0.19.0
+	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.5.0
 	github.com/spf13/cobra v1.8.0
 )

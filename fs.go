@@ -16,23 +16,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-func (o *OCIFS) Mount(h *v1.Hash, path string) (*fuse.Server, error) {
-	root, err := o.initFS(h, o.extraDirs)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a FUSE server
-	return fs.Mount(path, root, &fs.Options{
-		MountOptions: fuse.MountOptions{
-			AllowOther:  false,
-			Name:        "ocifs",
-			DirectMount: true,
-			Debug:       false, // Set to true for debugging
-		},
-	})
-}
-
 type ociFS struct {
 	fs.Inode
 	ut        *unifiedTree

@@ -21,8 +21,8 @@ var rootCmd = &cobra.Command{
 type rootCmdFlags struct {
 	MountPoint string
 	ImageRef   string
-	ExtraDirs  []string
 	WorkDir    string
+	ExtraDirs  []string
 }
 
 var rootFlags = &rootCmdFlags{}
@@ -48,6 +48,7 @@ func main() {
 func rootCmdRunE(cmd *cobra.Command, args []string) error {
 	opts := []ocifs.Option{
 		ocifs.WithWorkDir(rootFlags.WorkDir),
+		ocifs.WithEnableDefaultKeychain(),
 	}
 	if len(rootFlags.ExtraDirs) > 0 {
 		opts = append(opts, ocifs.WithExtraDirs(rootFlags.ExtraDirs))
@@ -58,13 +59,8 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	h, err := ofs.Pull(rootFlags.ImageRef)
-	if err != nil {
-		return err
-	}
-
-	// Create a FUSE server
-	server, err := ofs.Mount(h, rootFlags.MountPoint)
+	// Mount the OCI image
+	im, err := ofs.Mount(rootFlags.ImageRef, ocifs.MountWithTargetPath(rootFlags.MountPoint))
 	if err != nil {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}
@@ -77,7 +73,7 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 	go func() {
 		for {
 			<-sigtermHandler()
-			err := server.Unmount()
+			err := im.Unmount()
 			if err == nil {
 				break
 			}
@@ -86,7 +82,7 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Serve the filesystem until unmounted
-	server.Wait()
+	im.Wait()
 
 	return nil
 }
