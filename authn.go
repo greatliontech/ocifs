@@ -16,7 +16,7 @@ type ocifsKeychain struct {
 func (o *ocifsKeychain) Resolve(res authn.Resource) (authn.Authenticator, error) {
 	slog.Debug("resolving creds for", "resource", res.String())
 	for k, v := range o.creds {
-		if strings.HasPrefix(k, res.String()) {
+		if strings.HasPrefix(res.String(), k) {
 			slog.Debug("found creds for prefix", "prefix", k)
 			return authn.FromConfig(v), nil
 		}
