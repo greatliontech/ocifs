@@ -1,4 +1,4 @@
-package ocifs
+package unionfs
 
 import (
 	"archive/tar"
@@ -11,32 +11,31 @@ import (
 	"strings"
 	"syscall"
 
-	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/ocifs/internal/store"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 type ociFS struct {
 	fs.Inode
-	ut        *unifiedTree
+	img       *store.Image
+	files     []*store.File
+	lookup    map[string]*store.File
 	extraDirs []string
 }
 
-func (o *OCIFS) initFS(h *v1.Hash, extraDirs []string) (fs.InodeEmbedder, error) {
-	layers, err := o.getUnpackedLayers(h)
-	if err != nil {
-		return nil, err
+func Init(img *store.Image, extraDirs []string) fs.InodeEmbedder {
+	files := Unify(img.Layers())
+	lookup := make(map[string]*store.File, len(files))
+	for _, f := range files {
+		lookup[f.Hdr.Name] = f
 	}
-
-	ut := newUnifiedTree()
-	for _, l := range layers {
-		ut.AddLayer(l.Path(), l.Files())
-	}
-
 	return &ociFS{
-		ut:        ut,
+		img:       img,
+		files:     files,
+		lookup:    lookup,
 		extraDirs: extraDirs,
-	}, nil
+	}
 }
 
 // headerToFileInfo fills a fuse.Attr struct from a tar.Header.
@@ -51,9 +50,12 @@ func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
 var _ = (fs.NodeOnAdder)((*ociFS)(nil))
 
 func (ofs *ociFS) OnAdd(ctx context.Context) {
-	ofs.ut.Traverse(func(utn *unifiedTreeNode, f string) bool {
-		dir, base := path.Split(f)
+	for _, file := range ofs.files {
+		fileName := file.Hdr.Name
+		dir, base := path.Split(fileName)
 
+		// create parent directories as needed. TODO: we might not need this since we sort on
+		// unifications
 		p := &ofs.Inode
 		for _, part := range strings.Split(dir, "/") {
 			if len(part) == 0 {
@@ -67,7 +69,7 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			p = ch
 		}
 
-		hdr := utn.Header()
+		hdr := file.Hdr
 
 		attr := fuse.Attr{}
 		headerToFileInfo(&attr, hdr)
@@ -83,16 +85,16 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 		// for hardlinks we create an inode pointing to the link file in it's layer whith it's size
 		case tar.TypeLink:
-			linkEntry, ok := ofs.ut.Get(hdr.Linkname)
+			linkEntry, ok := ofs.lookup[hdr.Linkname]
 			if !ok {
-				slog.Debug("Missing link", "path", hdr.Linkname, "filepath", utn.Path())
-				return true
+				slog.Debug("Missing link", "path", hdr.Linkname, "filepath", hdr.Name)
+				break
 			}
-			attr.Size = uint64(linkEntry.Header().Size)
+			attr.Size = uint64(linkEntry.Hdr.Size)
 			ch := p.NewPersistentInode(ctx, &ociFile{
 				path:     hdr.Linkname,
 				attr:     attr,
-				fullPath: linkEntry.Path(),
+				fullPath: linkEntry.Path,
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 
@@ -113,17 +115,16 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 		case tar.TypeReg:
 			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:     f,
+				path:     fileName,
 				attr:     attr,
-				fullPath: utn.Path(),
+				fullPath: file.Path,
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 		default:
-			slog.Debug("Unsupported file type", "path", f, "type", hdr.Typeflag)
+			slog.Debug("Unsupported file type", "path", fileName, "type", hdr.Typeflag)
 		}
 
-		return true
-	})
+	}
 
 	for _, d := range ofs.extraDirs {
 		p := &ofs.Inode
