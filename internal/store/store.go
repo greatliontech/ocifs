@@ -267,7 +267,7 @@ func (s *Store) extractTar(ctx context.Context, rc io.ReadCloser) ([]*File, erro
 		}
 
 		outFile := &File{
-			Hdr: hdr,
+			Hdr: *hdr,
 		}
 
 		// we add this erly

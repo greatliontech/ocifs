@@ -99,18 +99,20 @@ func (u *UnionFS) PersistWritable() error {
 }
 
 // headerToAttr fills a fuse.Attr struct from a tar.Header.
-func headerToAttr(out *fuse.Attr, h *tar.Header) {
+func headerToAttr(h tar.Header) fuse.Attr {
+	out := fuse.Attr{}
 	out.Mode = uint32(h.Mode)
 	out.Size = uint64(h.Size)
 	out.Uid = uint32(h.Uid)
 	out.Gid = uint32(h.Gid)
 	out.SetTimes(&h.AccessTime, &h.ModTime, &h.ChangeTime)
+	return out
 }
 
 // attrToHeader creates a new tar.Header for a new file or directory.
-func attrToHeader(name string, attr *fuse.Attr, typeflag byte) *tar.Header {
+func attrToHeader(name string, attr *fuse.Attr, typeflag byte) tar.Header {
 	now := time.Now()
-	return &tar.Header{
+	return tar.Header{
 		Name:       name,
 		Mode:       int64(attr.Mode),
 		Uid:        int(attr.Uid),

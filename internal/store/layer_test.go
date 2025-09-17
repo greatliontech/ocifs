@@ -35,7 +35,7 @@ func mockFile(t *testing.T, tempDir, name string, flag int64, content string) *F
 	}
 
 	return &File{
-		Hdr: &tar.Header{
+		Hdr: tar.Header{
 			Name:       name,
 			Typeflag:   byte(flag),
 			Size:       int64(len(content)),
@@ -61,7 +61,7 @@ func makeDir(name string) *File {
 	}
 	// A temp dir and t are not needed as no content is written to disk.
 	return &File{
-		Hdr: &tar.Header{Name: p, Typeflag: tar.TypeDir, ModTime: time.Now()},
+		Hdr: tar.Header{Name: p, Typeflag: tar.TypeDir, ModTime: time.Now()},
 	}
 }
 
@@ -69,7 +69,7 @@ func makeDir(name string) *File {
 func makeWhiteout(name string) *File {
 	whPath := filepath.Join(filepath.Dir(name), whiteoutPrefix+filepath.Base(name))
 	return &File{
-		Hdr: &tar.Header{Name: whPath, Typeflag: tar.TypeReg, ModTime: time.Now()},
+		Hdr: tar.Header{Name: whPath, Typeflag: tar.TypeReg, ModTime: time.Now()},
 	}
 }
 
@@ -77,7 +77,7 @@ func makeWhiteout(name string) *File {
 func makeOpaque(dirName string) *File {
 	opqPath := filepath.Join(dirName, whiteoutOpaque)
 	return &File{
-		Hdr: &tar.Header{Name: opqPath, Typeflag: tar.TypeReg, ModTime: time.Now()},
+		Hdr: tar.Header{Name: opqPath, Typeflag: tar.TypeReg, ModTime: time.Now()},
 	}
 }
 
@@ -191,8 +191,7 @@ func TestUnify(t *testing.T) {
 			for i, l := range layers {
 				filesCopy := make([]*File, len(l.Files()))
 				for j, f := range l.Files() {
-					hdrCopy := *f.Hdr
-					filesCopy[j] = &File{Hdr: &hdrCopy, Path: f.Path}
+					filesCopy[j] = &File{Hdr: f.Hdr, Path: f.Path}
 				}
 				layersCopy[i] = &Layer{files: filesCopy}
 			}

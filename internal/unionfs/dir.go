@@ -207,7 +207,7 @@ func (od *unionDir) Unlink(ctx context.Context, name string) syscall.Errno {
 	if _, ok := od.roLookup[childPath]; ok {
 		slog.Debug("Creating whiteout for read-only layer file", "path", childPath)
 		whiteoutPath := path.Join(od.pathInFs, store.WhiteoutPrefix+name)
-		hdr := &tar.Header{Name: whiteoutPath, Mode: 0, Size: 0}
+		hdr := tar.Header{Name: whiteoutPath, Mode: 0, Size: 0}
 		file := &store.File{Hdr: hdr}
 		if err := od.writableLayer.SetFile(file); err != nil {
 			slog.Error("Failed to set whiteout file in writable layer", "error", err, "path", whiteoutPath)

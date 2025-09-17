@@ -26,6 +26,6 @@ const (
 )
 
 type File struct {
-	Hdr  *tar.Header
+	Hdr  tar.Header
 	Path string `json:",omitempty"`
 }

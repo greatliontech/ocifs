@@ -37,7 +37,7 @@ type unionFileHandle struct {
 }
 
 func (uf *unionFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	headerToAttr(&out.Attr, uf.file.Hdr)
+	out.Attr = headerToAttr(uf.file.Hdr)
 	return fs.OK
 }
 
