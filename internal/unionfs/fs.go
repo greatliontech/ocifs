@@ -25,7 +25,7 @@ type ociFS struct {
 }
 
 func Init(img *store.Image, extraDirs []string) fs.InodeEmbedder {
-	files := Unify(img.Layers())
+	files := img.Unify()
 	lookup := make(map[string]*store.File, len(files))
 	for _, f := range files {
 		lookup[f.Hdr.Name] = f
@@ -57,7 +57,7 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 		// create parent directories as needed. TODO: we might not need this since we sort on
 		// unifications
 		p := &ofs.Inode
-		for _, part := range strings.Split(dir, "/") {
+		for part := range strings.SplitSeq(dir, "/") {
 			if len(part) == 0 {
 				continue
 			}
@@ -128,7 +128,7 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 
 	for _, d := range ofs.extraDirs {
 		p := &ofs.Inode
-		for _, part := range strings.Split(d, "/") {
+		for part := range strings.SplitSeq(d, "/") {
 			if len(part) == 0 {
 				continue
 			}

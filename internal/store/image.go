@@ -1,4 +1,4 @@
-package unionfs
+package store
 
 import (
 	"archive/tar"
@@ -6,21 +6,45 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/greatliontech/ocifs/internal/store"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
-
-// adapted from https://github.com/google/go-containerregistry/blob/v0.20.6/pkg/v1/mutate/mutate.go#L265
 
 const (
 	whiteoutPrefix = ".wh."
 	whiteoutOpaque = whiteoutPrefix + whiteoutPrefix + "opq"
 )
 
+type Image struct {
+	h      v1.Hash
+	img    v1.Image
+	conf   *v1.ConfigFile
+	layers []*Layer
+}
+
+func (i *Image) Hash() v1.Hash {
+	return i.h
+}
+
+func (i *Image) Image() v1.Image {
+	return i.img
+}
+
+func (i *Image) ConfigFile() *v1.ConfigFile {
+	return i.conf
+}
+
+func (i *Image) Layers() []*Layer {
+	return i.layers
+}
+
+// adapted from https://github.com/google/go-containerregistry/blob/v0.20.6/pkg/v1/mutate/mutate.go#L265
+// to also respect opaque whiteouts
+
 // Unify takes a slice of layers, ordered from base to top, and flattens them
 // into a single, unified list of files representing the final filesystem view.
 // It correctly processes file overrides, standard whiteouts (.wh.), and
 // opaque whiteouts (.wh..wh..opq).
-func Unify(layers []*store.Layer) []*store.File {
+func (i *Image) Unify() []*File {
 	// fileMap tracks the status of all paths encountered so far. The meaning of the
 	// boolean value is crucial:
 	// - true: The path is "final". It's either a regular file or has been explicitly
@@ -34,7 +58,8 @@ func Unify(layers []*store.Layer) []*store.File {
 	// the final output, whereas a deleted directory (marked in fileMap) must not.
 	opaqueDirs := map[string]bool{}
 
-	out := []*store.File{}
+	layers := i.Layers()
+	out := []*File{}
 
 	// Iterate through layers from top to bottom (reverse order).
 	for i := len(layers) - 1; i >= 0; i-- {
@@ -44,7 +69,7 @@ func Unify(layers []*store.Layer) []*store.File {
 		// apply to *lower* layers, not files within this same layer.
 		newOpaqueDirs := map[string]bool{}
 
-		for _, file := range layer.Files {
+		for _, file := range layer.Files() {
 			header := file.Hdr
 			header.Name = filepath.Clean(header.Name)
 
@@ -80,7 +105,7 @@ func Unify(layers []*store.Layer) []*store.File {
 
 			// 2. If the file is inside a directory that was deleted or made opaque
 			//    by a higher layer, skip.
-			if isObscuredByParent(fileMap, finalPath) || inOpaqueDir(opaqueDirs, finalPath) {
+			if isFinalized(fileMap, finalPath) || inOpaqueDir(opaqueDirs, finalPath) {
 				continue
 			}
 
@@ -113,10 +138,10 @@ func Unify(layers []*store.Layer) []*store.File {
 	return out
 }
 
-// isObscuredByParent checks if a file is inside a directory that has been finalized
+// isFinalized checks if a file is inside a directory that has been finalized
 // by a higher layer. A parent is "finalized" if it was either replaced by a regular
 // file or explicitly deleted with a whiteout marker.
-func isObscuredByParent(fileMap map[string]bool, path string) bool {
+func isFinalized(fileMap map[string]bool, path string) bool {
 	// Walk up the directory tree towards the root.
 	for path != "" && path != "." && path != "/" {
 		parent := filepath.Dir(path)

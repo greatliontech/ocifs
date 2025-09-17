@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -111,13 +110,11 @@ func (s *Store) getImage(h v1.Hash) (*Image, error) {
 			return nil, err
 		}
 		blobPath := s.blobPath(lh)
-		data, err := os.ReadFile(blobPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading layer %d blob %s: %w", i, lh.String(), err)
+		outLayer := &Layer{
+			path: blobPath,
 		}
-		outLayer := &Layer{}
-		if err := json.Unmarshal(data, outLayer); err != nil {
-			return nil, fmt.Errorf("unmarshaling layer %d blob %s: %w", i, lh.String(), err)
+		if err := outLayer.Load(); err != nil {
+			return nil, err
 		}
 		outLayers[i] = outLayer
 	}
@@ -233,17 +230,12 @@ func (s *Store) unpackLayer(ctx context.Context, layer v1.Layer) error {
 	blobPath := s.blobPath(h)
 
 	intLayer := &Layer{
-		Files: files,
-	}
-
-	// marshal internal layer to json
-	data, err := json.Marshal(intLayer)
-	if err != nil {
-		return err
+		files: files,
+		path:  blobPath,
 	}
 
 	// persist layer data
-	if err := os.WriteFile(blobPath, data, 0644); err != nil {
+	if err := intLayer.Persist(); err != nil {
 		return err
 	}
 
