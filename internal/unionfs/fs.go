@@ -2,44 +2,99 @@ package unionfs
 
 import (
 	"archive/tar"
-	"context"
-	"io"
-	"log"
 	"log/slog"
-	"os"
 	"path"
-	"strings"
-	"syscall"
+	"time"
 
 	"github.com/greatliontech/ocifs/internal/store"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
+// ociFS is the root of our filesystem. It holds all top-level configuration.
 type ociFS struct {
 	fs.Inode
-	img       *store.Image
-	files     []*store.File
-	lookup    map[string]*store.File
-	extraDirs []string
+	ociDir // Embed the directory logic
 }
 
-func Init(img *store.Image, extraDirs []string) fs.InodeEmbedder {
+// Option is a function that configures the ociFS.
+type Option func(*ociDir) error
+
+// WithWritableLayer enables read-write mode by providing a path for the upper layer.
+func WithWritableLayer(writablePath string) Option {
+	return func(od *ociDir) error {
+		if writablePath == "" {
+			return nil // No-op if path is empty
+		}
+		slog.Info("Configuring filesystem with a writable layer", "path", writablePath)
+		writableLayer, err := store.NewWritableLayer(writablePath)
+		if err != nil {
+			return err
+		}
+		od.writableLayer = writableLayer
+		return nil
+	}
+}
+
+// WithExtraDirs ensures a list of directories are present in the filesystem.
+func WithExtraDirs(dirs []string) Option {
+	return func(od *ociDir) error {
+		slog.Info("Configuring filesystem with extra directories", "dirs", dirs)
+		for _, dir := range dirs {
+			// Ensure we have all parent directories as well.
+			d := dir
+			for d != "/" && d != "." {
+				od.extraDirs[d] = true
+				d = path.Dir(d)
+			}
+		}
+		return nil
+	}
+}
+
+// Init sets up the union filesystem using functional options.
+func Init(img *store.Image, opts ...Option) (fs.InodeEmbedder, error) {
 	files := img.Unify()
-	lookup := make(map[string]*store.File, len(files))
+	roLookup := make(map[string]*store.File, len(files))
+	roDirs := make(map[string]bool)
+
+	roDirs[""] = true // Root is always a dir
 	for _, f := range files {
-		lookup[f.Hdr.Name] = f
+		roLookup[f.Hdr.Name] = f
+		dir := path.Dir(f.Hdr.Name)
+		for dir != "." && dir != "/" {
+			roDirs[dir] = true
+			dir = path.Dir(dir)
+		}
 	}
-	return &ociFS{
-		img:       img,
-		files:     files,
-		lookup:    lookup,
-		extraDirs: extraDirs,
+
+	// Setup the root directory node with defaults.
+	rootDir := &ociFS{ociDir: ociDir{
+		isRoot:    true,
+		pathInFs:  "",
+		roLookup:  roLookup,
+		roDirs:    roDirs,
+		extraDirs: make(map[string]bool),
+	}}
+
+	// Apply all the provided options.
+	for _, opt := range opts {
+		if err := opt(&rootDir.ociDir); err != nil {
+			return nil, err
+		}
 	}
+
+	if rootDir.writableLayer == nil {
+		slog.Info("Initializing filesystem in read-only mode")
+	} else {
+		slog.Info("Initializing filesystem in read-write mode")
+	}
+
+	return rootDir, nil
 }
 
-// headerToFileInfo fills a fuse.Attr struct from a tar.Header.
-func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
+// headerToAttr fills a fuse.Attr struct from a tar.Header.
+func headerToAttr(out *fuse.Attr, h *tar.Header) {
 	out.Mode = uint32(h.Mode)
 	out.Size = uint64(h.Size)
 	out.Uid = uint32(h.Uid)
@@ -47,169 +102,23 @@ func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
 	out.SetTimes(&h.AccessTime, &h.ModTime, &h.ChangeTime)
 }
 
-var _ = (fs.NodeOnAdder)((*ociFS)(nil))
-
-func (ofs *ociFS) OnAdd(ctx context.Context) {
-	for _, file := range ofs.files {
-		fileName := file.Hdr.Name
-		dir, base := path.Split(fileName)
-
-		// create parent directories as needed. TODO: we might not need this since we sort on
-		// unifications
-		p := &ofs.Inode
-		for part := range strings.SplitSeq(dir, "/") {
-			if len(part) == 0 {
-				continue
-			}
-			ch := p.GetChild(part)
-			if ch == nil {
-				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
-				p.AddChild(part, ch, true)
-			}
-			p = ch
-		}
-
-		hdr := file.Hdr
-
-		attr := fuse.Attr{}
-		headerToFileInfo(&attr, hdr)
-
-		switch hdr.Typeflag {
-
-		case tar.TypeSymlink:
-			l := &fs.MemSymlink{
-				Data: []byte(hdr.Linkname),
-			}
-			l.Attr = attr
-			p.AddChild(base, p.NewPersistentInode(ctx, l, fs.StableAttr{Mode: syscall.S_IFLNK}), false)
-
-		// for hardlinks we create an inode pointing to the link file in it's layer whith it's size
-		case tar.TypeLink:
-			linkEntry, ok := ofs.lookup[hdr.Linkname]
-			if !ok {
-				slog.Debug("Missing link", "path", hdr.Linkname, "filepath", hdr.Name)
-				break
-			}
-			attr.Size = uint64(linkEntry.Hdr.Size)
-			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:     hdr.Linkname,
-				attr:     attr,
-				fullPath: linkEntry.Path,
-			}, fs.StableAttr{})
-			p.AddChild(base, ch, true)
-
-		case tar.TypeChar:
-			rf := &fs.MemRegularFile{}
-			rf.Attr = attr
-			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFCHR}), false)
-
-		case tar.TypeBlock:
-			rf := &fs.MemRegularFile{}
-			rf.Attr = attr
-			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFBLK}), false)
-
-		case tar.TypeFifo:
-			rf := &fs.MemRegularFile{}
-			rf.Attr = attr
-			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFIFO}), false)
-
-		case tar.TypeReg:
-			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:     fileName,
-				attr:     attr,
-				fullPath: file.Path,
-			}, fs.StableAttr{})
-			p.AddChild(base, ch, true)
-		default:
-			slog.Debug("Unsupported file type", "path", fileName, "type", hdr.Typeflag)
-		}
-
-	}
-
-	for _, d := range ofs.extraDirs {
-		p := &ofs.Inode
-		for part := range strings.SplitSeq(d, "/") {
-			if len(part) == 0 {
-				continue
-			}
-			ch := p.GetChild(part)
-			if ch == nil {
-				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
-				p.AddChild(part, ch, true)
-			}
-			p = ch
-		}
+// attrToHeader creates a new tar.Header for a new file or directory.
+func attrToHeader(name string, attr *fuse.Attr, typeflag byte) *tar.Header {
+	now := time.Now()
+	return &tar.Header{
+		Name:       name,
+		Mode:       int64(attr.Mode),
+		Uid:        int(attr.Uid),
+		Gid:        int(attr.Gid),
+		Size:       int64(attr.Size),
+		ModTime:    now,
+		AccessTime: now,
+		ChangeTime: now,
+		Typeflag:   typeflag,
 	}
 }
 
-type ociFile struct {
-	fs.Inode
-	path     string
-	fullPath string
-	attr     fuse.Attr
-}
-
-var _ = (fs.NodeOpener)((*ociFile)(nil))
-
-func (of *ociFile) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	slog.Debug("Open", "path", of.path, "flags", openFlags, "layerPath", of.fullPath, "size", of.attr.Size)
-
-	f, err := os.Open(of.fullPath)
-	if err != nil {
-		log.Printf("Error opening file: %v", err)
-		return nil, 0, syscall.EIO
-	}
-
-	return &ociFileHandle{f: f, size: of.attr.Size}, fuse.FOPEN_KEEP_CACHE, fs.OK
-}
-
-type ociFileHandle struct {
-	f    *os.File
-	size uint64
-}
-
-var _ = (fs.NodeReader)((*ociFile)(nil))
-
-func (gf *ociFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	slog.Debug("Read", "path", gf.path, "offset", off, "lendest", len(dest))
-
-	ofh, ok := fh.(*ociFileHandle)
-	if !ok {
-		slog.Error("Error getting file handle", "path", gf.path, "offset", off)
-		return nil, syscall.EIO
-	}
-
-	n, err := ofh.f.ReadAt(dest, off)
-	if err != nil && err != io.EOF {
-		slog.Error("Error reading file", "path", gf.path, "offset", off, "error", err)
-		return nil, syscall.EIO
-	}
-
-	slog.Debug("Read", "path", gf.path, "offset", off, "n", n)
-
-	return fuse.ReadResultData(dest), fs.OK
-}
-
-var _ = (fs.NodeGetattrer)((*ociFile)(nil))
-
-func (f *ociFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	out.Attr = f.attr
-	return fs.OK
-}
-
-var _ = (fs.NodeReleaser)((*ociFile)(nil))
-
-func (f *ociFile) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
-	slog.Debug("Release", "path", f.path)
-	ofh, ok := fh.(*ociFileHandle)
-	if !ok {
-		slog.Error("Error getting file handle", "path", f.path)
-		return syscall.EIO
-	}
-	err := ofh.f.Close()
-	if err != nil {
-		slog.Error("Error closing file", "path", f.path, "error", err)
-		return syscall.EIO
-	}
-	return fs.OK
-}
+// NOTE: Remember to call `writableLayer.Persist()` on unmount to save changes!
+// You can hook into the Unmount call on the fuse.Server.
+// server.Unmount()
+// if writableLayer != nil { writableLayer.Persist() }
