@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/renameio/v2"
 )
 
 type referenceStore string
@@ -38,7 +37,7 @@ func (rc referenceStore) Put(ref name.Reference, hash v1.Hash) error {
 		return err
 	}
 	// atomic write
-	return renameio.WriteFile(p, []byte(hash.String()), 0644)
+	return os.WriteFile(p, []byte(hash.String()), 0644)
 }
 
 func (rc referenceStore) pathForRef(ref name.Reference) string {

@@ -4,7 +4,6 @@ go 1.24
 
 require (
 	github.com/google/go-containerregistry v0.20.6
-	github.com/google/renameio/v2 v2.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.5.0
 	github.com/spf13/cobra v1.9.1
