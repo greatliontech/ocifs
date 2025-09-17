@@ -21,12 +21,6 @@ var WithWorkDir = func(workDir string) Option {
 	}
 }
 
-var WithExtraDirs = func(extraDirs []string) Option {
-	return func(o *OCIFS) {
-		o.extraDirs = extraDirs
-	}
-}
-
 var WithAuthSource = func(prefix string, auth authn.AuthConfig) Option {
 	return func(o *OCIFS) {
 		o.authn.creds[prefix] = auth
@@ -40,10 +34,9 @@ var WithEnableDefaultKeychain = func() Option {
 }
 
 type OCIFS struct {
-	workDir   string
-	extraDirs []string
-	authn     *ocifsKeychain
-	store     *store.Store
+	workDir string
+	authn   *ocifsKeychain
+	store   *store.Store
 }
 
 func New(opts ...Option) (*OCIFS, error) {
@@ -71,20 +64,26 @@ func New(opts ...Option) (*OCIFS, error) {
 }
 
 type ImageMount struct {
-	ofs        *OCIFS
 	srv        *fuse.Server
 	img        *store.Image
 	mountPoint string
 	id         string
 	ctx        context.Context
+	extraDirs  []string
+	writeDir   string
+	ufs        *unionfs.UnionFS
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
 	return im.img.ConfigFile()
 }
 
-func (im *ImageMount) Wait() {
+func (im *ImageMount) Wait() error {
 	im.srv.Wait()
+	if im.writeDir != "" {
+		return im.ufs.PersistWritable()
+	}
+	return nil
 }
 
 func (im *ImageMount) Unmount() error {
@@ -115,9 +114,20 @@ var MountWithContext = func(ctx context.Context) MountOption {
 	}
 }
 
+var MountWithExtraDirs = func(dirs []string) MountOption {
+	return func(im *ImageMount) {
+		im.extraDirs = dirs
+	}
+}
+
+var MountWithWritableDir = func(dir string) MountOption {
+	return func(im *ImageMount) {
+		im.writeDir = dir
+	}
+}
+
 func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	im := &ImageMount{
-		ofs: o,
 		ctx: context.Background(),
 	}
 	for _, opt := range opts {
@@ -147,7 +157,16 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	}
 	im.img = img
 
-	root := unionfs.Init(img, o.extraDirs)
+	uopts := []unionfs.Option{
+		unionfs.WithExtraDirs(im.extraDirs),
+		unionfs.WithWritableLayer(im.writeDir),
+	}
+
+	root, err := unionfs.Init(img, uopts...)
+	if err != nil {
+		return nil, err
+	}
+	im.ufs = root
 
 	// Create a FUSE server
 	srv, err := fs.Mount(im.mountPoint, root, &fs.Options{

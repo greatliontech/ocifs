@@ -18,9 +18,9 @@ const (
 
 // WritableLayer manages the upper, writable directory and its in-memory metadata.
 type WritableLayer struct {
-	path    string
-	mutex   sync.RWMutex
-	headers map[string]*tar.Header // In-memory store for metadata
+	path  string
+	mutex sync.RWMutex
+	files map[string]*File // In-memory store for metadata
 }
 
 // NewWritableLayer creates and initializes a new writable layer.
@@ -31,8 +31,8 @@ func NewWritableLayer(path string) (*WritableLayer, error) {
 	}
 
 	wl := &WritableLayer{
-		path:    path,
-		headers: make(map[string]*tar.Header),
+		path:  path,
+		files: make(map[string]*File),
 	}
 
 	if err := wl.Load(); err != nil && !os.IsNotExist(err) {
@@ -42,53 +42,68 @@ func NewWritableLayer(path string) (*WritableLayer, error) {
 	return wl, nil
 }
 
-// GetContentPath returns the path where a file's content should be stored.
-func (wl *WritableLayer) GetContentPath(name string) string {
-	// Note: You might want to use a hash of the name to avoid deep directory structures
-	return filepath.Join(wl.path, contentDirName, name)
-}
-
-// GetHeader retrieves the tar.Header for a given path from memory.
-func (wl *WritableLayer) GetHeader(path string) *tar.Header {
+// GetFile retrieves the tar.Header for a given path from memory.
+func (wl *WritableLayer) GetFile(path string) *File {
 	wl.mutex.RLock()
 	defer wl.mutex.RUnlock()
 	// Return a copy to prevent race conditions on the header fields
-	if hdr, ok := wl.headers[path]; ok {
-		hdrCopy := *hdr
-		return &hdrCopy
+	if file, ok := wl.files[path]; ok {
+		fileCopy := *file
+		return &fileCopy
 	}
 	return nil
 }
 
-// SetHeader stores a tar.Header in memory.
-func (wl *WritableLayer) SetHeader(hdr *tar.Header) {
+// SetFile stores a tar.Header in memory.
+func (wl *WritableLayer) SetFile(file *File) error {
 	wl.mutex.Lock()
 	defer wl.mutex.Unlock()
-	wl.headers[hdr.Name] = hdr
+
+	filePath := wl.getContentPath(file.Hdr.Name)
+	dir := filePath
+	if file.Hdr.Typeflag != tar.TypeDir {
+		dir = filepath.Dir(filePath)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	file.Path = filePath
+	wl.files[file.Hdr.Name] = file
+	return nil
 }
 
-// DeleteHeader removes a tar.Header from memory.
-func (wl *WritableLayer) DeleteHeader(path string) {
+// DeleteFile removes a tar.Header from memory.
+func (wl *WritableLayer) DeleteFile(path string) error {
 	wl.mutex.Lock()
 	defer wl.mutex.Unlock()
-	delete(wl.headers, path)
+
+	f, ok := wl.files[path]
+	if !ok {
+		return nil // Nothing to delete
+	}
+
+	if err := os.Remove(wl.getContentPath(f.Hdr.Name)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	delete(wl.files, path)
+	return nil
 }
 
 // ListChildren returns all immediate children for a given directory path from memory.
-func (wl *WritableLayer) ListChildren(dirPath string) []*tar.Header {
+func (wl *WritableLayer) ListChildren(dirPath string) []*File {
 	wl.mutex.RLock()
 	defer wl.mutex.RUnlock()
 
-	var children []*tar.Header
+	var children []*File
 	if dirPath != "" && !strings.HasSuffix(dirPath, "/") {
 		dirPath += "/"
 	}
 
-	for key, hdr := range wl.headers {
+	for key, file := range wl.files {
 		if strings.HasPrefix(key, dirPath) {
 			childPath := strings.TrimPrefix(key, dirPath)
 			if !strings.Contains(childPath, "/") {
-				children = append(children, hdr)
+				children = append(children, file)
 			}
 		}
 	}
@@ -111,7 +126,7 @@ func (wl *WritableLayer) Load() error {
 		return err
 	}
 
-	return json.Unmarshal(data, &wl.headers)
+	return json.Unmarshal(data, &wl.files)
 }
 
 // Persist writes the in-memory map to the metadata.json file.
@@ -119,10 +134,16 @@ func (wl *WritableLayer) Persist() error {
 	wl.mutex.RLock()
 	defer wl.mutex.RUnlock()
 
-	data, err := json.MarshalIndent(wl.headers, "", "  ")
+	data, err := json.MarshalIndent(wl.files, "", "  ")
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(filepath.Join(wl.path, metadataFileName), data, 0644)
+}
+
+// getContentPath returns the path where a file's content should be stored.
+func (wl *WritableLayer) getContentPath(name string) string {
+	// Note: You might want to use a hash of the name to avoid deep directory structures
+	return filepath.Join(wl.path, contentDirName, name)
 }

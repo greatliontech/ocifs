@@ -7,22 +7,20 @@ import (
 	"time"
 
 	"github.com/greatliontech/ocifs/internal/store"
-	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// ociFS is the root of our filesystem. It holds all top-level configuration.
-type ociFS struct {
-	fs.Inode
-	ociDir // Embed the directory logic
+// UnionFS is the root of our filesystem. It holds all top-level configuration.
+type UnionFS struct {
+	unionDir // Embed the directory logic
 }
 
 // Option is a function that configures the ociFS.
-type Option func(*ociDir) error
+type Option func(*unionDir) error
 
 // WithWritableLayer enables read-write mode by providing a path for the upper layer.
 func WithWritableLayer(writablePath string) Option {
-	return func(od *ociDir) error {
+	return func(od *unionDir) error {
 		if writablePath == "" {
 			return nil // No-op if path is empty
 		}
@@ -38,7 +36,7 @@ func WithWritableLayer(writablePath string) Option {
 
 // WithExtraDirs ensures a list of directories are present in the filesystem.
 func WithExtraDirs(dirs []string) Option {
-	return func(od *ociDir) error {
+	return func(od *unionDir) error {
 		slog.Info("Configuring filesystem with extra directories", "dirs", dirs)
 		for _, dir := range dirs {
 			// Ensure we have all parent directories as well.
@@ -53,7 +51,7 @@ func WithExtraDirs(dirs []string) Option {
 }
 
 // Init sets up the union filesystem using functional options.
-func Init(img *store.Image, opts ...Option) (fs.InodeEmbedder, error) {
+func Init(img *store.Image, opts ...Option) (*UnionFS, error) {
 	files := img.Unify()
 	roLookup := make(map[string]*store.File, len(files))
 	roDirs := make(map[string]bool)
@@ -69,7 +67,7 @@ func Init(img *store.Image, opts ...Option) (fs.InodeEmbedder, error) {
 	}
 
 	// Setup the root directory node with defaults.
-	rootDir := &ociFS{ociDir: ociDir{
+	rootDir := &UnionFS{unionDir: unionDir{
 		isRoot:    true,
 		pathInFs:  "",
 		roLookup:  roLookup,
@@ -79,7 +77,7 @@ func Init(img *store.Image, opts ...Option) (fs.InodeEmbedder, error) {
 
 	// Apply all the provided options.
 	for _, opt := range opts {
-		if err := opt(&rootDir.ociDir); err != nil {
+		if err := opt(&rootDir.unionDir); err != nil {
 			return nil, err
 		}
 	}
@@ -91,6 +89,13 @@ func Init(img *store.Image, opts ...Option) (fs.InodeEmbedder, error) {
 	}
 
 	return rootDir, nil
+}
+
+func (u *UnionFS) PersistWritable() error {
+	if u.writableLayer != nil {
+		return u.writableLayer.Persist()
+	}
+	return nil
 }
 
 // headerToAttr fills a fuse.Attr struct from a tar.Header.
