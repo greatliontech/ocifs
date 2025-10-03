@@ -1,0 +1,12 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Print this help message
+    cmd: go-task --list
+    silent: true
+
+  test:
+    desc: Run tests
+    cmd: go test -cover ./...
+    silent: true
