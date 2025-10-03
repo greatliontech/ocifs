@@ -55,21 +55,25 @@ func (wl *WritableLayer) GetFile(path string) *File {
 }
 
 // SetFile stores a tar.Header in memory.
-func (wl *WritableLayer) SetFile(file *File) error {
+func (wl *WritableLayer) SetFile(hdr tar.Header) (*File, error) {
 	wl.mutex.Lock()
 	defer wl.mutex.Unlock()
 
-	filePath := wl.getContentPath(file.Hdr.Name)
+	filePath := wl.getContentPath(hdr.Name)
 	dir := filePath
-	if file.Hdr.Typeflag != tar.TypeDir {
+	if hdr.Typeflag != tar.TypeDir {
 		dir = filepath.Dir(filePath)
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return nil, err
 	}
-	file.Path = filePath
+	file := &File{
+		Hdr:  hdr,
+		Path: filePath,
+	}
 	wl.files[file.Hdr.Name] = file
-	return nil
+	fileCopy := *file
+	return &fileCopy, nil
 }
 
 // DeleteFile removes a tar.Header from memory.

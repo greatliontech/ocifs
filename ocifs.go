@@ -174,7 +174,7 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 			AllowOther:  false,
 			Name:        "ocifs",
 			DirectMount: true,
-			Debug:       false, // Set to true for debugging
+			Debug:       true, // Set to true for debugging
 		},
 	})
 	if err != nil {

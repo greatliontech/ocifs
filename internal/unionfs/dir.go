@@ -41,8 +41,8 @@ func (od *unionDir) OnAdd(ctx context.Context) {
 	if od.isRoot && od.writableLayer != nil {
 		if hdr := od.writableLayer.GetFile(""); hdr == nil {
 			rootAttr := fuse.Attr{Mode: fuse.S_IFDIR | 0755}
-			file := &store.File{Hdr: attrToHeader("", &rootAttr, tar.TypeDir)}
-			od.writableLayer.SetFile(file)
+			hdr := attrToHeader("", &rootAttr, tar.TypeDir)
+			od.writableLayer.SetFile(hdr)
 		}
 	}
 }
@@ -147,8 +147,7 @@ func (od *unionDir) Mkdir(ctx context.Context, name string, mode uint32, out *fu
 		Ctime: uint64(now.Unix()),
 	}
 	hdr := attrToHeader(childPath, &attr, tar.TypeDir)
-	file := &store.File{Hdr: hdr}
-	if err := od.writableLayer.SetFile(file); err != nil {
+	if _, err := od.writableLayer.SetFile(hdr); err != nil {
 		return nil, fs.ToErrno(err)
 	}
 
@@ -169,8 +168,8 @@ func (od *unionDir) Create(ctx context.Context, name string, flags uint32, mode 
 		Ctime: uint64(now.Unix()),
 	}
 	hdr := attrToHeader(childPath, &attr, tar.TypeReg)
-	file := &store.File{Hdr: hdr}
-	if err := od.writableLayer.SetFile(file); err != nil {
+	file, err := od.writableLayer.SetFile(hdr)
+	if err != nil {
 		return nil, nil, 0, fs.ToErrno(err)
 	}
 
@@ -208,8 +207,8 @@ func (od *unionDir) Unlink(ctx context.Context, name string) syscall.Errno {
 		slog.Debug("Creating whiteout for read-only layer file", "path", childPath)
 		whiteoutPath := path.Join(od.pathInFs, store.WhiteoutPrefix+name)
 		hdr := tar.Header{Name: whiteoutPath, Mode: 0, Size: 0}
-		file := &store.File{Hdr: hdr}
-		if err := od.writableLayer.SetFile(file); err != nil {
+		file, err := od.writableLayer.SetFile(hdr)
+		if err != nil {
 			slog.Error("Failed to set whiteout file in writable layer", "error", err, "path", whiteoutPath)
 			return fs.ToErrno(err)
 		}
@@ -227,6 +226,11 @@ func (od *unionDir) Unlink(ctx context.Context, name string) syscall.Errno {
 	}
 
 	return syscall.ENOENT
+}
+
+func (od *unionDir) Truncate(name string, offset uint64, context *fuse.Context) (code fuse.Status) {
+	slog.Debug("Truncate called on directory", "path", od.pathInFs, "name", name, "offset", offset)
+	return fuse.ENOSYS
 }
 
 // newInodeFromHeader decides whether to create a file or directory Inode.

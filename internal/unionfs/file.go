@@ -36,12 +36,19 @@ type unionFileHandle struct {
 	f *os.File
 }
 
+func (uf *unionFileHandle) Truncate(name string, offset uint64, context *fuse.Context) (code fuse.Status) {
+	slog.Debug("FileHandle Truncate called", "offset", offset)
+	return fuse.ENOSYS
+}
+
 func (uf *unionFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	out.Attr = headerToAttr(uf.file.Hdr)
 	return fs.OK
 }
 
 func (uf *unionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	isWR := (flags&syscall.O_RDWR != 0) || (flags&syscall.O_WRONLY != 0)
+	slog.Debug("Open called", "path", uf.pathInFs, "flags", flags, "isWritable", uf.isWritable, "isWR", isWR)
 	var pathOnDisk string
 	if uf.isWritable {
 		pathOnDisk = uf.file.Path
@@ -56,9 +63,16 @@ func (uf *unionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uin
 
 	f, err := os.OpenFile(pathOnDisk, int(flags), os.FileMode(uf.file.Hdr.Mode))
 	if err != nil {
+		slog.Error("Open error", "path", uf.pathInFs, "error", err)
 		return nil, 0, fs.ToErrno(err)
 	}
+	slog.Debug("File opened", "path", uf.pathInFs, "fd", f.Fd())
 	return &unionFileHandle{f: f}, fuse.FOPEN_KEEP_CACHE, fs.OK
+}
+
+func (uf *unionFile) Truncate(name string, offset uint64, context *fuse.Context) (code fuse.Status) {
+	slog.Debug("Truncate called", "path", uf.pathInFs, "offset", offset)
+	return fuse.ENOSYS
 }
 
 func (uf *unionFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
@@ -95,12 +109,11 @@ func (uf *unionFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, o
 		// Get source and destination paths
 		roFile := uf.roLookup[uf.pathInFs]
 		srcPath := roFile.Path
-		dstFile := &store.File{Hdr: uf.file.Hdr} // Create a new file metadata for writable layer
-		if err := uf.writableLayer.SetFile(dstFile); err != nil {
+		destFile, err := uf.writableLayer.SetFile(uf.file.Hdr)
+		if err != nil {
 			return 0, fs.ToErrno(err)
 		}
-
-		destPath := dstFile.Path
+		destPath := destFile.Path
 
 		// Copy the content
 		src, err := os.Open(srcPath)
@@ -136,7 +149,10 @@ func (uf *unionFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, o
 
 	// Update the size in our metadata
 	uf.file.Hdr.Size = uf.file.Hdr.Size + int64(n) // This is a simplification; a full stat is better
-	uf.writableLayer.SetFile(uf.file)
+	uf.file, err = uf.writableLayer.SetFile(uf.file.Hdr)
+	if err != nil {
+		return 0, fs.ToErrno(err)
+	}
 
 	return uint32(n), fs.OK
 }
