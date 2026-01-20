@@ -140,8 +140,17 @@ func (od *unionDir) Mkdir(ctx context.Context, name string, mode uint32, out *fu
 	}
 
 	childPath := path.Join(od.pathInFs, name)
-	if _, err := od.writableLayer.Create(childPath, os.FileMode(mode), true); err != nil {
+	file, err := od.writableLayer.Create(childPath, os.FileMode(mode), true)
+	if err != nil {
 		return nil, fs.ToErrno(err)
+	}
+
+	// Set caller's uid/gid
+	caller, _ := fuse.FromContext(ctx)
+	if caller != nil {
+		file.Hdr.Uid = int(caller.Uid)
+		file.Hdr.Gid = int(caller.Gid)
+		od.writableLayer.Update(file)
 	}
 
 	return od.newDirInode(ctx, childPath), fs.OK
@@ -156,6 +165,14 @@ func (od *unionDir) Create(ctx context.Context, name string, flags uint32, mode 
 	file, err := od.writableLayer.Create(childPath, os.FileMode(mode), false)
 	if err != nil {
 		return nil, nil, 0, fs.ToErrno(err)
+	}
+
+	// Set caller's uid/gid
+	caller, _ := fuse.FromContext(ctx)
+	if caller != nil {
+		file.Hdr.Uid = int(caller.Uid)
+		file.Hdr.Gid = int(caller.Gid)
+		od.writableLayer.Update(file)
 	}
 
 	f, err := od.writableLayer.OpenContent(childPath, int(flags)|os.O_CREATE, os.FileMode(mode))
@@ -535,6 +552,14 @@ func (od *unionDir) Symlink(ctx context.Context, target, name string, out *fuse.
 	file, err := od.writableLayer.CreateSymlink(childPath, target)
 	if err != nil {
 		return nil, fs.ToErrno(err)
+	}
+
+	// Set caller's uid/gid
+	caller, _ := fuse.FromContext(ctx)
+	if caller != nil {
+		file.Hdr.Uid = int(caller.Uid)
+		file.Hdr.Gid = int(caller.Gid)
+		od.writableLayer.Update(file)
 	}
 
 	// Create inode for the symlink

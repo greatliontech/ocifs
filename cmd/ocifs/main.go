@@ -29,9 +29,50 @@ type rootCmdFlags struct {
 
 var rootFlags = &rootCmdFlags{}
 
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish]",
+	Short: "Generate shell completion script",
+	Long: `Generate shell completion script for ocifs.
+
+To load completions:
+
+Bash:
+  $ source <(ocifs completion bash)
+  # Or install permanently:
+  $ ocifs completion bash > ~/.local/share/bash-completion/completions/ocifs
+
+Zsh:
+  $ source <(ocifs completion zsh)
+  # Or install permanently:
+  $ ocifs completion zsh > ~/.local/share/zsh/site-functions/_ocifs
+
+Fish:
+  $ ocifs completion fish | source
+  # Or install permanently:
+  $ ocifs completion fish > ~/.config/fish/completions/ocifs.fish
+`,
+	Args:      cobra.ExactArgs(1),
+	ValidArgs: []string{"bash", "zsh", "fish"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		switch args[0] {
+		case "bash":
+			return rootCmd.GenBashCompletion(os.Stdout)
+		case "zsh":
+			return rootCmd.GenZshCompletion(os.Stdout)
+		case "fish":
+			return rootCmd.GenFishCompletion(os.Stdout, true)
+		default:
+			return nil
+		}
+	},
+}
+
 func main() {
 	// initialize logging
 	initLogging()
+
+	// add subcommands
+	rootCmd.AddCommand(completionCmd)
 
 	// bind command-line flags
 	rootCmd.Flags().StringVarP(&rootFlags.MountPoint, "mountpoint", "m", "", "Directory to mount OCI image")

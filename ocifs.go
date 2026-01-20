@@ -170,6 +170,11 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
+	// Create mount point if it doesn't exist
+	if err := os.MkdirAll(im.mountPoint, 0755); err != nil {
+		return nil, fmt.Errorf("create mount point: %w", err)
+	}
+
 	img, err := o.store.Image(im.ctx, imgRef)
 	if err != nil {
 		return nil, err
