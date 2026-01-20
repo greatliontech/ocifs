@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -17,6 +18,8 @@ import (
 
 // Ensure ociDir implements all necessary interfaces
 var (
+	_ = (fs.NodeGetattrer)((*unionDir)(nil))
+	_ = (fs.NodeSetattrer)((*unionDir)(nil))
 	_ = (fs.NodeLookuper)((*unionDir)(nil))
 	_ = (fs.NodeReaddirer)((*unionDir)(nil))
 	_ = (fs.NodeMkdirer)((*unionDir)(nil))
@@ -40,6 +43,26 @@ type unionDir struct {
 	blobs         store.BlobStore // Optional: for reading content by reference
 }
 
+// modeFromHeader returns the proper mode value with file type bits for DirEntry.
+func modeFromHeader(h tar.Header) uint32 {
+	mode := uint32(h.Mode) & 0777
+	switch h.Typeflag {
+	case tar.TypeDir:
+		mode |= fuse.S_IFDIR
+	case tar.TypeSymlink:
+		mode |= fuse.S_IFLNK
+	case tar.TypeChar:
+		mode |= syscall.S_IFCHR
+	case tar.TypeBlock:
+		mode |= syscall.S_IFBLK
+	case tar.TypeFifo:
+		mode |= syscall.S_IFIFO
+	default:
+		mode |= fuse.S_IFREG
+	}
+	return mode
+}
+
 func (od *unionDir) OnAdd(ctx context.Context) {
 	// If this is the root node and we are in read-write mode,
 	// ensure the root directory exists in our metadata.
@@ -50,8 +73,86 @@ func (od *unionDir) OnAdd(ctx context.Context) {
 	}
 }
 
+func (od *unionDir) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	// Check writable layer first
+	if od.writableLayer != nil {
+		if file := od.writableLayer.Get(od.pathInFs); file != nil {
+			out.Attr = headerToAttr(file.Hdr)
+			out.Attr.Mode |= fuse.S_IFDIR
+			return fs.OK
+		}
+	}
+
+	// Check read-only layers for explicit directory entry
+	if od.roLookup != nil {
+		if file, ok := od.roLookup[od.pathInFs]; ok {
+			out.Attr = headerToAttr(file.Hdr)
+			out.Attr.Mode |= fuse.S_IFDIR
+			return fs.OK
+		}
+	}
+
+	// Default for implicit directories (from roDirs), extra dirs, root
+	out.Attr.Mode = fuse.S_IFDIR | 0755
+	out.Attr.Nlink = 2
+	return fs.OK
+}
+
+func (od *unionDir) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	if od.writableLayer == nil {
+		return syscall.EROFS
+	}
+
+	// Get or create directory entry in writable layer
+	file := od.writableLayer.Get(od.pathInFs)
+	if file == nil {
+		// Directory exists only in RO layer or is implicit - copy metadata to writable
+		var err error
+		file, err = od.writableLayer.Create(od.pathInFs, 0755, true)
+		if err != nil {
+			return fs.ToErrno(err)
+		}
+		// Set caller's uid/gid for new entry
+		caller, _ := fuse.FromContext(ctx)
+		if caller != nil {
+			file.Hdr.Uid = int(caller.Uid)
+			file.Hdr.Gid = int(caller.Gid)
+		}
+	}
+
+	// Handle mode change
+	if mode, ok := in.GetMode(); ok {
+		file.Hdr.Mode = int64(mode)
+	}
+
+	// Handle uid/gid change
+	if uid, ok := in.GetUID(); ok {
+		file.Hdr.Uid = int(uid)
+	}
+	if gid, ok := in.GetGID(); ok {
+		file.Hdr.Gid = int(gid)
+	}
+
+	// Handle atime/mtime
+	if atime, ok := in.GetATime(); ok {
+		file.Hdr.AccessTime = atime
+	}
+	if mtime, ok := in.GetMTime(); ok {
+		file.Hdr.ModTime = mtime
+	}
+
+	if err := od.writableLayer.Update(file); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	out.Attr = headerToAttr(file.Hdr)
+	out.Attr.Mode |= fuse.S_IFDIR
+	return fs.OK
+}
+
 func (od *unionDir) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	childPath := path.Join(od.pathInFs, name)
+	slog.Debug("Lookup called", "parentPath", od.pathInFs, "name", name, "childPath", childPath)
 
 	// Precedence 1: Writable layer has the final say.
 	if od.writableLayer != nil {
@@ -65,21 +166,26 @@ func (od *unionDir) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 
 	// Precedence 2: Read-only OCI layers.
 	if roFile, ok := od.roLookup[childPath]; ok {
+		slog.Debug("Lookup found in roLookup", "path", childPath, "typeflag", roFile.Hdr.Typeflag)
 		return od.newInodeFromFile(ctx, roFile, false), fs.OK
 	}
 	if _, ok := od.roDirs[childPath]; ok {
+		slog.Debug("Lookup found in roDirs", "path", childPath)
 		return od.newDirInode(ctx, childPath), fs.OK
 	}
 
 	// Precedence 3: Virtual extra directories.
 	if _, ok := od.extraDirs[childPath]; ok {
+		slog.Debug("Lookup found in extraDirs", "path", childPath)
 		return od.newDirInode(ctx, childPath), fs.OK
 	}
 
+	slog.Debug("Lookup: ENOENT", "path", childPath)
 	return nil, syscall.ENOENT
 }
 
 func (od *unionDir) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+	slog.Debug("Readdir called", "path", od.pathInFs, "roLookupLen", len(od.roLookup), "roDirsLen", len(od.roDirs))
 	merged := make(map[string]fuse.DirEntry)
 	prefix := od.pathInFs
 	if prefix != "" {
@@ -90,8 +196,8 @@ func (od *unionDir) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	for p, f := range od.roLookup {
 		if strings.HasPrefix(p, prefix) {
 			childName := strings.TrimPrefix(p, prefix)
-			if !strings.Contains(childName, "/") {
-				merged[childName] = fuse.DirEntry{Name: childName, Mode: uint32(f.Hdr.Mode)}
+			if childName != "" && !strings.Contains(childName, "/") {
+				merged[childName] = fuse.DirEntry{Name: childName, Mode: modeFromHeader(f.Hdr)}
 			}
 		}
 	}
@@ -119,7 +225,7 @@ func (od *unionDir) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		// Add files from writable layer
 		for _, file := range od.writableLayer.List(od.pathInFs) {
 			baseName := path.Base(file.Hdr.Name)
-			merged[baseName] = fuse.DirEntry{Name: baseName, Mode: uint32(file.Hdr.Mode)}
+			merged[baseName] = fuse.DirEntry{Name: baseName, Mode: modeFromHeader(file.Hdr)}
 		}
 		// Remove whited-out files
 		for _, name := range od.writableLayer.Whiteouts(od.pathInFs) {
@@ -127,10 +233,16 @@ func (od *unionDir) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		}
 	}
 
-	var entries []fuse.DirEntry
+	// Collect entries into a sorted slice for consistent ordering
+	entries := make([]fuse.DirEntry, 0, len(merged))
 	for _, entry := range merged {
 		entries = append(entries, entry)
 	}
+	// Sort by name for consistent iteration order
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name < entries[j].Name
+	})
+	slog.Debug("Readdir returning", "path", od.pathInFs, "entries", len(entries))
 	return fs.NewListDirStream(entries), fs.OK
 }
 

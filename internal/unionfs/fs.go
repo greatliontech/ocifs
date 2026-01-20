@@ -2,12 +2,18 @@ package unionfs
 
 import (
 	"archive/tar"
+	"context"
 	"log/slog"
 	"path"
+	"syscall"
 
 	"github.com/greatliontech/ocifs/internal/store"
+	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
+
+// Ensure UnionFS implements Statfs
+var _ = (fs.NodeStatfser)((*UnionFS)(nil))
 
 // UnionFS is the root of our filesystem. It holds all top-level configuration.
 type UnionFS struct {
@@ -124,10 +130,59 @@ func (u *UnionFS) WritableLayer() *store.WritableLayer {
 	return u.writableLayer
 }
 
+// Statfs returns filesystem statistics for df command.
+func (u *UnionFS) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+	// Get underlying filesystem stats if we have a writable layer
+	if u.writableLayer != nil {
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(u.writableLayer.ContentPath(""), &stat); err == nil {
+			out.Blocks = stat.Blocks
+			out.Bfree = stat.Bfree
+			out.Bavail = stat.Bavail
+			out.Bsize = uint32(stat.Bsize)
+			out.Files = stat.Files
+			out.Ffree = stat.Ffree
+			out.NameLen = uint32(stat.Namelen)
+			return fs.OK
+		}
+	}
+
+	// Default values for read-only mode or if statfs fails
+	out.Blocks = 1 << 20 // ~1TB at 1MB blocks
+	out.Bfree = 1 << 19
+	out.Bavail = 1 << 19
+	out.Bsize = 4096
+	out.Files = 1 << 16
+	out.Ffree = 1 << 15
+	out.NameLen = 255
+	return fs.OK
+}
+
 // headerToAttr fills a fuse.Attr struct from a tar.Header.
 func headerToAttr(h tar.Header) fuse.Attr {
 	out := fuse.Attr{}
-	out.Mode = uint32(h.Mode)
+	// Start with permission bits from Mode
+	out.Mode = uint32(h.Mode) & 0777
+
+	// Set file type bits based on Typeflag
+	switch h.Typeflag {
+	case tar.TypeDir:
+		out.Mode |= fuse.S_IFDIR
+	case tar.TypeSymlink:
+		out.Mode |= fuse.S_IFLNK
+	case tar.TypeLink: // hard link - treated as regular file
+		out.Mode |= fuse.S_IFREG
+	case tar.TypeChar:
+		out.Mode |= syscall.S_IFCHR
+	case tar.TypeBlock:
+		out.Mode |= syscall.S_IFBLK
+	case tar.TypeFifo:
+		out.Mode |= syscall.S_IFIFO
+	default:
+		// Regular file or unknown - treat as regular
+		out.Mode |= fuse.S_IFREG
+	}
+
 	out.Size = uint64(h.Size)
 	out.Uid = uint32(h.Uid)
 	out.Gid = uint32(h.Gid)

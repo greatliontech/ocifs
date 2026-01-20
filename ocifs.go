@@ -196,10 +196,10 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	// Create a FUSE server
 	srv, err := fs.Mount(im.mountPoint, root, &fs.Options{
 		MountOptions: fuse.MountOptions{
-			AllowOther:  false,
-			Name:        "ocifs",
-			DirectMount: true,
-			Debug:       true, // Set to true for debugging
+			AllowOther:         false,
+			Name:               "ocifs",
+			DirectMount:        true,
+			DisableReadDirPlus: true, // Disable READDIRPLUS to work around dir listing issues
 		},
 	})
 	if err != nil {

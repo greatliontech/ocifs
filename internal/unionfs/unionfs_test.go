@@ -273,6 +273,57 @@ func TestReadOnly_ReadDir(t *testing.T) {
 	}
 }
 
+// TestReadOnly_ImplicitDirectories tests directories that exist only because
+// files are under them (no explicit directory entry in tar)
+func TestReadOnly_ImplicitDirectories(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add files WITHOUT adding explicit directory entries
+	// This simulates how many tar files are structured
+	env.addROFile("bin/sh", []byte("shell"), 0755)
+	env.addROFile("bin/ls", []byte("list"), 0755)
+	env.addROFile("usr/bin/env", []byte("env"), 0755)
+	env.addROFile("usr/lib/libc.so", []byte("libc"), 0644)
+	env.mount(false)
+
+	// Test listing implicit directory "bin"
+	entries, err := os.ReadDir(env.path("bin"))
+	if err != nil {
+		t.Fatalf("ReadDir on implicit dir 'bin' failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("Expected 2 entries in bin, got %d", len(entries))
+	}
+
+	// Test listing nested implicit directory "usr/bin"
+	entries, err = os.ReadDir(env.path("usr/bin"))
+	if err != nil {
+		t.Fatalf("ReadDir on implicit dir 'usr/bin' failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("Expected 1 entry in usr/bin, got %d", len(entries))
+	}
+
+	// Test stat on implicit directory
+	info, err := os.Stat(env.path("bin"))
+	if err != nil {
+		t.Fatalf("Stat on implicit dir failed: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("Implicit dir should be a directory")
+	}
+
+	// Test that we can read files in implicit directories
+	content, err := os.ReadFile(env.path("bin/sh"))
+	if err != nil {
+		t.Fatalf("ReadFile in implicit dir failed: %v", err)
+	}
+	if string(content) != "shell" {
+		t.Errorf("Content mismatch: got %q", content)
+	}
+}
+
 func TestReadOnly_NestedDirectories(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
@@ -380,6 +431,139 @@ func TestWritable_CreateNewFile(t *testing.T) {
 
 	if !bytes.Equal(got, content) {
 		t.Errorf("Content mismatch: got %q, want %q", got, content)
+	}
+}
+
+func TestWritable_CreateFileOwnership(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create a file
+	if err := os.WriteFile(env.path("owned.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Check ownership matches current user
+	info, err := os.Stat(env.path("owned.txt"))
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+
+	stat := info.Sys().(*syscall.Stat_t)
+	expectedUid := uint32(os.Getuid())
+	expectedGid := uint32(os.Getgid())
+
+	if stat.Uid != expectedUid {
+		t.Errorf("Uid mismatch: got %d, want %d", stat.Uid, expectedUid)
+	}
+	if stat.Gid != expectedGid {
+		t.Errorf("Gid mismatch: got %d, want %d", stat.Gid, expectedGid)
+	}
+}
+
+func TestWritable_MkdirOwnership(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create a directory
+	if err := os.Mkdir(env.path("owneddir"), 0755); err != nil {
+		t.Fatalf("Mkdir failed: %v", err)
+	}
+
+	// Check ownership matches current user
+	info, err := os.Stat(env.path("owneddir"))
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+
+	stat := info.Sys().(*syscall.Stat_t)
+	expectedUid := uint32(os.Getuid())
+	expectedGid := uint32(os.Getgid())
+
+	if stat.Uid != expectedUid {
+		t.Errorf("Uid mismatch: got %d, want %d", stat.Uid, expectedUid)
+	}
+	if stat.Gid != expectedGid {
+		t.Errorf("Gid mismatch: got %d, want %d", stat.Gid, expectedGid)
+	}
+}
+
+func TestWritable_ChmodDirectory(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create directory
+	if err := os.Mkdir(env.path("chmoddir"), 0755); err != nil {
+		t.Fatalf("Mkdir failed: %v", err)
+	}
+
+	// Change mode
+	if err := os.Chmod(env.path("chmoddir"), 0700); err != nil {
+		t.Fatalf("Chmod failed: %v", err)
+	}
+
+	// Verify mode changed
+	info, err := os.Stat(env.path("chmoddir"))
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+
+	if info.Mode().Perm() != 0700 {
+		t.Errorf("Mode mismatch: got %o, want %o", info.Mode().Perm(), 0700)
+	}
+}
+
+func TestWritable_ChmodRODirectory(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add files to create implicit RO directory
+	env.addROFile("rodir/file.txt", []byte("content"), 0644)
+	env.mount(true)
+
+	// Chmod on implicit RO directory should work (copy-up)
+	if err := os.Chmod(env.path("rodir"), 0700); err != nil {
+		t.Fatalf("Chmod on RO dir failed: %v", err)
+	}
+
+	// Verify mode changed
+	info, err := os.Stat(env.path("rodir"))
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+
+	if info.Mode().Perm() != 0700 {
+		t.Errorf("Mode mismatch: got %o, want %o", info.Mode().Perm(), 0700)
+	}
+}
+
+func TestStatfs(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Get filesystem stats
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(env.path(""), &stat); err != nil {
+		t.Fatalf("Statfs failed: %v", err)
+	}
+
+	// Basic sanity checks
+	if stat.Bsize == 0 {
+		t.Error("Block size should not be zero")
+	}
+	if stat.Blocks == 0 {
+		t.Error("Total blocks should not be zero")
+	}
+	if stat.Namelen == 0 {
+		t.Error("Max name length should not be zero")
 	}
 }
 
@@ -1242,5 +1426,440 @@ func TestWritable_Fsync(t *testing.T) {
 	got, _ := os.ReadFile(env.path("fsync.txt"))
 	if string(got) != "data to sync" {
 		t.Errorf("Content mismatch after fsync: got %q", got)
+	}
+}
+
+// ==================== READDIR BUG FIX TESTS ====================
+
+// TestReadOnly_ReaddirNoEmptyNames verifies that Readdir doesn't include
+// entries with empty names. This was a bug when tar archives contained
+// explicit directory entries (e.g., "bin/" as a separate entry).
+func TestReadOnly_ReaddirNoEmptyNames(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add explicit directory entry with trailing slash (simulates how some tars are structured)
+	// The roLookup will have "bin" as a key
+	now := time.Now()
+	env.roFiles["bin"] = &store.File{
+		Hdr: tar.Header{
+			Name:       "bin",
+			Mode:       0755 | int64(syscall.S_IFDIR),
+			Typeflag:   tar.TypeDir,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+	}
+
+	// Add files inside the directory
+	env.addROFile("bin/sh", []byte("shell"), 0755)
+	env.addROFile("bin/ls", []byte("list"), 0755)
+	env.mount(false)
+
+	// List the bin directory
+	entries, err := os.ReadDir(env.path("bin"))
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	// Should have exactly 2 entries (sh and ls), no empty name
+	if len(entries) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(entries))
+	}
+
+	for _, e := range entries {
+		if e.Name() == "" {
+			t.Errorf("Found entry with empty name - this is the bug!")
+		}
+	}
+
+	// Verify the actual entries are correct
+	names := make(map[string]bool)
+	for _, e := range entries {
+		names[e.Name()] = true
+	}
+	if !names["sh"] || !names["ls"] {
+		t.Errorf("Missing expected entries: sh=%v, ls=%v", names["sh"], names["ls"])
+	}
+}
+
+// TestReadOnly_ReaddirWithExplicitDirEntry tests that explicit directory entries
+// in the tar archive don't cause issues with directory listing.
+func TestReadOnly_ReaddirWithExplicitDirEntry(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add nested structure with explicit directory entries
+	now := time.Now()
+
+	// Explicit directory entry for "usr"
+	env.roFiles["usr"] = &store.File{
+		Hdr: tar.Header{
+			Name:       "usr",
+			Mode:       0755,
+			Typeflag:   tar.TypeDir,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+	}
+
+	// Explicit directory entry for "usr/bin"
+	env.roFiles["usr/bin"] = &store.File{
+		Hdr: tar.Header{
+			Name:       "usr/bin",
+			Mode:       0755,
+			Typeflag:   tar.TypeDir,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+	}
+
+	// Files inside
+	env.addROFile("usr/bin/env", []byte("env"), 0755)
+	env.addROFile("usr/bin/python", []byte("python"), 0755)
+	env.mount(false)
+
+	// List usr directory
+	entries, err := os.ReadDir(env.path("usr"))
+	if err != nil {
+		t.Fatalf("ReadDir on usr failed: %v", err)
+	}
+	if len(entries) != 1 { // Only "bin" subdirectory
+		t.Errorf("Expected 1 entry in usr, got %d", len(entries))
+	}
+	for _, e := range entries {
+		if e.Name() == "" {
+			t.Errorf("Found empty name in usr listing")
+		}
+	}
+
+	// List usr/bin directory
+	entries, err = os.ReadDir(env.path("usr/bin"))
+	if err != nil {
+		t.Fatalf("ReadDir on usr/bin failed: %v", err)
+	}
+	if len(entries) != 2 { // env and python
+		t.Errorf("Expected 2 entries in usr/bin, got %d", len(entries))
+	}
+	for _, e := range entries {
+		if e.Name() == "" {
+			t.Errorf("Found empty name in usr/bin listing")
+		}
+	}
+}
+
+// ==================== FILE TYPE BITS TESTS ====================
+
+// addROSymlink adds a symlink to the read-only layer
+func (e *testEnv) addROSymlink(name, target string, mode int64) {
+	e.t.Helper()
+
+	now := time.Now()
+	e.roFiles[name] = &store.File{
+		Hdr: tar.Header{
+			Name:       name,
+			Mode:       mode,
+			Typeflag:   tar.TypeSymlink,
+			Linkname:   target,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+	}
+}
+
+// TestReadOnly_SymlinkInReaddir verifies that symlinks in the read-only layer
+// are properly listed in directory listings with correct mode bits.
+func TestReadOnly_SymlinkInReaddir(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add a regular file and a symlink pointing to it
+	env.addROFile("bin/busybox", []byte("busybox binary"), 0755)
+	env.addROSymlink("bin/sh", "/bin/busybox", 0777)
+	env.addROSymlink("bin/ash", "/bin/busybox", 0777)
+	env.mount(false)
+
+	entries, err := os.ReadDir(env.path("bin"))
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Errorf("Expected 3 entries, got %d", len(entries))
+	}
+
+	// Verify the types are correct
+	typeMap := make(map[string]os.FileMode)
+	for _, e := range entries {
+		typeMap[e.Name()] = e.Type()
+	}
+
+	// busybox should be regular file
+	if typeMap["busybox"]&os.ModeSymlink != 0 {
+		t.Errorf("busybox should be regular file, got symlink")
+	}
+
+	// sh and ash should be symlinks
+	if typeMap["sh"]&os.ModeSymlink == 0 {
+		t.Errorf("sh should be symlink, got %v", typeMap["sh"])
+	}
+	if typeMap["ash"]&os.ModeSymlink == 0 {
+		t.Errorf("ash should be symlink, got %v", typeMap["ash"])
+	}
+}
+
+// TestReadOnly_SymlinkReadlink verifies that symlinks in the read-only layer
+// can be read with Readlink.
+func TestReadOnly_SymlinkReadlink(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	target := "/bin/busybox"
+	env.addROSymlink("bin/sh", target, 0777)
+	env.mount(false)
+
+	got, err := os.Readlink(env.path("bin/sh"))
+	if err != nil {
+		t.Fatalf("Readlink failed: %v", err)
+	}
+
+	if got != target {
+		t.Errorf("Readlink: got %q, want %q", got, target)
+	}
+}
+
+// TestReadOnly_SymlinkStat verifies that Lstat on a symlink returns symlink mode.
+func TestReadOnly_SymlinkStat(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.addROSymlink("link", "/some/target", 0777)
+	env.mount(false)
+
+	// Lstat should return symlink info
+	info, err := os.Lstat(env.path("link"))
+	if err != nil {
+		t.Fatalf("Lstat failed: %v", err)
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("Lstat should return symlink mode, got %v", info.Mode())
+	}
+}
+
+// TestHeaderToAttr_FileTypes tests that headerToAttr correctly sets file type bits.
+func TestHeaderToAttr_FileTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		typeflag byte
+		wantMode uint32
+	}{
+		{"regular file", tar.TypeReg, fuse.S_IFREG},
+		{"directory", tar.TypeDir, fuse.S_IFDIR},
+		{"symlink", tar.TypeSymlink, fuse.S_IFLNK},
+		{"hardlink", tar.TypeLink, fuse.S_IFREG}, // hardlinks treated as regular files
+		{"char device", tar.TypeChar, syscall.S_IFCHR},
+		{"block device", tar.TypeBlock, syscall.S_IFBLK},
+		{"fifo", tar.TypeFifo, syscall.S_IFIFO},
+		{"unknown", 'X', fuse.S_IFREG}, // unknown treated as regular file
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hdr := tar.Header{
+				Mode:     0755,
+				Typeflag: tt.typeflag,
+			}
+
+			attr := headerToAttr(hdr)
+
+			// Check that the file type bits are set correctly
+			gotType := attr.Mode & syscall.S_IFMT
+			if gotType != tt.wantMode {
+				t.Errorf("headerToAttr type bits: got %o, want %o", gotType, tt.wantMode)
+			}
+
+			// Check that permission bits are preserved
+			gotPerm := attr.Mode & 0777
+			if gotPerm != 0755 {
+				t.Errorf("headerToAttr perm bits: got %o, want %o", gotPerm, 0755)
+			}
+		})
+	}
+}
+
+// TestModeFromHeader_FileTypes tests that modeFromHeader correctly sets file type bits
+// for DirEntry structures used in Readdir.
+func TestModeFromHeader_FileTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		typeflag byte
+		wantMode uint32
+	}{
+		{"regular file", tar.TypeReg, fuse.S_IFREG},
+		{"directory", tar.TypeDir, fuse.S_IFDIR},
+		{"symlink", tar.TypeSymlink, fuse.S_IFLNK},
+		{"char device", tar.TypeChar, syscall.S_IFCHR},
+		{"block device", tar.TypeBlock, syscall.S_IFBLK},
+		{"fifo", tar.TypeFifo, syscall.S_IFIFO},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hdr := tar.Header{
+				Mode:     0644,
+				Typeflag: tt.typeflag,
+			}
+
+			mode := modeFromHeader(hdr)
+
+			// Check that the file type bits are set correctly
+			gotType := mode & syscall.S_IFMT
+			if gotType != tt.wantMode {
+				t.Errorf("modeFromHeader type bits: got %o, want %o", gotType, tt.wantMode)
+			}
+
+			// Check that permission bits are preserved
+			gotPerm := mode & 0777
+			if gotPerm != 0644 {
+				t.Errorf("modeFromHeader perm bits: got %o, want %o", gotPerm, 0644)
+			}
+		})
+	}
+}
+
+// TestReadOnly_MixedFileTypes verifies that directories with mixed file types
+// (regular files, directories, symlinks) are listed correctly.
+func TestReadOnly_MixedFileTypes(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Create a directory with mixed content
+	env.addROFile("mixed/regular.txt", []byte("content"), 0644)
+	env.addRODir("mixed/subdir", 0755)
+	env.addROSymlink("mixed/link", "/some/target", 0777)
+	env.mount(false)
+
+	entries, err := os.ReadDir(env.path("mixed"))
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Errorf("Expected 3 entries, got %d", len(entries))
+	}
+
+	// Verify types
+	for _, e := range entries {
+		switch e.Name() {
+		case "regular.txt":
+			if !e.Type().IsRegular() {
+				t.Errorf("regular.txt should be regular file, got %v", e.Type())
+			}
+		case "subdir":
+			if !e.IsDir() {
+				t.Errorf("subdir should be directory, got %v", e.Type())
+			}
+		case "link":
+			if e.Type()&os.ModeSymlink == 0 {
+				t.Errorf("link should be symlink, got %v", e.Type())
+			}
+		default:
+			t.Errorf("Unexpected entry: %s", e.Name())
+		}
+	}
+}
+
+// TestReadOnly_DeepSymlinkDirectory verifies that symlinks in deeply nested
+// directories are handled correctly.
+func TestReadOnly_DeepSymlinkDirectory(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Create deep nested structure with symlinks
+	env.addROFile("a/b/c/target.txt", []byte("content"), 0644)
+	env.addROSymlink("a/b/c/link.txt", "target.txt", 0777)
+	env.mount(false)
+
+	// List the deep directory
+	entries, err := os.ReadDir(env.path("a/b/c"))
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	if len(entries) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(entries))
+	}
+
+	// Verify types
+	typeMap := make(map[string]os.FileMode)
+	for _, e := range entries {
+		typeMap[e.Name()] = e.Type()
+	}
+
+	if !typeMap["target.txt"].IsRegular() {
+		t.Errorf("target.txt should be regular")
+	}
+	if typeMap["link.txt"]&os.ModeSymlink == 0 {
+		t.Errorf("link.txt should be symlink")
+	}
+
+	// Verify we can read the symlink target
+	got, err := os.Readlink(env.path("a/b/c/link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink failed: %v", err)
+	}
+	if got != "target.txt" {
+		t.Errorf("Readlink: got %q, want %q", got, "target.txt")
+	}
+}
+
+// TestReadOnly_ReaddirConsistency verifies that multiple Readdir calls
+// return consistent results.
+func TestReadOnly_ReaddirConsistency(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Create some files
+	for i := 0; i < 50; i++ {
+		name := filepath.Join("consistency", string(rune('a'+i%26))+string(rune('0'+i/26))+".txt")
+		env.addROFile(name, []byte("content"), 0644)
+	}
+	env.mount(false)
+
+	// Read directory multiple times
+	var firstEntries []string
+	for attempt := 0; attempt < 5; attempt++ {
+		entries, err := os.ReadDir(env.path("consistency"))
+		if err != nil {
+			t.Fatalf("ReadDir failed on attempt %d: %v", attempt, err)
+		}
+
+		var names []string
+		for _, e := range entries {
+			if e.Name() == "" {
+				t.Errorf("Found empty name entry on attempt %d", attempt)
+			}
+			names = append(names, e.Name())
+		}
+
+		if attempt == 0 {
+			firstEntries = names
+		} else {
+			if len(names) != len(firstEntries) {
+				t.Errorf("Inconsistent entry count: attempt 0 had %d, attempt %d had %d",
+					len(firstEntries), attempt, len(names))
+			}
+			// Check names match (they should be sorted)
+			for i, name := range names {
+				if i < len(firstEntries) && name != firstEntries[i] {
+					t.Errorf("Entry mismatch at index %d: got %q, want %q", i, name, firstEntries[i])
+				}
+			}
+		}
 	}
 }
