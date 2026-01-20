@@ -128,6 +128,12 @@ func (s *Store) Commit(ctx context.Context, base *Image, wl *WritableLayer, opts
 		return nil, fmt.Errorf("store image: %w", err)
 	}
 
+	// Unpack the new layer to our blob store
+	// This extracts file contents and creates layer metadata
+	if err := s.unpackLayer(ctx, layer); err != nil {
+		return nil, fmt.Errorf("unpack layer: %w", err)
+	}
+
 	// Get the new image's digest
 	h, err := newImg.Digest()
 	if err != nil {
