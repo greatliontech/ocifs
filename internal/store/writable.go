@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,11 +27,50 @@ type WritableLayer struct {
 	basePath string
 	mu       sync.RWMutex
 	files    map[string]*File
+
+	// Content storage (optional - uses direct filesystem if nil)
+	content ContentStore
+
+	// Auto-persist fields
+	dirty            bool          // Has metadata changed since last persist?
+	mutations        int           // Count of mutations since last persist
+	persistThreshold int           // Persist after this many mutations (0 = disabled)
+	persistInterval  time.Duration // Auto-persist interval (0 = disabled)
+	persistTicker    *time.Ticker
+	persistDone      chan struct{}
+	closed           bool
+}
+
+// WritableLayerOption configures a WritableLayer.
+type WritableLayerOption func(*WritableLayer)
+
+// WithAutoPersist enables automatic periodic persistence at the given interval.
+// A reasonable default is 30 seconds.
+func WithAutoPersist(interval time.Duration) WritableLayerOption {
+	return func(wl *WritableLayer) {
+		wl.persistInterval = interval
+	}
+}
+
+// WithPersistAfterMutations triggers a persist after the given number of mutations.
+// This provides durability proportional to write activity.
+func WithPersistAfterMutations(n int) WritableLayerOption {
+	return func(wl *WritableLayer) {
+		wl.persistThreshold = n
+	}
+}
+
+// WithContentStore injects a ContentStore for managing file content.
+// If not provided, the WritableLayer uses direct filesystem operations.
+func WithContentStore(cs ContentStore) WritableLayerOption {
+	return func(wl *WritableLayer) {
+		wl.content = cs
+	}
 }
 
 // NewWritableLayer creates a new writable layer at the given path.
 // If metadata exists from a previous session, it will be loaded.
-func NewWritableLayer(basePath string) (*WritableLayer, error) {
+func NewWritableLayer(basePath string, opts ...WritableLayerOption) (*WritableLayer, error) {
 	contentDir := filepath.Join(basePath, contentDirName)
 	if err := os.MkdirAll(contentDir, 0755); err != nil {
 		return nil, fmt.Errorf("create content dir: %w", err)
@@ -41,11 +81,96 @@ func NewWritableLayer(basePath string) (*WritableLayer, error) {
 		files:    make(map[string]*File),
 	}
 
+	// Apply options
+	for _, opt := range opts {
+		opt(wl)
+	}
+
 	if err := wl.load(); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("load metadata: %w", err)
 	}
 
+	// Start auto-persist if configured
+	if wl.persistInterval > 0 {
+		wl.startAutoPersist()
+	}
+
 	return wl, nil
+}
+
+// startAutoPersist begins the background persistence goroutine.
+func (wl *WritableLayer) startAutoPersist() {
+	wl.persistTicker = time.NewTicker(wl.persistInterval)
+	wl.persistDone = make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case <-wl.persistTicker.C:
+				wl.mu.RLock()
+				dirty := wl.dirty
+				wl.mu.RUnlock()
+
+				if dirty {
+					if err := wl.Persist(); err != nil {
+						slog.Error("auto-persist failed", "error", err)
+					} else {
+						slog.Debug("auto-persist completed")
+					}
+				}
+			case <-wl.persistDone:
+				return
+			}
+		}
+	}()
+}
+
+// markDirtyLocked marks the layer as having unsaved changes.
+// Caller must hold wl.mu. Returns true if threshold persist should be triggered.
+func (wl *WritableLayer) markDirtyLocked() bool {
+	wl.dirty = true
+	wl.mutations++
+	return wl.persistThreshold > 0 && wl.mutations >= wl.persistThreshold
+}
+
+// triggerThresholdPersist triggers an async persist if needed.
+// Call this after releasing the lock if markDirtyLocked returned true.
+func (wl *WritableLayer) triggerThresholdPersist() {
+	go func() {
+		if err := wl.Persist(); err != nil {
+			slog.Error("threshold-persist failed", "error", err)
+		} else {
+			slog.Debug("threshold-persist completed", "threshold", wl.persistThreshold)
+		}
+	}()
+}
+
+// Close stops auto-persist and performs a final persist.
+// After Close, the WritableLayer should not be used.
+func (wl *WritableLayer) Close() error {
+	wl.mu.Lock()
+	if wl.closed {
+		wl.mu.Unlock()
+		return nil
+	}
+	wl.closed = true
+	wl.mu.Unlock()
+
+	// Stop the ticker if running
+	if wl.persistTicker != nil {
+		wl.persistTicker.Stop()
+		close(wl.persistDone)
+	}
+
+	// Final persist
+	return wl.Persist()
+}
+
+// IsDirty returns true if there are unsaved changes.
+func (wl *WritableLayer) IsDirty() bool {
+	wl.mu.RLock()
+	defer wl.mu.RUnlock()
+	return wl.dirty
 }
 
 // =============================================================================
@@ -152,7 +277,6 @@ func (wl *WritableLayer) Whiteouts(dirPath string) []string {
 // For files, use OpenContent() to write the actual content.
 func (wl *WritableLayer) Create(path string, mode os.FileMode, isDir bool) (*File, error) {
 	wl.mu.Lock()
-	defer wl.mu.Unlock()
 
 	contentPath := wl.contentPath(path)
 
@@ -162,6 +286,7 @@ func (wl *WritableLayer) Create(path string, mode os.FileMode, isDir bool) (*Fil
 		parentDir = filepath.Dir(contentPath)
 	}
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		wl.mu.Unlock()
 		return nil, fmt.Errorf("create parent dirs: %w", err)
 	}
 
@@ -189,8 +314,15 @@ func (wl *WritableLayer) Create(path string, mode os.FileMode, isDir bool) (*Fil
 	}
 
 	wl.files[path] = f
+	shouldPersist := wl.markDirtyLocked()
 
 	copy := *f
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
 	return &copy, nil
 }
 
@@ -198,9 +330,9 @@ func (wl *WritableLayer) Create(path string, mode os.FileMode, isDir bool) (*Fil
 // The file must already exist in the writable layer.
 func (wl *WritableLayer) Update(f *File) error {
 	wl.mu.Lock()
-	defer wl.mu.Unlock()
 
 	if _, ok := wl.files[f.Hdr.Name]; !ok {
+		wl.mu.Unlock()
 		return fmt.Errorf("file not found: %s", f.Hdr.Name)
 	}
 
@@ -210,6 +342,13 @@ func (wl *WritableLayer) Update(f *File) error {
 
 	copy := *f
 	wl.files[f.Hdr.Name] = &copy
+	shouldPersist := wl.markDirtyLocked()
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
 	return nil
 }
 
@@ -217,21 +356,29 @@ func (wl *WritableLayer) Update(f *File) error {
 // This removes both metadata and content.
 func (wl *WritableLayer) Remove(path string) error {
 	wl.mu.Lock()
-	defer wl.mu.Unlock()
 
 	f, ok := wl.files[path]
 	if !ok {
+		wl.mu.Unlock()
 		return nil // Nothing to remove
 	}
 
 	// Remove content file if it exists
 	if f.Path != "" {
 		if err := os.Remove(f.Path); err != nil && !os.IsNotExist(err) {
+			wl.mu.Unlock()
 			return fmt.Errorf("remove content: %w", err)
 		}
 	}
 
 	delete(wl.files, path)
+	shouldPersist := wl.markDirtyLocked()
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
 	return nil
 }
 
@@ -239,19 +386,20 @@ func (wl *WritableLayer) Remove(path string) error {
 // This is used when deleting files that exist in read-only layers.
 func (wl *WritableLayer) Whiteout(path string) error {
 	wl.mu.Lock()
-	defer wl.mu.Unlock()
 
 	whPath := toWhiteoutPath(path)
 	contentPath := wl.contentPath(whPath)
 
 	// Create parent directories
 	if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+		wl.mu.Unlock()
 		return fmt.Errorf("create whiteout parent dirs: %w", err)
 	}
 
 	// Create empty whiteout file on disk
 	f, err := os.Create(contentPath)
 	if err != nil {
+		wl.mu.Unlock()
 		return fmt.Errorf("create whiteout file: %w", err)
 	}
 	f.Close()
@@ -265,6 +413,13 @@ func (wl *WritableLayer) Whiteout(path string) error {
 			Typeflag: tar.TypeReg,
 		},
 		Path: contentPath,
+	}
+
+	shouldPersist := wl.markDirtyLocked()
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
 	}
 
 	return nil
@@ -284,19 +439,20 @@ func (wl *WritableLayer) RemoveWhiteout(path string) error {
 // It copies both content and metadata, returning the new writable File.
 func (wl *WritableLayer) CopyUp(srcFile *File, srcContent io.Reader) (*File, error) {
 	wl.mu.Lock()
-	defer wl.mu.Unlock()
 
 	path := srcFile.Hdr.Name
 	contentPath := wl.contentPath(path)
 
 	// Create parent directories
 	if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+		wl.mu.Unlock()
 		return nil, fmt.Errorf("create parent dirs: %w", err)
 	}
 
 	// Copy content
 	dest, err := os.Create(contentPath)
 	if err != nil {
+		wl.mu.Unlock()
 		return nil, fmt.Errorf("create dest file: %w", err)
 	}
 
@@ -304,6 +460,7 @@ func (wl *WritableLayer) CopyUp(srcFile *File, srcContent io.Reader) (*File, err
 	if err != nil {
 		dest.Close()
 		os.Remove(contentPath)
+		wl.mu.Unlock()
 		return nil, fmt.Errorf("copy content: %w", err)
 	}
 	dest.Close()
@@ -326,8 +483,15 @@ func (wl *WritableLayer) CopyUp(srcFile *File, srcContent io.Reader) (*File, err
 	}
 
 	wl.files[path] = f
+	shouldPersist := wl.markDirtyLocked()
 
 	copy := *f
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
 	return &copy, nil
 }
 
@@ -362,9 +526,14 @@ func (wl *WritableLayer) OpenContent(path string, flags int, mode os.FileMode) (
 // Persist saves all metadata to disk.
 // Content is already on disk; this only persists the metadata index.
 func (wl *WritableLayer) Persist() error {
-	wl.mu.RLock()
-	defer wl.mu.RUnlock()
+	wl.mu.Lock()
+	defer wl.mu.Unlock()
 
+	return wl.persistLocked()
+}
+
+// persistLocked performs the actual persist. Caller must hold wl.mu.
+func (wl *WritableLayer) persistLocked() error {
 	data, err := json.MarshalIndent(wl.files, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
@@ -374,6 +543,10 @@ func (wl *WritableLayer) Persist() error {
 	if err := os.WriteFile(metaPath, data, 0644); err != nil {
 		return fmt.Errorf("write metadata: %w", err)
 	}
+
+	// Reset dirty state after successful persist
+	wl.dirty = false
+	wl.mutations = 0
 
 	return nil
 }

@@ -32,6 +32,7 @@ type unionDir struct {
 	roLookup      map[string]*store.File
 	roDirs        map[string]bool
 	extraDirs     map[string]bool // Directories to ensure exist
+	blobs         store.BlobStore // Optional: for reading content by reference
 }
 
 func (od *unionDir) OnAdd(ctx context.Context) {
@@ -210,6 +211,7 @@ func (od *unionDir) newInodeFromFile(ctx context.Context, file *store.File, isWr
 		isWritable:    isWritable,
 		roLookup:      od.roLookup,
 		writableLayer: od.writableLayer,
+		blobs:         od.blobs,
 	}
 	return od.NewPersistentInode(ctx, fileNode, fs.StableAttr{})
 }
@@ -221,6 +223,7 @@ func (od *unionDir) newDirInode(ctx context.Context, path string) *fs.Inode {
 		writableLayer: od.writableLayer,
 		roLookup:      od.roLookup,
 		roDirs:        od.roDirs,
+		blobs:         od.blobs,
 	}
 	return od.NewPersistentInode(ctx, dirNode, fs.StableAttr{Mode: fuse.S_IFDIR})
 }

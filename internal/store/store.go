@@ -24,6 +24,7 @@ type Store struct {
 	pullPolicy PullPolicy
 	refs       referenceStore
 	lp         layout.Path
+	blobs      BlobStore
 }
 
 func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, error) {
@@ -55,12 +56,19 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, 
 		return nil, err
 	}
 
+	// Initialize blob store
+	blobStore, err := NewFSBlobStore(filepath.Join(path, "blobs"))
+	if err != nil {
+		return nil, fmt.Errorf("create blob store: %w", err)
+	}
+
 	return &Store{
 		path:       path,
 		auth:       auth,
 		pullPolicy: pullPolicy,
 		refs:       referenceStore(filepath.Join(path, "refs")),
 		lp:         layout.Path(ociDir),
+		blobs:      blobStore,
 	}, nil
 }
 
@@ -77,6 +85,18 @@ func (s *Store) NewMountDir(id string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// BlobStore returns the store's blob storage interface.
+// This can be used to access content by reference without knowing the physical path.
+func (s *Store) BlobStore() BlobStore {
+	return s.blobs
+}
+
+// OpenBlob opens a blob by its reference (e.g., "sha256:abc123...").
+// This is a convenience method that delegates to the BlobStore.
+func (s *Store) OpenBlob(ref string) (io.ReadCloser, error) {
+	return s.blobs.Get(ref)
 }
 
 func (s *Store) Image(ctx context.Context, imageRef string) (*Image, error) {
@@ -301,6 +321,7 @@ func (s *Store) extractTar(ctx context.Context, rc io.ReadCloser) ([]*File, erro
 		blobPath := s.blobPath(h)
 
 		outFile.Path = blobPath
+		outFile.BlobRef = h.Algorithm + ":" + h.Hex // Set content-addressed reference
 
 		// check if blob already exists
 		if _, err := os.Stat(blobPath); err == nil {

@@ -2,6 +2,7 @@ package ocifs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -64,14 +65,15 @@ func New(opts ...Option) (*OCIFS, error) {
 }
 
 type ImageMount struct {
-	srv        *fuse.Server
-	img        *store.Image
-	mountPoint string
-	id         string
-	ctx        context.Context
-	extraDirs  []string
-	writeDir   string
-	ufs        *unionfs.UnionFS
+	srv              *fuse.Server
+	img              *store.Image
+	mountPoint       string
+	id               string
+	ctx              context.Context
+	extraDirs        []string
+	writeDir         string
+	writableLayerOpts []store.WritableLayerOption
+	ufs              *unionfs.UnionFS
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
@@ -81,7 +83,7 @@ func (im *ImageMount) ConfigFile() *v1.ConfigFile {
 func (im *ImageMount) Wait() error {
 	im.srv.Wait()
 	if im.writeDir != "" {
-		return im.ufs.PersistWritable()
+		return im.ufs.Close()
 	}
 	return nil
 }
@@ -92,6 +94,16 @@ func (im *ImageMount) Unmount() error {
 
 func (im *ImageMount) MountPoint() string {
 	return im.mountPoint
+}
+
+// Image returns the underlying store.Image for this mount.
+func (im *ImageMount) Image() *store.Image {
+	return im.img
+}
+
+// WritableLayer returns the writable layer, or nil if in read-only mode.
+func (im *ImageMount) WritableLayer() *store.WritableLayer {
+	return im.ufs.WritableLayer()
 }
 
 type MountOption func(*ImageMount)
@@ -123,6 +135,13 @@ var MountWithExtraDirs = func(dirs []string) MountOption {
 var MountWithWritableDir = func(dir string) MountOption {
 	return func(im *ImageMount) {
 		im.writeDir = dir
+	}
+}
+
+// MountWithWritableLayerOptions configures the writable layer with options like auto-persist.
+var MountWithWritableLayerOptions = func(opts ...store.WritableLayerOption) MountOption {
+	return func(im *ImageMount) {
+		im.writableLayerOpts = append(im.writableLayerOpts, opts...)
 	}
 }
 
@@ -159,7 +178,8 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 
 	uopts := []unionfs.Option{
 		unionfs.WithExtraDirs(im.extraDirs),
-		unionfs.WithWritableLayer(im.writeDir),
+		unionfs.WithWritableLayer(im.writeDir, im.writableLayerOpts...),
+		unionfs.WithBlobStore(o.store.BlobStore()),
 	}
 
 	root, err := unionfs.Init(img, uopts...)
@@ -183,4 +203,29 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	im.srv = srv
 
 	return im, nil
+}
+
+// CommitOptions configures how a writable layer is committed.
+// Re-exported from store for convenience.
+type CommitOptions = store.CommitOptions
+
+// Commit creates a new image by appending the writable layer's changes to a base image.
+// The mount should have a writable layer configured.
+// The new image is stored in the local OCI layout and can be pushed or tagged.
+func (o *OCIFS) Commit(ctx context.Context, mount *ImageMount, opts CommitOptions) (*store.Image, error) {
+	wl := mount.WritableLayer()
+	if wl == nil {
+		return nil, fmt.Errorf("mount has no writable layer")
+	}
+	return o.store.Commit(ctx, mount.img, wl, opts)
+}
+
+// Push uploads an image to a remote registry.
+func (o *OCIFS) Push(ctx context.Context, img *store.Image, ref string) error {
+	return o.store.Push(ctx, img, ref)
+}
+
+// Tag associates a reference with an image in the local store.
+func (o *OCIFS) Tag(img *store.Image, ref string) error {
+	return o.store.Tag(img, ref)
 }

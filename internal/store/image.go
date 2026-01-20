@@ -38,7 +38,7 @@ func (i *Image) Layers() []*Layer {
 }
 
 // adapted from https://github.com/google/go-containerregistry/blob/v0.20.6/pkg/v1/mutate/mutate.go#L265
-// to also respect opaque whiteouts
+// to also respect opaque whiteouts. a lot of comments added for me to follow the logic.
 
 // Unify takes a slice of layers, ordered from base to top, and flattens them
 // into a single, unified list of files representing the final filesystem view.

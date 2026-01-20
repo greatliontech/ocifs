@@ -32,6 +32,7 @@ type unionFile struct {
 	isWritable    bool // Does this file exist in the writable layer?
 	writableLayer *store.WritableLayer
 	roLookup      map[string]*store.File
+	blobs         store.BlobStore // Optional: for reading content by reference
 }
 
 // unionFileHandle holds the open file descriptor.

@@ -18,13 +18,14 @@ type UnionFS struct {
 type Option func(*unionDir) error
 
 // WithWritableLayer enables read-write mode by providing a path for the upper layer.
-func WithWritableLayer(writablePath string) Option {
+// Optional WritableLayerOptions can be passed to configure auto-persist behavior.
+func WithWritableLayer(writablePath string, opts ...store.WritableLayerOption) Option {
 	return func(od *unionDir) error {
 		if writablePath == "" {
 			return nil // No-op if path is empty
 		}
 		slog.Info("Configuring filesystem with a writable layer", "path", writablePath)
-		writableLayer, err := store.NewWritableLayer(writablePath)
+		writableLayer, err := store.NewWritableLayer(writablePath, opts...)
 		if err != nil {
 			return err
 		}
@@ -45,6 +46,15 @@ func WithExtraDirs(dirs []string) Option {
 				d = path.Dir(d)
 			}
 		}
+		return nil
+	}
+}
+
+// WithBlobStore provides a BlobStore for reading content by reference.
+// This enables content-addressed access to read-only layer content.
+func WithBlobStore(bs store.BlobStore) Option {
+	return func(od *unionDir) error {
+		od.blobs = bs
 		return nil
 	}
 }
@@ -90,11 +100,28 @@ func Init(img *store.Image, opts ...Option) (*UnionFS, error) {
 	return rootDir, nil
 }
 
+// PersistWritable saves metadata to disk without stopping auto-persist.
+// Use Close() instead when unmounting.
 func (u *UnionFS) PersistWritable() error {
 	if u.writableLayer != nil {
 		return u.writableLayer.Persist()
 	}
 	return nil
+}
+
+// Close stops auto-persist and performs a final persist.
+// Call this when unmounting the filesystem.
+func (u *UnionFS) Close() error {
+	if u.writableLayer != nil {
+		return u.writableLayer.Close()
+	}
+	return nil
+}
+
+// WritableLayer returns the writable layer, or nil if in read-only mode.
+// Use this to access the layer for committing changes.
+func (u *UnionFS) WritableLayer() *store.WritableLayer {
+	return u.writableLayer
 }
 
 // headerToAttr fills a fuse.Attr struct from a tar.Header.
