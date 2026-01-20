@@ -642,7 +642,7 @@ func (wl *WritableLayer) Persist() error {
 func (wl *WritableLayer) persistLocked() error {
 	data, err := json.MarshalIndent(wl.files, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return &PersistError{Path: wl.basePath, Op: "marshal", Err: err}
 	}
 
 	metaPath := filepath.Join(wl.basePath, metadataFileName)
@@ -650,14 +650,16 @@ func (wl *WritableLayer) persistLocked() error {
 
 	// Write to temp file first
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("write temp metadata: %w", err)
+		return &PersistError{Path: metaPath, Op: "write", Err: err}
 	}
 
 	// Atomic rename
 	if err := os.Rename(tmpPath, metaPath); err != nil {
 		os.Remove(tmpPath) // Clean up temp file on failure
-		return fmt.Errorf("rename metadata: %w", err)
+		return &PersistError{Path: metaPath, Op: "rename", Err: err}
 	}
+
+	slog.Debug("writable layer persisted", "path", wl.basePath, "files", len(wl.files))
 
 	// Reset dirty state after successful persist
 	wl.dirty = false
@@ -744,10 +746,15 @@ func (wl *WritableLayer) load() error {
 	metaPath := filepath.Join(wl.basePath, metadataFileName)
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
-		return err
+		return err // Return raw error so caller can check for os.IsNotExist
 	}
 
-	return json.Unmarshal(data, &wl.files)
+	if err := json.Unmarshal(data, &wl.files); err != nil {
+		return &PersistError{Path: metaPath, Op: "unmarshal", Err: err}
+	}
+
+	slog.Debug("writable layer loaded", "path", wl.basePath, "files", len(wl.files))
+	return nil
 }
 
 // toWhiteoutPath converts a regular path to its whiteout marker path.

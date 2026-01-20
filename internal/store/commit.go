@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"time"
@@ -31,6 +32,8 @@ func (wl *WritableLayer) ToLayer() (v1.Layer, error) {
 	wl.mu.RLock()
 	defer wl.mu.RUnlock()
 
+	slog.Debug("creating layer from writable layer", "files", len(wl.files))
+
 	// Create a tarball buffer
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
@@ -50,29 +53,31 @@ func (wl *WritableLayer) ToLayer() (v1.Layer, error) {
 
 		// Write header
 		if err := tw.WriteHeader(&hdr); err != nil {
-			return nil, fmt.Errorf("write header %s: %w", path, err)
+			return nil, &CommitError{Op: "write_header", Err: fmt.Errorf("%s: %w", path, err)}
 		}
 
 		// Write content for regular files with content
 		if hdr.Typeflag == tar.TypeReg && hdr.Size > 0 && file.Path != "" {
 			content, err := os.Open(file.Path)
 			if err != nil {
-				return nil, fmt.Errorf("open content %s: %w", path, err)
+				return nil, &CommitError{Op: "open_content", Err: fmt.Errorf("%s: %w", path, err)}
 			}
 			written, err := io.Copy(tw, content)
 			content.Close()
 			if err != nil {
-				return nil, fmt.Errorf("copy content %s: %w", path, err)
+				return nil, &CommitError{Op: "copy_content", Err: fmt.Errorf("%s: %w", path, err)}
 			}
 			if written != hdr.Size {
-				return nil, fmt.Errorf("size mismatch for %s: expected %d, wrote %d", path, hdr.Size, written)
+				return nil, &CommitError{Op: "verify_size", Err: fmt.Errorf("%s: expected %d, wrote %d", path, hdr.Size, written)}
 			}
 		}
 	}
 
 	if err := tw.Close(); err != nil {
-		return nil, fmt.Errorf("close tar writer: %w", err)
+		return nil, &CommitError{Op: "close_tar", Err: err}
 	}
+
+	slog.Debug("layer tarball created", "size", buf.Len())
 
 	// Create layer from tarball using LayerFromOpener (non-deprecated)
 	data := buf.Bytes()
@@ -85,6 +90,8 @@ func (wl *WritableLayer) ToLayer() (v1.Layer, error) {
 // Commit creates a new image by appending the writable layer's changes to a base image.
 // The new image is stored in the local OCI layout.
 func (s *Store) Commit(ctx context.Context, base *Image, wl *WritableLayer, opts CommitOptions) (*Image, error) {
+	slog.Info("committing writable layer", "base", base.h.String())
+
 	// Set default timestamp
 	if opts.Timestamp.IsZero() {
 		opts.Timestamp = time.Now()
@@ -93,19 +100,22 @@ func (s *Store) Commit(ctx context.Context, base *Image, wl *WritableLayer, opts
 	// Create layer from writable changes
 	layer, err := wl.ToLayer()
 	if err != nil {
-		return nil, fmt.Errorf("create layer: %w", err)
+		return nil, err // ToLayer already wraps errors
 	}
+
+	layerDigest, _ := layer.Digest()
+	slog.Debug("layer created", "digest", layerDigest.String())
 
 	// Append layer to base image
 	newImg, err := mutate.AppendLayers(base.img, layer)
 	if err != nil {
-		return nil, fmt.Errorf("append layer: %w", err)
+		return nil, &CommitError{Op: "append", Err: err}
 	}
 
 	// Get current config and add history entry
 	cfg, err := newImg.ConfigFile()
 	if err != nil {
-		return nil, fmt.Errorf("get config: %w", err)
+		return nil, &CommitError{Op: "config", Err: err}
 	}
 
 	// Clone config to avoid modifying the original
@@ -120,25 +130,27 @@ func (s *Store) Commit(ctx context.Context, base *Image, wl *WritableLayer, opts
 	// Apply the new config
 	newImg, err = mutate.ConfigFile(newImg, newCfg)
 	if err != nil {
-		return nil, fmt.Errorf("update config: %w", err)
+		return nil, &CommitError{Op: "update_config", Err: err}
 	}
 
 	// Store in local OCI layout
 	if err := s.lp.AppendImage(newImg); err != nil {
-		return nil, fmt.Errorf("store image: %w", err)
+		return nil, &CommitError{Op: "store", Err: err}
 	}
 
 	// Unpack the new layer to our blob store
 	// This extracts file contents and creates layer metadata
 	if err := s.unpackLayer(ctx, layer); err != nil {
-		return nil, fmt.Errorf("unpack layer: %w", err)
+		return nil, &CommitError{Op: "unpack", Err: err}
 	}
 
 	// Get the new image's digest
 	h, err := newImg.Digest()
 	if err != nil {
-		return nil, fmt.Errorf("get digest: %w", err)
+		return nil, &CommitError{Op: "digest", Err: err}
 	}
+
+	slog.Info("commit complete", "digest", h.String())
 
 	// Return wrapped Image
 	return s.getImage(h)
@@ -146,28 +158,37 @@ func (s *Store) Commit(ctx context.Context, base *Image, wl *WritableLayer, opts
 
 // Push uploads an image to a remote registry.
 func (s *Store) Push(ctx context.Context, img *Image, ref string) error {
+	slog.Info("pushing image", "ref", ref, "digest", img.h.String())
+
 	dest, err := name.ParseReference(ref)
 	if err != nil {
-		return fmt.Errorf("parse ref: %w", err)
+		return &PullError{Ref: ref, Op: "parse", Err: err}
 	}
 
-	return remote.Write(dest, img.img,
+	if err := remote.Write(dest, img.img,
 		remote.WithAuthFromKeychain(s.auth),
 		remote.WithContext(ctx),
-	)
+	); err != nil {
+		return &PullError{Ref: ref, Op: "push", Err: err}
+	}
+
+	slog.Info("image pushed", "ref", ref)
+	return nil
 }
 
 // Tag associates a reference with an image in the local store.
 // This allows the image to be retrieved later by the given reference.
 func (s *Store) Tag(img *Image, ref string) error {
+	slog.Debug("tagging image", "ref", ref, "digest", img.h.String())
+
 	parsed, err := name.ParseReference(ref)
 	if err != nil {
-		return fmt.Errorf("parse ref: %w", err)
+		return &PullError{Ref: ref, Op: "parse", Err: err}
 	}
 
 	h, err := img.img.Digest()
 	if err != nil {
-		return fmt.Errorf("get digest: %w", err)
+		return &PullError{Ref: ref, Op: "digest", Err: err}
 	}
 
 	return s.refs.Put(parsed, h)

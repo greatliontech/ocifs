@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,13 +27,21 @@ func NewFSBlobStore(basePath string) (BlobStore, error) {
 	if err := os.MkdirAll(sha256Dir, 0755); err != nil {
 		return nil, fmt.Errorf("create blob store dir: %w", err)
 	}
+	slog.Debug("blob store initialized", "path", basePath)
 	return &fsBlobStore{basePath: basePath}, nil
 }
 
 // Get returns a reader for the blob content.
 func (s *fsBlobStore) Get(ref string) (io.ReadCloser, error) {
 	path := s.refToPath(ref)
-	return os.Open(path)
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, &BlobError{Ref: ref, Op: "get", Err: ErrNotFound}
+		}
+		return nil, &BlobError{Ref: ref, Op: "get", Err: err}
+	}
+	return f, nil
 }
 
 // Put stores content and returns its hash reference.
@@ -40,7 +49,7 @@ func (s *fsBlobStore) Put(r io.Reader) (string, error) {
 	// Write to temp file while computing hash
 	tmpFile, err := os.CreateTemp(s.basePath, "blob-*")
 	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
+		return "", &BlobError{Ref: "", Op: "put", Err: fmt.Errorf("create temp: %w", err)}
 	}
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
@@ -49,7 +58,7 @@ func (s *fsBlobStore) Put(r io.Reader) (string, error) {
 	mw := io.MultiWriter(tmpFile, hasher)
 
 	if _, err := io.Copy(mw, r); err != nil {
-		return "", fmt.Errorf("write content: %w", err)
+		return "", &BlobError{Ref: "", Op: "put", Err: fmt.Errorf("write: %w", err)}
 	}
 
 	ref := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
@@ -57,17 +66,19 @@ func (s *fsBlobStore) Put(r io.Reader) (string, error) {
 
 	// Check if blob already exists
 	if _, err := os.Stat(destPath); err == nil {
-		return ref, nil // Already exists
+		slog.Debug("blob already exists", "ref", ref)
+		return ref, nil
 	}
 
 	// Move temp file to final location
 	if err := tmpFile.Close(); err != nil {
-		return "", err
+		return "", &BlobError{Ref: ref, Op: "put", Err: fmt.Errorf("close temp: %w", err)}
 	}
 	if err := os.Rename(tmpFile.Name(), destPath); err != nil {
-		return "", fmt.Errorf("move blob: %w", err)
+		return "", &BlobError{Ref: ref, Op: "put", Err: fmt.Errorf("rename: %w", err)}
 	}
 
+	slog.Debug("blob stored", "ref", ref)
 	return ref, nil
 }
 
@@ -85,7 +96,11 @@ func (s *fsBlobStore) Delete(ref string) error {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return &BlobError{Ref: ref, Op: "delete", Err: err}
+	}
+	slog.Debug("blob deleted", "ref", ref)
+	return nil
 }
 
 // refToPath converts a ref like "sha256:abc123" to a filesystem path.

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -186,50 +187,53 @@ func (s *Store) ListPlatforms(ctx context.Context, imageRef string) ([]v1.Platfo
 }
 
 func (s *Store) Image(ctx context.Context, imageRef string) (*Image, error) {
-	// pull image if needed
+	slog.Debug("loading image", "ref", imageRef)
+
 	h, err := s.pullImage(ctx, imageRef)
 	if err != nil {
-		return nil, err
+		return nil, err // pullImage already wraps errors
 	}
 
-	// get image from store
-	return s.getImage(h)
+	img, err := s.getImage(h)
+	if err != nil {
+		return nil, &PullError{Ref: imageRef, Op: "load", Err: err}
+	}
+
+	slog.Debug("image loaded", "ref", imageRef, "digest", h.String())
+	return img, nil
 }
 
 func (s *Store) getImage(h v1.Hash) (*Image, error) {
 	img, err := s.lp.Image(h)
 	if err != nil {
-		return nil, err
+		return nil, &LayerError{Digest: h.String(), Op: "open", Err: err}
 	}
 
 	layers, err := img.Layers()
 	if err != nil {
-		return nil, err
+		return nil, &LayerError{Digest: h.String(), Op: "list", Err: err}
 	}
 
 	outLayers := make([]*Layer, len(layers))
 
-	// loop through layers to get their hashes
 	for i, layer := range layers {
 		lh, err := layer.Digest()
 		if err != nil {
-			return nil, err
+			return nil, &LayerError{Op: "digest", Err: err}
 		}
 		blobPath := s.blobPath(lh)
 		outLayer := &Layer{
 			path: blobPath,
 		}
 		if err := outLayer.Load(); err != nil {
-			return nil, err
+			return nil, &LayerError{Digest: lh.String(), Op: "load", Err: err}
 		}
 		outLayers[i] = outLayer
 	}
 
-	// read the config file here to avoid exposing a method
-	// that will return (Conf, error)
 	conf, err := img.ConfigFile()
 	if err != nil {
-		return nil, err
+		return nil, &LayerError{Digest: h.String(), Op: "config", Err: err}
 	}
 
 	return &Image{
@@ -241,113 +245,111 @@ func (s *Store) getImage(h v1.Hash) (*Image, error) {
 }
 
 func (s *Store) pullImage(ctx context.Context, imageRef string) (v1.Hash, error) {
-	// parse reference string
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "parse", Err: err}
 	}
 
-	// check in cache
+	// Check cache
 	h, refFound, err := s.refs.Get(ref)
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "cache_lookup", Err: err}
 	}
 
-	// no ref found, only matters if pull policy is never
 	if !refFound && s.pullPolicy == PullNever {
-		return emptyHash, fmt.Errorf("image %s not found in cache and pull policy is 'Never'", imageRef)
+		return emptyHash, &PullError{Ref: imageRef, Op: "cache_lookup", Err: ErrNotFound}
 	}
 
-	// ref found, return hash if no pull needed
+	// Return cached if policy allows
 	if refFound {
 		if s.pullPolicy == PullIfNotPresent {
+			slog.Debug("using cached image", "ref", imageRef, "digest", h.String())
 			return h, nil
 		}
 		desc, err := remote.Head(ref, remote.WithAuthFromKeychain(s.auth))
 		if err != nil {
-			return emptyHash, err
+			return emptyHash, &PullError{Ref: imageRef, Op: "check_remote", Err: err}
 		}
 		if desc.Digest == h {
+			slog.Debug("cached image is up to date", "ref", imageRef, "digest", h.String())
 			return h, nil
 		}
+		slog.Debug("cached image is stale, pulling", "ref", imageRef, "cached", h.String(), "remote", desc.Digest.String())
 	}
 
-	// at this point, we need to pull the image
-	// Use the configured platform for multi-arch image resolution
+	// Pull from remote
+	slog.Info("pulling image", "ref", imageRef, "platform", s.Platform().String())
+
 	remoteOpts := []remote.Option{remote.WithAuthFromKeychain(s.auth)}
 	if s.platform != nil {
 		remoteOpts = append(remoteOpts, remote.WithPlatform(*s.platform))
 	}
 	rmtImg, err := remote.Image(ref, remoteOpts...)
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "fetch", Err: err}
 	}
 
-	// store in local oci layout
 	if err := s.lp.AppendImage(rmtImg); err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "store", Err: err}
 	}
 
-	// get the image hash to query local layout
 	h, err = rmtImg.Digest()
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "digest", Err: err}
 	}
 
-	// find local image
 	img, err := s.lp.Image(h)
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "load", Err: err}
 	}
 
-	// get layers and unpack them
 	layers, err := img.Layers()
 	if err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "layers", Err: err}
 	}
-	for _, layer := range layers {
+
+	slog.Debug("extracting layers", "ref", imageRef, "count", len(layers))
+	for i, layer := range layers {
 		if err := s.unpackLayer(ctx, layer); err != nil {
-			return emptyHash, err
+			return emptyHash, err // unpackLayer already wraps errors
 		}
+		slog.Debug("layer extracted", "ref", imageRef, "layer", i+1, "total", len(layers))
 	}
 
-	// store ref
 	if err := s.refs.Put(ref, h); err != nil {
-		return emptyHash, err
+		return emptyHash, &PullError{Ref: imageRef, Op: "save_ref", Err: err}
 	}
 
+	slog.Info("image pulled", "ref", imageRef, "digest", h.String())
 	return h, nil
 }
 
 func (s *Store) unpackLayer(ctx context.Context, layer v1.Layer) error {
-	// tar reader
+	h, err := layer.Digest()
+	if err != nil {
+		return &LayerError{Op: "digest", Err: err}
+	}
+	digest := h.String()
+
 	rc, err := layer.Uncompressed()
 	if err != nil {
-		return err
+		return &LayerError{Digest: digest, Op: "decompress", Err: err}
 	}
 	defer rc.Close()
 
-	// get unpacked layer files
 	files, err := s.extractTar(ctx, rc)
 	if err != nil {
-		return err
+		return &LayerError{Digest: digest, Op: "extract", Err: err}
 	}
 
-	// layer hash
-	h, err := layer.Digest()
-	if err != nil {
-		return err
-	}
 	blobPath := s.blobPath(h)
-
 	intLayer := &Layer{
 		files: files,
 		path:  blobPath,
 	}
 
-	// persist layer data
 	if err := intLayer.Persist(); err != nil {
-		return err
+		return &LayerError{Digest: digest, Op: "persist", Err: err}
 	}
 
 	return nil
@@ -355,54 +357,43 @@ func (s *Store) unpackLayer(ctx context.Context, layer v1.Layer) error {
 
 func (s *Store) extractTar(ctx context.Context, rc io.ReadCloser) ([]*File, error) {
 	tr := tar.NewReader(rc)
-	ret := []*File{}
+	var ret []*File
 	buf := make([]byte, 256*1024)
 	blobsDir := filepath.Join(s.path, "blobs")
 
-	// iterate through entries in the tar archive
 	for {
-		// check for context cancellation
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
 
-		// get next hdr
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			break // End of archive
+			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read tar header: %w", err)
 		}
 
-		outFile := &File{
-			Hdr: *hdr,
-		}
-
-		// we add this erly
+		outFile := &File{Hdr: *hdr}
 		ret = append(ret, outFile)
 
-		// we only care about regular files
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 
-		// temp file
 		tf, err := os.CreateTemp(blobsDir, "blob-*")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create temp file: %w", err)
 		}
 		defer tf.Close()
 		defer os.Remove(tf.Name())
 
 		hasher := sha256.New()
-
-		// stream file bytes -> [temp file, hasher]
 		mw := io.MultiWriter(tf, hasher)
 		if _, err := io.CopyBuffer(mw, tr, buf); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("extract %s: %w", hdr.Name, err)
 		}
 
 		h := v1.Hash{
@@ -412,18 +403,16 @@ func (s *Store) extractTar(ctx context.Context, rc io.ReadCloser) ([]*File, erro
 		blobPath := s.blobPath(h)
 
 		outFile.Path = blobPath
-		outFile.BlobRef = h.Algorithm + ":" + h.Hex // Set content-addressed reference
+		outFile.BlobRef = h.Algorithm + ":" + h.Hex
 
-		// check if blob already exists
 		if _, err := os.Stat(blobPath); err == nil {
 			continue
 		} else if !os.IsNotExist(err) {
-			return nil, err
+			return nil, fmt.Errorf("stat blob %s: %w", blobPath, err)
 		}
 
-		// move temp file to final location
 		if err := os.Rename(tf.Name(), blobPath); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("store blob %s: %w", hdr.Name, err)
 		}
 	}
 
