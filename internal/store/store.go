@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -18,6 +19,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// StoreOption configures a Store.
+type StoreOption func(*Store)
+
+// WithDefaultPlatform sets the default platform for pulling multi-arch images.
+// If not specified, defaults to the current runtime platform (runtime.GOOS/runtime.GOARCH).
+func WithDefaultPlatform(platform v1.Platform) StoreOption {
+	return func(s *Store) {
+		s.platform = &platform
+	}
+}
+
 type Store struct {
 	path       string
 	auth       authn.Keychain
@@ -25,9 +37,10 @@ type Store struct {
 	refs       referenceStore
 	lp         layout.Path
 	blobs      BlobStore
+	platform   *v1.Platform // Target platform for multi-arch images
 }
 
-func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, error) {
+func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, opts ...StoreOption) (*Store, error) {
 	// if dir does not exist, create it
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if err := os.MkdirAll(path, 0755); err != nil {
@@ -62,14 +75,28 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, 
 		return nil, fmt.Errorf("create blob store: %w", err)
 	}
 
-	return &Store{
+	// Default platform is the current runtime
+	defaultPlatform := &v1.Platform{
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+	}
+
+	s := &Store{
 		path:       path,
 		auth:       auth,
 		pullPolicy: pullPolicy,
 		refs:       referenceStore(filepath.Join(path, "refs")),
 		lp:         layout.Path(ociDir),
 		blobs:      blobStore,
-	}, nil
+		platform:   defaultPlatform,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s, nil
 }
 
 func (s *Store) NewMountDir(id string) (string, error) {
@@ -97,6 +124,65 @@ func (s *Store) BlobStore() BlobStore {
 // This is a convenience method that delegates to the BlobStore.
 func (s *Store) OpenBlob(ref string) (io.ReadCloser, error) {
 	return s.blobs.Get(ref)
+}
+
+// Platform returns the target platform used for pulling multi-arch images.
+func (s *Store) Platform() v1.Platform {
+	if s.platform != nil {
+		return *s.platform
+	}
+	return v1.Platform{OS: runtime.GOOS, Architecture: runtime.GOARCH}
+}
+
+// ListPlatforms queries a remote image reference and returns available platforms.
+// For single-arch images, returns a slice with one platform.
+// For multi-arch images (indexes), returns all available platforms.
+func (s *Store) ListPlatforms(ctx context.Context, imageRef string) ([]v1.Platform, error) {
+	ref, err := name.ParseReference(imageRef)
+	if err != nil {
+		return nil, fmt.Errorf("parse reference: %w", err)
+	}
+
+	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(s.auth), remote.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("get descriptor: %w", err)
+	}
+
+	// Check if it's an index (multi-arch)
+	if desc.MediaType.IsIndex() {
+		idx, err := desc.ImageIndex()
+		if err != nil {
+			return nil, fmt.Errorf("get index: %w", err)
+		}
+		manifest, err := idx.IndexManifest()
+		if err != nil {
+			return nil, fmt.Errorf("get index manifest: %w", err)
+		}
+
+		var platforms []v1.Platform
+		for _, m := range manifest.Manifests {
+			if m.Platform != nil {
+				platforms = append(platforms, *m.Platform)
+			}
+		}
+		return platforms, nil
+	}
+
+	// Single-arch image - get platform from config
+	img, err := desc.Image()
+	if err != nil {
+		return nil, fmt.Errorf("get image: %w", err)
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		return nil, fmt.Errorf("get config: %w", err)
+	}
+
+	return []v1.Platform{{
+		OS:           cfg.OS,
+		Architecture: cfg.Architecture,
+		Variant:      cfg.Variant,
+	}}, nil
 }
 
 func (s *Store) Image(ctx context.Context, imageRef string) (*Image, error) {
@@ -187,7 +273,12 @@ func (s *Store) pullImage(ctx context.Context, imageRef string) (v1.Hash, error)
 	}
 
 	// at this point, we need to pull the image
-	rmtImg, err := remote.Image(ref, remote.WithAuthFromKeychain(s.auth))
+	// Use the configured platform for multi-arch image resolution
+	remoteOpts := []remote.Option{remote.WithAuthFromKeychain(s.auth)}
+	if s.platform != nil {
+		remoteOpts = append(remoteOpts, remote.WithPlatform(*s.platform))
+	}
+	rmtImg, err := remote.Image(ref, remoteOpts...)
 	if err != nil {
 		return emptyHash, err
 	}
