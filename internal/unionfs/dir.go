@@ -25,6 +25,7 @@ var (
 	_ = (fs.NodeRmdirer)((*unionDir)(nil))
 	_ = (fs.NodeRenamer)((*unionDir)(nil))
 	_ = (fs.NodeSymlinker)((*unionDir)(nil))
+	_ = (fs.NodeLinker)((*unionDir)(nil))
 )
 
 // unionDir handles operations for a directory in the filesystem.
@@ -537,6 +538,45 @@ func (od *unionDir) Symlink(ctx context.Context, target, name string, out *fuse.
 	}
 
 	// Create inode for the symlink
+	return od.newInodeFromFile(ctx, file, true), fs.OK
+}
+
+func (od *unionDir) Link(ctx context.Context, target fs.InodeEmbedder, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	if od.writableLayer == nil {
+		return nil, syscall.EROFS
+	}
+
+	childPath := path.Join(od.pathInFs, name)
+	slog.Debug("Link called", "path", childPath)
+
+	// Get the target file
+	var targetFile *unionFile
+	switch v := target.(type) {
+	case *unionFile:
+		targetFile = v
+	default:
+		ops := target.EmbeddedInode().Operations()
+		var ok bool
+		targetFile, ok = ops.(*unionFile)
+		if !ok {
+			slog.Error("Link: target is not a unionFile")
+			return nil, syscall.EINVAL
+		}
+	}
+
+	// Only allow hardlinks to files in the writable layer
+	if !targetFile.isWritable {
+		slog.Debug("Link: target is not in writable layer, returning EXDEV")
+		return nil, syscall.EXDEV // Cross-device link not permitted
+	}
+
+	// Create the hard link
+	file, err := od.writableLayer.CreateHardlink(childPath, targetFile.pathInFs)
+	if err != nil {
+		return nil, fs.ToErrno(err)
+	}
+
+	// Return the same inode as the target (hard links share inodes)
 	return od.newInodeFromFile(ctx, file, true), fs.OK
 }
 

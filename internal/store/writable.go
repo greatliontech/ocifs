@@ -431,6 +431,63 @@ func (wl *WritableLayer) RemoveWhiteout(path string) error {
 	return wl.Remove(whPath)
 }
 
+// CreateHardlink creates a hard link at linkPath pointing to targetPath.
+// Both paths must be in the writable layer.
+func (wl *WritableLayer) CreateHardlink(linkPath, targetPath string) (*File, error) {
+	wl.mu.Lock()
+
+	// Get target file metadata
+	targetFile, ok := wl.files[targetPath]
+	if !ok {
+		wl.mu.Unlock()
+		return nil, fmt.Errorf("target not found: %s", targetPath)
+	}
+
+	linkContentPath := wl.contentPath(linkPath)
+	targetContentPath := wl.contentPath(targetPath)
+
+	// Create parent directories
+	if err := os.MkdirAll(filepath.Dir(linkContentPath), 0755); err != nil {
+		wl.mu.Unlock()
+		return nil, fmt.Errorf("create parent dirs: %w", err)
+	}
+
+	// Create the actual hard link on disk
+	if err := os.Link(targetContentPath, linkContentPath); err != nil {
+		wl.mu.Unlock()
+		return nil, fmt.Errorf("create hardlink: %w", err)
+	}
+
+	now := time.Now()
+	f := &File{
+		Hdr: tar.Header{
+			Name:       linkPath,
+			Mode:       targetFile.Hdr.Mode,
+			Uid:        targetFile.Hdr.Uid,
+			Gid:        targetFile.Hdr.Gid,
+			Size:       targetFile.Hdr.Size,
+			Typeflag:   tar.TypeLink,
+			Linkname:   targetPath,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+		Path: linkContentPath,
+	}
+
+	wl.files[linkPath] = f
+	shouldPersist := wl.markDirtyLocked()
+
+	copy := *f
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
+	return &copy, nil
+}
+
 // CreateSymlink creates a symbolic link at path pointing to target.
 func (wl *WritableLayer) CreateSymlink(path, target string) (*File, error) {
 	wl.mu.Lock()
@@ -581,6 +638,7 @@ func (wl *WritableLayer) Persist() error {
 }
 
 // persistLocked performs the actual persist. Caller must hold wl.mu.
+// Uses atomic write (write to temp file, then rename) to prevent corruption on crash.
 func (wl *WritableLayer) persistLocked() error {
 	data, err := json.MarshalIndent(wl.files, "", "  ")
 	if err != nil {
@@ -588,8 +646,17 @@ func (wl *WritableLayer) persistLocked() error {
 	}
 
 	metaPath := filepath.Join(wl.basePath, metadataFileName)
-	if err := os.WriteFile(metaPath, data, 0644); err != nil {
-		return fmt.Errorf("write metadata: %w", err)
+	tmpPath := metaPath + ".tmp"
+
+	// Write to temp file first
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("write temp metadata: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, metaPath); err != nil {
+		os.Remove(tmpPath) // Clean up temp file on failure
+		return fmt.Errorf("rename metadata: %w", err)
 	}
 
 	// Reset dirty state after successful persist

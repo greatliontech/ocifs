@@ -23,6 +23,11 @@ var (
 	_ = (fs.NodeWriter)((*unionFile)(nil))
 	_ = (fs.NodeReleaser)((*unionFile)(nil))
 	_ = (fs.NodeReadlinker)((*unionFile)(nil))
+	_ = (fs.NodeFsyncer)((*unionFile)(nil))
+	_ = (fs.NodeGetxattrer)((*unionFile)(nil))
+	_ = (fs.NodeSetxattrer)((*unionFile)(nil))
+	_ = (fs.NodeListxattrer)((*unionFile)(nil))
+	_ = (fs.NodeRemovexattrer)((*unionFile)(nil))
 )
 
 // unionFile represents a file in the filesystem.
@@ -285,4 +290,173 @@ func (uf *unionFile) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 
 	// The target is stored in the header's Linkname field
 	return []byte(uf.file.Hdr.Linkname), fs.OK
+}
+
+func (uf *unionFile) Fsync(ctx context.Context, fh fs.FileHandle, flags uint32) syscall.Errno {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Fsync called", "path", uf.pathInFs, "flags", flags)
+
+	h, ok := fh.(*unionFileHandle)
+	if !ok {
+		return syscall.EBADF
+	}
+
+	// Sync the file data to disk
+	if err := h.f.Sync(); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	// Also persist metadata if we have a writable layer
+	if uf.writableLayer != nil && uf.isWritable {
+		if err := uf.writableLayer.Persist(); err != nil {
+			slog.Error("Fsync: failed to persist metadata", "error", err)
+			return fs.ToErrno(err)
+		}
+	}
+
+	return fs.OK
+}
+
+func (uf *unionFile) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Getxattr called", "path", uf.pathInFs, "attr", attr)
+
+	// Use PAXRecords with SCHILY.xattr. prefix (standard for xattrs in tar)
+	paxKey := "SCHILY.xattr." + attr
+	if uf.file.Hdr.PAXRecords != nil {
+		if val, ok := uf.file.Hdr.PAXRecords[paxKey]; ok {
+			if len(dest) == 0 {
+				return uint32(len(val)), fs.OK
+			}
+			if len(dest) < len(val) {
+				return 0, syscall.ERANGE
+			}
+			copy(dest, val)
+			return uint32(len(val)), fs.OK
+		}
+	}
+
+	return 0, syscall.ENODATA
+}
+
+func (uf *unionFile) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Setxattr called", "path", uf.pathInFs, "attr", attr, "size", len(data))
+
+	if uf.writableLayer == nil {
+		return syscall.EROFS
+	}
+
+	// Ensure file is in writable layer
+	if errno := uf.ensureWritableLocked(); errno != fs.OK {
+		return errno
+	}
+
+	// Initialize PAXRecords map if needed
+	if uf.file.Hdr.PAXRecords == nil {
+		uf.file.Hdr.PAXRecords = make(map[string]string)
+	}
+
+	// Use PAXRecords with SCHILY.xattr. prefix
+	paxKey := "SCHILY.xattr." + attr
+	_, exists := uf.file.Hdr.PAXRecords[paxKey]
+
+	// Handle flags
+	if flags&0x1 != 0 && exists { // XATTR_CREATE
+		return syscall.EEXIST
+	}
+	if flags&0x2 != 0 && !exists { // XATTR_REPLACE
+		return syscall.ENODATA
+	}
+
+	uf.file.Hdr.PAXRecords[paxKey] = string(data)
+
+	if err := uf.writableLayer.Update(uf.file); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	return fs.OK
+}
+
+func (uf *unionFile) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Listxattr called", "path", uf.pathInFs)
+
+	// Collect all xattr names from PAXRecords
+	var names []string
+	if uf.file.Hdr.PAXRecords != nil {
+		prefix := "SCHILY.xattr."
+		for key := range uf.file.Hdr.PAXRecords {
+			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+				attrName := key[len(prefix):]
+				names = append(names, attrName)
+			}
+		}
+	}
+
+	// Calculate total size (names are null-terminated)
+	var totalSize uint32
+	for _, name := range names {
+		totalSize += uint32(len(name) + 1) // +1 for null terminator
+	}
+
+	if len(dest) == 0 {
+		return totalSize, fs.OK
+	}
+
+	if uint32(len(dest)) < totalSize {
+		return 0, syscall.ERANGE
+	}
+
+	// Copy names with null terminators
+	offset := 0
+	for _, name := range names {
+		copy(dest[offset:], name)
+		offset += len(name)
+		dest[offset] = 0
+		offset++
+	}
+
+	return totalSize, fs.OK
+}
+
+func (uf *unionFile) Removexattr(ctx context.Context, attr string) syscall.Errno {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Removexattr called", "path", uf.pathInFs, "attr", attr)
+
+	if uf.writableLayer == nil {
+		return syscall.EROFS
+	}
+
+	// Ensure file is in writable layer
+	if errno := uf.ensureWritableLocked(); errno != fs.OK {
+		return errno
+	}
+
+	// Check if attribute exists in PAXRecords
+	paxKey := "SCHILY.xattr." + attr
+	if uf.file.Hdr.PAXRecords == nil {
+		return syscall.ENODATA
+	}
+	if _, ok := uf.file.Hdr.PAXRecords[paxKey]; !ok {
+		return syscall.ENODATA
+	}
+
+	delete(uf.file.Hdr.PAXRecords, paxKey)
+
+	if err := uf.writableLayer.Update(uf.file); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	return fs.OK
 }

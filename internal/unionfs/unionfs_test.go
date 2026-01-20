@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -1111,5 +1112,135 @@ func TestWritable_Symlink_Absolute(t *testing.T) {
 	}
 	if got != target {
 		t.Errorf("Readlink: got %q, want %q", got, target)
+	}
+}
+
+// ==================== HARDLINK TESTS ====================
+
+func TestWritable_Hardlink_ROFile(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.addROFile("rofile.txt", []byte("read-only"), 0644)
+	env.mount(true)
+
+	// Hardlink to RO file should fail with EXDEV
+	err := os.Link(env.path("rofile.txt"), env.path("link.txt"))
+	if err == nil {
+		t.Errorf("Link to RO file should fail")
+	}
+}
+
+// Note: Full hardlink support (sharing modifications) requires inode tracking
+// which is complex to implement in a union filesystem. The basic hardlink
+// creation is supported but may have limitations.
+
+// ==================== XATTR TESTS ====================
+
+func TestWritable_Xattr_SetGet(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	os.WriteFile(env.path("xattr.txt"), []byte("content"), 0644)
+
+	// Set xattr
+	attrName := "user.test"
+	attrValue := []byte("test value")
+
+	if err := syscall.Setxattr(env.path("xattr.txt"), attrName, attrValue, 0); err != nil {
+		t.Fatalf("Setxattr failed: %v", err)
+	}
+
+	// Get xattr
+	dest := make([]byte, 256)
+	n, err := syscall.Getxattr(env.path("xattr.txt"), attrName, dest)
+	if err != nil {
+		t.Fatalf("Getxattr failed: %v", err)
+	}
+
+	if !bytes.Equal(dest[:n], attrValue) {
+		t.Errorf("Xattr value mismatch: got %q, want %q", dest[:n], attrValue)
+	}
+}
+
+func TestWritable_Xattr_List(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	os.WriteFile(env.path("xattr-list.txt"), []byte("content"), 0644)
+
+	// Set multiple xattrs
+	syscall.Setxattr(env.path("xattr-list.txt"), "user.attr1", []byte("val1"), 0)
+	syscall.Setxattr(env.path("xattr-list.txt"), "user.attr2", []byte("val2"), 0)
+
+	// List xattrs
+	dest := make([]byte, 256)
+	n, err := syscall.Listxattr(env.path("xattr-list.txt"), dest)
+	if err != nil {
+		t.Fatalf("Listxattr failed: %v", err)
+	}
+
+	// Parse null-terminated list
+	list := string(dest[:n])
+	if !strings.Contains(list, "user.attr1") || !strings.Contains(list, "user.attr2") {
+		t.Errorf("Listxattr missing attrs: got %q", list)
+	}
+}
+
+func TestWritable_Xattr_Remove(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	os.WriteFile(env.path("xattr-rm.txt"), []byte("content"), 0644)
+
+	attrName := "user.removeme"
+	syscall.Setxattr(env.path("xattr-rm.txt"), attrName, []byte("value"), 0)
+
+	// Remove xattr
+	if err := syscall.Removexattr(env.path("xattr-rm.txt"), attrName); err != nil {
+		t.Fatalf("Removexattr failed: %v", err)
+	}
+
+	// Getting it should fail
+	dest := make([]byte, 256)
+	_, err := syscall.Getxattr(env.path("xattr-rm.txt"), attrName, dest)
+	if err == nil {
+		t.Errorf("Getxattr should fail after removal")
+	}
+}
+
+// ==================== FSYNC TEST ====================
+
+func TestWritable_Fsync(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create and write to a file
+	f, err := os.Create(env.path("fsync.txt"))
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	f.WriteString("data to sync")
+
+	// Fsync should succeed
+	if err := f.Sync(); err != nil {
+		t.Fatalf("Fsync failed: %v", err)
+	}
+
+	f.Close()
+
+	// Verify content
+	got, _ := os.ReadFile(env.path("fsync.txt"))
+	if string(got) != "data to sync" {
+		t.Errorf("Content mismatch after fsync: got %q", got)
 	}
 }
