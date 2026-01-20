@@ -1,2 +1,5 @@
 layers/
 layout/
+.coverage
+ocifs
+.task/

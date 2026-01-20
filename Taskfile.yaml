@@ -1,12 +1,68 @@
 version: "3"
 
+silent: true
+
+vars:
+  BINARY: ocifs
+  INSTALL_DIR: "{{.HOME}}/.local/bin"
+  COVERAGE_DIR: .coverage
+  BASH_COMPLETION_DIR: "{{.HOME}}/.local/share/bash-completion/completions"
+  ZSH_COMPLETION_DIR: "{{.HOME}}/.local/share/zsh/site-functions"
+  FISH_COMPLETION_DIR: "{{.HOME}}/.config/fish/completions"
+
 tasks:
   default:
     desc: List all tasks
-    cmd: go-task --list
-    silent: true
+    cmd: task --list
+
+  build:
+    desc: Build the binary
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - ./{{.BINARY}}
+    method: checksum
+    cmd: go build -o {{.BINARY}} ./cmd/ocifs
+
+  install:
+    desc: Install binary and completions
+    deps: [build]
+    cmds:
+      - install -D {{.BINARY}} {{.INSTALL_DIR}}/{{.BINARY}}
+      - mkdir -p {{.BASH_COMPLETION_DIR}}
+      - mkdir -p {{.ZSH_COMPLETION_DIR}}
+      - mkdir -p {{.FISH_COMPLETION_DIR}}
+      - ./{{.BINARY}} completion bash > {{.BASH_COMPLETION_DIR}}/{{.BINARY}}
+      - ./{{.BINARY}} completion zsh > {{.ZSH_COMPLETION_DIR}}/_{{.BINARY}}
+      - ./{{.BINARY}} completion fish > {{.FISH_COMPLETION_DIR}}/{{.BINARY}}.fish
 
   test:
-    desc: Run tests
-    cmd: go test -cover ./...
-    silent: true
+    desc: Run tests with coverage
+    deps: [coverage-dir]
+    cmds:
+      - go test -coverprofile={{.COVERAGE_DIR}}/coverage.out ./...
+      - go tool cover -html={{.COVERAGE_DIR}}/coverage.out -o {{.COVERAGE_DIR}}/coverage.html
+      - go tool cover -func={{.COVERAGE_DIR}}/coverage.out | tail -1
+
+  coverage:
+    desc: Open coverage report in browser
+    deps: [test]
+    cmd: xdg-open {{.COVERAGE_DIR}}/coverage.html 2>/dev/null || open {{.COVERAGE_DIR}}/coverage.html
+
+  lint:
+    desc: Run linters
+    cmd: golangci-lint run
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f {{.BINARY}}
+      - rm -rf {{.COVERAGE_DIR}}
+
+  coverage-dir:
+    internal: true
+    status:
+      - test -d {{.COVERAGE_DIR}}
+    cmd: mkdir -p {{.COVERAGE_DIR}}
