@@ -708,7 +708,339 @@ func BenchmarkWritableLayer_ConcurrentGet(b *testing.B) {
 	})
 }
 
-// Helper to make io.Reader from byte slice
-func bytesReader(content []byte) io.Reader {
-	return bytes.NewReader(content)
+// =============================================================================
+// Phase 1.2: WritableLayer Error Handling Tests
+// =============================================================================
+
+// TestWritableLayer_LoadCorruptedJSON tests handling of corrupted metadata JSON
+func TestWritableLayer_LoadCorruptedJSON(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a corrupted metadata file
+	metadataPath := dir + "/metadata.json"
+	if err := os.WriteFile(metadataPath, []byte("{invalid json"), 0644); err != nil {
+		t.Fatalf("Failed to write corrupted metadata: %v", err)
+	}
+
+	// Create content directory (required by NewWritableLayer)
+	if err := os.MkdirAll(dir+"/content", 0755); err != nil {
+		t.Fatalf("Failed to create content dir: %v", err)
+	}
+
+	// NewWritableLayer should fail on corrupted JSON
+	_, err := NewWritableLayer(dir)
+	if err == nil {
+		t.Error("Expected error when loading corrupted JSON")
+	}
+}
+
+// TestWritableLayer_LoadMissingFile tests that missing metadata is handled gracefully
+func TestWritableLayer_LoadMissingFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// NewWritableLayer should succeed with no existing metadata (fresh start)
+	wl, err := NewWritableLayer(dir)
+	if err != nil {
+		t.Fatalf("NewWritableLayer failed for fresh directory: %v", err)
+	}
+	defer wl.Close()
+
+	// Should have no files
+	if wl.Exists("anything") {
+		t.Error("Fresh writable layer should have no files")
+	}
+}
+
+// TestWritableLayer_CopyUpSourceMissing tests CopyUp with nil content reader
+func TestWritableLayer_CopyUpSourceMissing(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	srcFile := &File{
+		Hdr: tar.Header{
+			Name:     "missing.txt",
+			Typeflag: tar.TypeReg,
+		},
+	}
+
+	// CopyUp with a reader that returns an error
+	errReader := &errorReader{err: io.ErrUnexpectedEOF}
+	_, err := wl.CopyUp(srcFile, errReader)
+	if err == nil {
+		t.Error("Expected error when CopyUp with failing reader")
+	}
+
+	// File should not exist in the layer
+	if wl.Exists("missing.txt") {
+		t.Error("File should not exist after failed CopyUp")
+	}
+}
+
+// errorReader is an io.Reader that always returns an error
+type errorReader struct {
+	err error
+}
+
+func (e *errorReader) Read(p []byte) (int, error) {
+	return 0, e.err
+}
+
+// TestWritableLayer_ConcurrentPersist tests multiple goroutines calling Persist
+func TestWritableLayer_ConcurrentPersist(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	// Create some files
+	for i := 0; i < 10; i++ {
+		name := "file" + string(rune('a'+i)) + ".txt"
+		wl.Create(name, 0644, false)
+	}
+
+	const numGoroutines = 20
+	var wg sync.WaitGroup
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := wl.Persist(); err != nil {
+				errors <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Errorf("Concurrent Persist error: %v", err)
+	}
+}
+
+// TestWritableLayer_CloseWhilePersisting tests Close during active Persist
+func TestWritableLayer_CloseWhilePersisting(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+
+	// Create many files to make Persist take longer
+	for i := 0; i < 100; i++ {
+		name := "file" + string(rune('a'+i%26)) + string(rune('0'+i/26)) + ".txt"
+		wl.Create(name, 0644, false)
+	}
+
+	// Start Persist in background
+	done := make(chan error)
+	go func() {
+		done <- wl.Persist()
+	}()
+
+	// Immediately call Close
+	closeErr := wl.Close()
+
+	// Wait for Persist to complete
+	persistErr := <-done
+
+	// Neither should panic; errors are acceptable
+	if closeErr != nil {
+		t.Logf("Close error (may be expected): %v", closeErr)
+	}
+	if persistErr != nil {
+		t.Logf("Persist error (may be expected): %v", persistErr)
+	}
+}
+
+// TestWritableLayer_AutoPersistRace tests mutations during auto-persist
+func TestWritableLayer_AutoPersistRace(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := NewWritableLayer(dir, WithAutoPersist(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewWritableLayer failed: %v", err)
+	}
+	defer wl.Close()
+
+	// Perform many mutations while auto-persist is running
+	const numMutations = 200
+	for i := 0; i < numMutations; i++ {
+		name := "file" + string(rune('a'+i%26)) + ".txt"
+		wl.Create(name, 0644, false)
+		time.Sleep(time.Millisecond) // Give auto-persist a chance to run
+	}
+
+	// Let auto-persist catch up
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify no panics and data is consistent
+	if !wl.Exists("filea.txt") {
+		t.Error("Expected filea.txt to exist")
+	}
+}
+
+// TestWritableLayer_PersistThreshold tests mutation-based auto-persist
+func TestWritableLayer_PersistThreshold(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := NewWritableLayer(dir, WithPersistAfterMutations(5))
+	if err != nil {
+		t.Fatalf("NewWritableLayer failed: %v", err)
+	}
+	defer wl.Close()
+
+	// Perform mutations
+	for i := 0; i < 10; i++ {
+		name := "file" + string(rune('a'+i)) + ".txt"
+		wl.Create(name, 0644, false)
+	}
+
+	// Give threshold persist time to complete
+	time.Sleep(50 * time.Millisecond)
+
+	// Reload to verify persist happened
+	wl2, _ := NewWritableLayer(dir)
+	defer wl2.Close()
+
+	// At least some files should be persisted
+	found := 0
+	for i := 0; i < 10; i++ {
+		name := "file" + string(rune('a'+i)) + ".txt"
+		if wl2.Exists(name) {
+			found++
+		}
+	}
+
+	if found == 0 {
+		t.Error("Expected some files to be persisted by threshold")
+	}
+}
+
+// TestWritableLayer_CreateInvalidPath tests creating files with edge-case paths
+func TestWritableLayer_CreateInvalidPath(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	testCases := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"empty path", "", false}, // Empty is allowed, creates at content root
+		{"dot path", ".", false},
+		{"relative with dots", "../escape", false}, // Will be created but within content dir
+		{"deeply nested", "a/b/c/d/e/f/g/file.txt", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := wl.Create(tc.path, 0644, false)
+			if tc.wantErr && err == nil {
+				t.Errorf("Expected error for path %q", tc.path)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("Unexpected error for path %q: %v", tc.path, err)
+			}
+		})
+	}
+}
+
+// TestWritableLayer_DoubleClose tests calling Close multiple times
+func TestWritableLayer_DoubleClose(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+
+	// First close should succeed
+	if err := wl.Close(); err != nil {
+		t.Errorf("First Close failed: %v", err)
+	}
+
+	// Second close should be idempotent (no error)
+	if err := wl.Close(); err != nil {
+		t.Errorf("Second Close should be idempotent, got: %v", err)
+	}
+}
+
+// TestWritableLayer_IsDirty tests the dirty flag tracking
+func TestWritableLayer_IsDirty(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	// Fresh layer should not be dirty
+	if wl.IsDirty() {
+		t.Error("Fresh layer should not be dirty")
+	}
+
+	// Create a file - should become dirty
+	wl.Create("file.txt", 0644, false)
+	if !wl.IsDirty() {
+		t.Error("Layer should be dirty after Create")
+	}
+
+	// Persist - should clear dirty flag
+	wl.Persist()
+	if wl.IsDirty() {
+		t.Error("Layer should not be dirty after Persist")
+	}
+
+	// Update - should become dirty again
+	f := wl.Get("file.txt")
+	f.Hdr.Size = 100
+	wl.Update(f)
+	if !wl.IsDirty() {
+		t.Error("Layer should be dirty after Update")
+	}
+}
+
+// TestWritableLayer_RemoveNonexistent tests removing a file that doesn't exist
+func TestWritableLayer_RemoveNonexistent(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	// Remove should be idempotent - no error for nonexistent file
+	err := wl.Remove("nonexistent.txt")
+	if err != nil {
+		t.Errorf("Remove nonexistent should not error: %v", err)
+	}
+}
+
+// TestWritableLayer_CopyUpLargeFile tests CopyUp with a larger file
+func TestWritableLayer_CopyUpLargeFile(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewWritableLayer(dir)
+	defer wl.Close()
+
+	// Create 1MB of content
+	content := make([]byte, 1024*1024)
+	for i := range content {
+		content[i] = byte(i % 256)
+	}
+
+	srcFile := &File{
+		Hdr: tar.Header{
+			Name:     "large.bin",
+			Mode:     0644,
+			Typeflag: tar.TypeReg,
+		},
+	}
+
+	copied, err := wl.CopyUp(srcFile, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("CopyUp large file failed: %v", err)
+	}
+
+	// Verify size
+	if copied.Hdr.Size != int64(len(content)) {
+		t.Errorf("Size mismatch: got %d, want %d", copied.Hdr.Size, len(content))
+	}
+
+	// Verify content
+	got, err := os.ReadFile(copied.Path)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Error("Content mismatch for large file")
+	}
 }

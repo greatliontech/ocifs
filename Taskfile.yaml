@@ -46,6 +46,33 @@ tasks:
       - go tool cover -html={{.COVERAGE_DIR}}/coverage.out -o {{.COVERAGE_DIR}}/coverage.html
       - go tool cover -func={{.COVERAGE_DIR}}/coverage.out | tail -1
 
+  test:unit:
+    desc: Run unit tests with race detection
+    cmd: go test -race ./...
+
+  test:integration:
+    desc: Run integration tests (requires network)
+    cmd: go test -v -tags=integration ./...
+
+  test:stress:
+    desc: Run heavy stress tests
+    cmd: go test -v -timeout=30m -run=Stress ./...
+
+  test:stress:race:
+    desc: Run stress tests with race detection
+    cmd: go test -race -timeout=30m -run=Stress ./...
+
+  test:fuzz:
+    desc: Run fuzz tests for 60 seconds
+    cmd: go test -fuzz=Fuzz -fuzztime=60s ./internal/store/
+
+  test:all:
+    desc: Run full test suite (unit + integration + stress with race)
+    cmds:
+      - go test -race ./...
+      - go test -v -tags=integration ./...
+      - go test -race -timeout=30m -run=Stress ./...
+
   coverage:
     desc: Open coverage report in browser
     deps: [test]

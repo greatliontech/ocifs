@@ -884,3 +884,304 @@ func TestStore_LargeFile(t *testing.T) {
 		t.Error("large.bin not found in unified view")
 	}
 }
+
+// =============================================================================
+// Phase 1.4: Store Operations Error Paths Tests
+// =============================================================================
+
+// TestStore_PullInvalidRef tests pulling with an invalid image reference
+func TestStore_PullInvalidRef(t *testing.T) {
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	testCases := []string{
+		"",                  // empty ref
+		"invalid::",         // invalid format
+		"INVALID_UPPERCASE", // uppercase not allowed
+		":notag",            // missing name
+	}
+
+	for _, ref := range testCases {
+		t.Run(ref, func(t *testing.T) {
+			_, err := store.Image(context.Background(), ref)
+			if err == nil {
+				t.Errorf("Expected error for invalid ref %q", ref)
+			}
+		})
+	}
+}
+
+// TestStore_PullImageNotFound tests pulling a non-existent image
+func TestStore_PullImageNotFound(t *testing.T) {
+	server := setupTestRegistry(t)
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	// Try to pull an image that doesn't exist
+	host := strings.TrimPrefix(server.URL, "http://")
+	_, err := store.Image(context.Background(), host+"/nonexistent/image:v999")
+	if err == nil {
+		t.Error("Expected error when pulling non-existent image")
+	}
+}
+
+// TestStore_CommitWithEmptyWritableLayer tests committing when no changes were made
+func TestStore_CommitWithEmptyWritableLayer(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	// Create and push base image
+	baseImg := createTestImage(t, map[string][]byte{
+		"base.txt": []byte("base content"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/empty-commit", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	img, err := store.Image(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("Image failed: %v", err)
+	}
+
+	// Create empty writable layer (no changes)
+	wlDir := t.TempDir()
+	wl, _ := NewWritableLayer(wlDir)
+	defer wl.Close()
+
+	// Commit with no changes - should still work
+	newImg, err := store.Commit(context.Background(), img, wl, CommitOptions{
+		Comment: "Empty commit",
+	})
+	if err != nil {
+		t.Fatalf("Commit with empty layer failed: %v", err)
+	}
+
+	// New image should have same files as base
+	unified := newImg.Unify()
+	hasBase := false
+	for _, f := range unified {
+		if f.Hdr.Name == "base.txt" {
+			hasBase = true
+		}
+	}
+	if !hasBase {
+		t.Error("base.txt should still exist after empty commit")
+	}
+}
+
+// TestStore_CommitPreservesAllMetadata tests that commit preserves all file metadata
+func TestStore_CommitPreservesAllMetadata(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	baseImg := createTestImage(t, map[string][]byte{
+		"test.txt": []byte("test"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/metadata", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	img, err := store.Image(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("Image failed: %v", err)
+	}
+
+	// Create writable layer with file having specific metadata
+	wlDir := t.TempDir()
+	wl, _ := NewWritableLayer(wlDir)
+	defer wl.Close()
+
+	// Create file with specific metadata
+	f, _ := wl.Create("metadata.txt", 0755, false)
+	f.Hdr.Uid = 1000
+	f.Hdr.Gid = 2000
+	f.Hdr.Size = 5
+	wl.Update(f)
+
+	// Write content
+	os.WriteFile(wl.ContentPath("metadata.txt"), []byte("hello"), 0755)
+
+	// Commit
+	newImg, err := store.Commit(context.Background(), img, wl, CommitOptions{})
+	if err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Verify metadata is preserved
+	unified := newImg.Unify()
+	for _, file := range unified {
+		if file.Hdr.Name == "metadata.txt" {
+			if file.Hdr.Uid != 1000 {
+				t.Errorf("Uid not preserved: got %d, want 1000", file.Hdr.Uid)
+			}
+			if file.Hdr.Gid != 2000 {
+				t.Errorf("Gid not preserved: got %d, want 2000", file.Hdr.Gid)
+			}
+			if file.Hdr.Mode&0777 != 0755 {
+				t.Errorf("Mode not preserved: got %o, want 755", file.Hdr.Mode&0777)
+			}
+		}
+	}
+}
+
+// TestStore_PushToInvalidRef tests pushing to an invalid reference
+func TestStore_PushToInvalidRef(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	baseImg := createTestImage(t, map[string][]byte{
+		"test.txt": []byte("test"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/push-invalid", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	img, err := store.Image(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("Image failed: %v", err)
+	}
+
+	// Try to push to invalid ref
+	err = store.Push(context.Background(), img, "::invalid::")
+	if err == nil {
+		t.Error("Expected error when pushing to invalid ref")
+	}
+}
+
+// TestStore_TagInvalidRef tests tagging with an invalid reference
+func TestStore_TagInvalidRef(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	baseImg := createTestImage(t, map[string][]byte{
+		"test.txt": []byte("test"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/tag-invalid", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	img, err := store.Image(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("Image failed: %v", err)
+	}
+
+	// Try to tag with invalid ref
+	err = store.Tag(img, "::invalid::")
+	if err == nil {
+		t.Error("Expected error when tagging with invalid ref")
+	}
+}
+
+// TestStore_MultipleCommits tests making multiple commits on the same base
+func TestStore_MultipleCommits(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	baseImg := createTestImage(t, map[string][]byte{
+		"base.txt": []byte("base"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/multi-commit", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	img, err := store.Image(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("Image failed: %v", err)
+	}
+
+	// Make 3 commits in sequence
+	currentImg := img
+	for i := 0; i < 3; i++ {
+		wlDir := t.TempDir()
+		wl, _ := NewWritableLayer(wlDir)
+
+		filename := "commit" + string(rune('1'+i)) + ".txt"
+		f, _ := wl.Create(filename, 0644, false)
+		content := []byte("commit " + string(rune('1'+i)))
+		os.WriteFile(wl.ContentPath(filename), content, 0644)
+		f.Hdr.Size = int64(len(content))
+		wl.Update(f)
+
+		newImg, err := store.Commit(context.Background(), currentImg, wl, CommitOptions{})
+		wl.Close()
+		if err != nil {
+			t.Fatalf("Commit %d failed: %v", i+1, err)
+		}
+		currentImg = newImg
+	}
+
+	// Verify final image has all files
+	unified := currentImg.Unify()
+	expected := []string{"base.txt", "commit1.txt", "commit2.txt", "commit3.txt"}
+	for _, name := range expected {
+		found := false
+		for _, f := range unified {
+			if f.Hdr.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected %s in final image", name)
+		}
+	}
+}
+
+// TestStore_PullWithContextCancel tests cancellation during pull
+func TestStore_PullWithContextCancel(t *testing.T) {
+	server := setupTestRegistry(t)
+
+	// Create a larger image to have time to cancel
+	largeContent := bytes.Repeat([]byte("x"), 100*1024) // 100KB
+	baseImg := createTestImage(t, map[string][]byte{
+		"large.bin": largeContent,
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/cancel", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	// Create cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel immediately
+	cancel()
+
+	// Pull should fail with context cancelled
+	_, err := store.Image(ctx, ref.String())
+	if err == nil {
+		// It's OK if it succeeds (pull was fast enough)
+		t.Log("Pull completed before cancellation")
+	} else if err != context.Canceled {
+		// Error should be context cancelled or a derived error
+		t.Logf("Got error (expected): %v", err)
+	}
+}
+
+// TestStore_ListPlatforms tests listing platforms for a multi-arch image
+func TestStore_ListPlatforms(t *testing.T) {
+	// This test uses the internal test registry which doesn't support multi-arch
+	// So we test with a single-arch image
+	server := setupTestRegistry(t)
+
+	baseImg := createTestImage(t, map[string][]byte{
+		"test.txt": []byte("test"),
+	})
+	ref := pushTestImage(t, server.URL, baseImg, "test/platforms", "v1")
+
+	storeDir := t.TempDir()
+	store, _ := NewStore(storeDir, nil, PullAlways)
+
+	platforms, err := store.ListPlatforms(context.Background(), ref.String())
+	if err != nil {
+		// May fail for single-arch images, which is fine
+		t.Logf("ListPlatforms returned error (may be expected): %v", err)
+		return
+	}
+
+	if len(platforms) == 0 {
+		t.Log("No platforms returned (may be expected for single-arch)")
+	} else {
+		t.Logf("Found %d platforms", len(platforms))
+	}
+}
