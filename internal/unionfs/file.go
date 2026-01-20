@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"syscall"
 
 	"github.com/greatliontech/ocifs/internal/store"
@@ -12,9 +13,10 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// Ensure ociFile implements all necessary interfaces
+// Ensure unionFile implements all necessary interfaces
 var (
 	_ = (fs.NodeGetattrer)((*unionFile)(nil))
+	_ = (fs.NodeSetattrer)((*unionFile)(nil))
 	_ = (fs.NodeOpener)((*unionFile)(nil))
 	_ = (fs.NodeReader)((*unionFile)(nil))
 	_ = (fs.NodeWriter)((*unionFile)(nil))
@@ -24,6 +26,7 @@ var (
 // unionFile represents a file in the filesystem.
 type unionFile struct {
 	fs.Inode
+	mu            sync.Mutex // Protects fields below from concurrent access
 	pathInFs      string
 	file          *store.File
 	isWritable    bool // Does this file exist in the writable layer?
@@ -36,19 +39,77 @@ type unionFileHandle struct {
 	f *os.File
 }
 
-func (uf *unionFileHandle) Truncate(name string, offset uint64, context *fuse.Context) (code fuse.Status) {
-	slog.Debug("FileHandle Truncate called", "offset", offset)
-	return fuse.ENOSYS
+func (uf *unionFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+	out.Attr = headerToAttr(uf.file.Hdr)
+	return fs.OK
 }
 
-func (uf *unionFile) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+func (uf *unionFile) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Setattr called", "path", uf.pathInFs, "valid", in.Valid)
+
+	// Handle truncate (size change)
+	if sz, ok := in.GetSize(); ok {
+		if errno := uf.truncateLocked(int64(sz)); errno != fs.OK {
+			return errno
+		}
+	}
+
+	// Handle mode change
+	if mode, ok := in.GetMode(); ok {
+		if uf.writableLayer == nil {
+			return syscall.EROFS
+		}
+		if errno := uf.ensureWritableLocked(); errno != fs.OK {
+			return errno
+		}
+		uf.file.Hdr.Mode = int64(mode)
+		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+			return fs.ToErrno(err)
+		}
+	}
+
+	// Handle uid/gid changes
+	if uid, ok := in.GetUID(); ok {
+		if uf.writableLayer == nil {
+			return syscall.EROFS
+		}
+		if errno := uf.ensureWritableLocked(); errno != fs.OK {
+			return errno
+		}
+		uf.file.Hdr.Uid = int(uid)
+		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+			return fs.ToErrno(err)
+		}
+	}
+	if gid, ok := in.GetGID(); ok {
+		if uf.writableLayer == nil {
+			return syscall.EROFS
+		}
+		if errno := uf.ensureWritableLocked(); errno != fs.OK {
+			return errno
+		}
+		uf.file.Hdr.Gid = int(gid)
+		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+			return fs.ToErrno(err)
+		}
+	}
+
 	out.Attr = headerToAttr(uf.file.Hdr)
 	return fs.OK
 }
 
 func (uf *unionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
 	isWR := (flags&syscall.O_RDWR != 0) || (flags&syscall.O_WRONLY != 0)
 	slog.Debug("Open called", "path", uf.pathInFs, "flags", flags, "isWritable", uf.isWritable, "isWR", isWR)
+
 	var pathOnDisk string
 	if uf.isWritable {
 		pathOnDisk = uf.file.Path
@@ -70,9 +131,90 @@ func (uf *unionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uin
 	return &unionFileHandle{f: f}, fuse.FOPEN_KEEP_CACHE, fs.OK
 }
 
-func (uf *unionFile) Truncate(name string, offset uint64, context *fuse.Context) (code fuse.Status) {
-	slog.Debug("Truncate called", "path", uf.pathInFs, "offset", offset)
-	return fuse.ENOSYS
+// ensureWritableLocked copies the file to the writable layer if needed.
+// Caller must hold uf.mu.
+func (uf *unionFile) ensureWritableLocked() syscall.Errno {
+	if uf.isWritable {
+		return fs.OK
+	}
+
+	if uf.writableLayer == nil {
+		return syscall.EROFS
+	}
+
+	slog.Debug("Copy-on-write triggered", "path", uf.pathInFs)
+
+	// Get source path from read-only layer
+	roFile, ok := uf.roLookup[uf.pathInFs]
+	if !ok {
+		return syscall.ENOENT
+	}
+	srcPath := roFile.Path
+
+	// Create file in writable layer
+	destFile, err := uf.writableLayer.SetFile(uf.file.Hdr)
+	if err != nil {
+		return fs.ToErrno(err)
+	}
+	destPath := destFile.Path
+
+	// Copy the content
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return fs.ToErrno(err)
+	}
+	defer src.Close()
+
+	dest, err := os.Create(destPath)
+	if err != nil {
+		return fs.ToErrno(err)
+	}
+	if _, err := io.Copy(dest, src); err != nil {
+		dest.Close()
+		return fs.ToErrno(err)
+	}
+	dest.Close()
+
+	// Get actual size after copy
+	fi, err := os.Stat(destPath)
+	if err != nil {
+		return fs.ToErrno(err)
+	}
+
+	// Update our file reference to point to writable layer
+	uf.file = destFile
+	uf.file.Hdr.Size = fi.Size()
+	uf.isWritable = true
+
+	slog.Debug("Copy-on-write completed", "path", uf.pathInFs, "size", uf.file.Hdr.Size)
+	return fs.OK
+}
+
+// truncateLocked changes the file size. Caller must hold uf.mu.
+func (uf *unionFile) truncateLocked(size int64) syscall.Errno {
+	if uf.writableLayer == nil {
+		return syscall.EROFS
+	}
+
+	slog.Debug("Truncate called", "path", uf.pathInFs, "size", size)
+
+	// Ensure file is in writable layer
+	if errno := uf.ensureWritableLocked(); errno != fs.OK {
+		return errno
+	}
+
+	// Truncate the actual file
+	if err := os.Truncate(uf.file.Path, size); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	// Update metadata
+	uf.file.Hdr.Size = size
+	if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+		return fs.ToErrno(err)
+	}
+
+	return fs.OK
 }
 
 func (uf *unionFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
@@ -91,9 +233,13 @@ func (uf *unionFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, of
 }
 
 func (uf *unionFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
 	slog.Debug("Write called", "path", uf.pathInFs, "offset", off, "length", len(data))
+
 	if uf.writableLayer == nil {
-		return 0, syscall.EROFS // Read-only file system
+		return 0, syscall.EROFS
 	}
 
 	h, ok := fh.(*unionFileHandle)
@@ -101,57 +247,34 @@ func (uf *unionFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, o
 		return 0, syscall.EBADF
 	}
 
-	// This is the copy-on-write (CoW) logic.
+	// Ensure file is in writable layer (triggers CoW if needed)
 	if !uf.isWritable {
-		// The file is currently from a read-only layer. We need to copy it up.
-		slog.Debug("Copy-on-write triggered", "path", uf.pathInFs)
-
-		// Get source and destination paths
-		roFile := uf.roLookup[uf.pathInFs]
-		srcPath := roFile.Path
-		destFile, err := uf.writableLayer.SetFile(uf.file.Hdr)
-		if err != nil {
-			return 0, fs.ToErrno(err)
+		if errno := uf.ensureWritableLocked(); errno != fs.OK {
+			return 0, errno
 		}
-		destPath := destFile.Path
 
-		// Copy the content
-		src, err := os.Open(srcPath)
-		if err != nil {
-			return 0, fs.ToErrno(err)
-		}
-		defer src.Close()
-
-		dest, err := os.Create(destPath)
-		if err != nil {
-			return 0, fs.ToErrno(err)
-		}
-		if _, err := io.Copy(dest, src); err != nil {
-			dest.Close()
-			return 0, fs.ToErrno(err)
-		}
-		dest.Close()
-
-		// Now, reopen the file handle with the new writable file
+		// Reopen file handle with writable path
 		h.f.Close()
-		newF, err := os.OpenFile(destPath, os.O_RDWR, os.FileMode(uf.file.Hdr.Mode))
+		newF, err := os.OpenFile(uf.file.Path, os.O_RDWR, os.FileMode(uf.file.Hdr.Mode))
 		if err != nil {
 			return 0, fs.ToErrno(err)
 		}
 		h.f = newF
-		uf.isWritable = true
 	}
 
+	// Perform the write
 	n, err := h.f.WriteAt(data, off)
 	if err != nil {
 		return 0, fs.ToErrno(err)
 	}
 
-	// Update the size in our metadata
-	uf.file.Hdr.Size = uf.file.Hdr.Size + int64(n) // This is a simplification; a full stat is better
-	uf.file, err = uf.writableLayer.SetFile(uf.file.Hdr)
-	if err != nil {
-		return 0, fs.ToErrno(err)
+	// Update size: new size is max(current size, offset + bytes written)
+	newEnd := off + int64(n)
+	if newEnd > uf.file.Hdr.Size {
+		uf.file.Hdr.Size = newEnd
+		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+			return 0, fs.ToErrno(err)
+		}
 	}
 
 	return uint32(n), fs.OK
