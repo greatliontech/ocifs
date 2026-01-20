@@ -68,7 +68,7 @@ func (uf *unionFile) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.Set
 			return errno
 		}
 		uf.file.Hdr.Mode = int64(mode)
-		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+		if err := uf.writableLayer.Update(uf.file); err != nil {
 			return fs.ToErrno(err)
 		}
 	}
@@ -82,7 +82,7 @@ func (uf *unionFile) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.Set
 			return errno
 		}
 		uf.file.Hdr.Uid = int(uid)
-		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+		if err := uf.writableLayer.Update(uf.file); err != nil {
 			return fs.ToErrno(err)
 		}
 	}
@@ -94,7 +94,7 @@ func (uf *unionFile) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.Set
 			return errno
 		}
 		uf.file.Hdr.Gid = int(gid)
-		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+		if err := uf.writableLayer.Update(uf.file); err != nil {
 			return fs.ToErrno(err)
 		}
 	}
@@ -144,46 +144,27 @@ func (uf *unionFile) ensureWritableLocked() syscall.Errno {
 
 	slog.Debug("Copy-on-write triggered", "path", uf.pathInFs)
 
-	// Get source path from read-only layer
+	// Get source from read-only layer
 	roFile, ok := uf.roLookup[uf.pathInFs]
 	if !ok {
 		return syscall.ENOENT
 	}
-	srcPath := roFile.Path
 
-	// Create file in writable layer
-	destFile, err := uf.writableLayer.SetFile(uf.file.Hdr)
-	if err != nil {
-		return fs.ToErrno(err)
-	}
-	destPath := destFile.Path
-
-	// Copy the content
-	src, err := os.Open(srcPath)
+	// Open source content
+	src, err := os.Open(roFile.Path)
 	if err != nil {
 		return fs.ToErrno(err)
 	}
 	defer src.Close()
 
-	dest, err := os.Create(destPath)
-	if err != nil {
-		return fs.ToErrno(err)
-	}
-	if _, err := io.Copy(dest, src); err != nil {
-		dest.Close()
-		return fs.ToErrno(err)
-	}
-	dest.Close()
-
-	// Get actual size after copy
-	fi, err := os.Stat(destPath)
+	// Use CopyUp to copy both metadata and content
+	destFile, err := uf.writableLayer.CopyUp(uf.file, src)
 	if err != nil {
 		return fs.ToErrno(err)
 	}
 
 	// Update our file reference to point to writable layer
 	uf.file = destFile
-	uf.file.Hdr.Size = fi.Size()
 	uf.isWritable = true
 
 	slog.Debug("Copy-on-write completed", "path", uf.pathInFs, "size", uf.file.Hdr.Size)
@@ -210,7 +191,7 @@ func (uf *unionFile) truncateLocked(size int64) syscall.Errno {
 
 	// Update metadata
 	uf.file.Hdr.Size = size
-	if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+	if err := uf.writableLayer.Update(uf.file); err != nil {
 		return fs.ToErrno(err)
 	}
 
@@ -272,7 +253,7 @@ func (uf *unionFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, o
 	newEnd := off + int64(n)
 	if newEnd > uf.file.Hdr.Size {
 		uf.file.Hdr.Size = newEnd
-		if _, err := uf.writableLayer.SetFile(uf.file.Hdr); err != nil {
+		if err := uf.writableLayer.Update(uf.file); err != nil {
 			return 0, fs.ToErrno(err)
 		}
 	}

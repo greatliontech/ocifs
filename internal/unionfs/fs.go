@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"log/slog"
 	"path"
-	"time"
 
 	"github.com/greatliontech/ocifs/internal/store"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -107,22 +106,6 @@ func headerToAttr(h tar.Header) fuse.Attr {
 	out.Gid = uint32(h.Gid)
 	out.SetTimes(&h.AccessTime, &h.ModTime, &h.ChangeTime)
 	return out
-}
-
-// attrToHeader creates a new tar.Header for a new file or directory.
-func attrToHeader(name string, attr *fuse.Attr, typeflag byte) tar.Header {
-	now := time.Now()
-	return tar.Header{
-		Name:       name,
-		Mode:       int64(attr.Mode),
-		Uid:        int(attr.Uid),
-		Gid:        int(attr.Gid),
-		Size:       int64(attr.Size),
-		ModTime:    now,
-		AccessTime: now,
-		ChangeTime: now,
-		Typeflag:   typeflag,
-	}
 }
 
 // NOTE: Remember to call `writableLayer.Persist()` on unmount to save changes!

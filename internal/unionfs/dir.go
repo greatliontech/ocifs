@@ -8,7 +8,6 @@ import (
 	"path"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/greatliontech/ocifs/internal/store"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -39,10 +38,8 @@ func (od *unionDir) OnAdd(ctx context.Context) {
 	// If this is the root node and we are in read-write mode,
 	// ensure the root directory exists in our metadata.
 	if od.isRoot && od.writableLayer != nil {
-		if hdr := od.writableLayer.GetFile(""); hdr == nil {
-			rootAttr := fuse.Attr{Mode: fuse.S_IFDIR | 0755}
-			hdr := attrToHeader("", &rootAttr, tar.TypeDir)
-			od.writableLayer.SetFile(hdr)
+		if !od.writableLayer.Exists("") {
+			od.writableLayer.Create("", 0755, true)
 		}
 	}
 }
@@ -52,11 +49,10 @@ func (od *unionDir) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 
 	// Precedence 1: Writable layer has the final say.
 	if od.writableLayer != nil {
-		if file := od.writableLayer.GetFile(childPath); file != nil {
+		if file := od.writableLayer.Get(childPath); file != nil {
 			return od.newInodeFromFile(ctx, file, true), fs.OK
 		}
-		whiteoutPath := path.Join(od.pathInFs, store.WhiteoutPrefix+name)
-		if od.writableLayer.GetFile(whiteoutPath) != nil {
+		if od.writableLayer.IsWhiteout(childPath) {
 			return nil, syscall.ENOENT
 		}
 	}
@@ -114,15 +110,14 @@ func (od *unionDir) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 
 	// 3. Overlay changes from the writable layer.
 	if od.writableLayer != nil {
-		writableChildren := od.writableLayer.ListChildren(od.pathInFs)
-		for _, file := range writableChildren {
+		// Add files from writable layer
+		for _, file := range od.writableLayer.List(od.pathInFs) {
 			baseName := path.Base(file.Hdr.Name)
-			if strings.HasPrefix(baseName, store.WhiteoutPrefix) {
-				originalName := strings.TrimPrefix(baseName, store.WhiteoutPrefix)
-				delete(merged, originalName)
-			} else {
-				merged[baseName] = fuse.DirEntry{Name: baseName, Mode: uint32(file.Hdr.Mode)}
-			}
+			merged[baseName] = fuse.DirEntry{Name: baseName, Mode: uint32(file.Hdr.Mode)}
+		}
+		// Remove whited-out files
+		for _, name := range od.writableLayer.Whiteouts(od.pathInFs) {
+			delete(merged, name)
 		}
 	}
 
@@ -139,15 +134,7 @@ func (od *unionDir) Mkdir(ctx context.Context, name string, mode uint32, out *fu
 	}
 
 	childPath := path.Join(od.pathInFs, name)
-	now := time.Now()
-	attr := fuse.Attr{
-		Mode:  fuse.S_IFDIR | mode,
-		Atime: uint64(now.Unix()),
-		Mtime: uint64(now.Unix()),
-		Ctime: uint64(now.Unix()),
-	}
-	hdr := attrToHeader(childPath, &attr, tar.TypeDir)
-	if _, err := od.writableLayer.SetFile(hdr); err != nil {
+	if _, err := od.writableLayer.Create(childPath, os.FileMode(mode), true); err != nil {
 		return nil, fs.ToErrno(err)
 	}
 
@@ -160,21 +147,12 @@ func (od *unionDir) Create(ctx context.Context, name string, flags uint32, mode 
 	}
 
 	childPath := path.Join(od.pathInFs, name)
-	now := time.Now()
-	attr := fuse.Attr{
-		Mode:  fuse.S_IFREG | mode,
-		Atime: uint64(now.Unix()),
-		Mtime: uint64(now.Unix()),
-		Ctime: uint64(now.Unix()),
-	}
-	hdr := attrToHeader(childPath, &attr, tar.TypeReg)
-	file, err := od.writableLayer.SetFile(hdr)
+	file, err := od.writableLayer.Create(childPath, os.FileMode(mode), false)
 	if err != nil {
 		return nil, nil, 0, fs.ToErrno(err)
 	}
 
-	contentPath := file.Path
-	f, err := os.OpenFile(contentPath, int(flags), os.FileMode(mode))
+	f, err := od.writableLayer.OpenContent(childPath, int(flags)|os.O_CREATE, os.FileMode(mode))
 	if err != nil {
 		return nil, nil, 0, fs.ToErrno(err)
 	}
@@ -185,41 +163,27 @@ func (od *unionDir) Create(ctx context.Context, name string, flags uint32, mode 
 }
 
 func (od *unionDir) Unlink(ctx context.Context, name string) syscall.Errno {
-	slog.Debug("Unlink called", "path", path.Join(od.pathInFs, name))
+	childPath := path.Join(od.pathInFs, name)
+	slog.Debug("Unlink called", "path", childPath)
+
 	if od.writableLayer == nil {
 		return syscall.EROFS // Read-only file system
 	}
 
-	childPath := path.Join(od.pathInFs, name)
-
-	// If the file exists in the writable layer, just delete its metadata.
-	// The content in the `content` dir becomes garbage, can be collected later.
-	if od.writableLayer.GetFile(childPath) != nil {
+	// If the file exists in the writable layer, delete it.
+	if od.writableLayer.Exists(childPath) {
 		slog.Debug("Unlinking from writable layer", "path", childPath)
-		if err := od.writableLayer.DeleteFile(childPath); err != nil {
+		if err := od.writableLayer.Remove(childPath); err != nil {
 			return fs.ToErrno(err)
 		}
 		return fs.OK
 	}
 
-	// If it exists in the read-only layer, create a whiteout file.
+	// If it exists in the read-only layer, create a whiteout.
 	if _, ok := od.roLookup[childPath]; ok {
 		slog.Debug("Creating whiteout for read-only layer file", "path", childPath)
-		whiteoutPath := path.Join(od.pathInFs, store.WhiteoutPrefix+name)
-		hdr := tar.Header{Name: whiteoutPath, Mode: 0, Size: 0}
-		file, err := od.writableLayer.SetFile(hdr)
-		if err != nil {
-			slog.Error("Failed to set whiteout file in writable layer", "error", err, "path", whiteoutPath)
-			return fs.ToErrno(err)
-		}
-		slog.Debug("Creating whiteout file on disk", "path", file.Path)
-		touch, err := os.Create(file.Path)
-		if err != nil {
-			slog.Error("Failed to create whiteout file", "error", err, "path", file.Path)
-			return fs.ToErrno(err)
-		}
-		if err := touch.Close(); err != nil {
-			slog.Error("Failed to close whiteout file", "error", err, "path", file.Path)
+		if err := od.writableLayer.Whiteout(childPath); err != nil {
+			slog.Error("Failed to create whiteout", "error", err, "path", childPath)
 			return fs.ToErrno(err)
 		}
 		return fs.OK
