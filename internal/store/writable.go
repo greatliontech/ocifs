@@ -431,6 +431,54 @@ func (wl *WritableLayer) RemoveWhiteout(path string) error {
 	return wl.Remove(whPath)
 }
 
+// CreateSymlink creates a symbolic link at path pointing to target.
+func (wl *WritableLayer) CreateSymlink(path, target string) (*File, error) {
+	wl.mu.Lock()
+
+	contentPath := wl.contentPath(path)
+
+	// Create parent directories
+	if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+		wl.mu.Unlock()
+		return nil, fmt.Errorf("create parent dirs: %w", err)
+	}
+
+	// Remove any existing file at the content path
+	os.Remove(contentPath)
+
+	// Create the actual symlink on disk
+	if err := os.Symlink(target, contentPath); err != nil {
+		wl.mu.Unlock()
+		return nil, fmt.Errorf("create symlink: %w", err)
+	}
+
+	now := time.Now()
+	f := &File{
+		Hdr: tar.Header{
+			Name:       path,
+			Mode:       int64(os.ModeSymlink | 0777),
+			Typeflag:   tar.TypeSymlink,
+			Linkname:   target,
+			ModTime:    now,
+			AccessTime: now,
+			ChangeTime: now,
+		},
+		Path: contentPath,
+	}
+
+	wl.files[path] = f
+	shouldPersist := wl.markDirtyLocked()
+
+	copy := *f
+	wl.mu.Unlock()
+
+	if shouldPersist {
+		wl.triggerThresholdPersist()
+	}
+
+	return &copy, nil
+}
+
 // =============================================================================
 // Copy-on-Write Support
 // =============================================================================

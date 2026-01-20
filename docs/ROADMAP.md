@@ -263,17 +263,17 @@ Implement `NodeFsyncer`:
 
 ## Implementation Roadmap
 
-### Phase 1: Critical Bug Fixes (Must Do First)
-1. [ ] BUG-001: Fix size calculation
-2. [ ] BUG-002: Fix file reference after CoW
-3. [ ] BUG-003: Add mutex to unionFile
-4. [ ] BUG-004: Implement Truncate
+### Phase 1: Critical Bug Fixes (Must Do First) ✅ COMPLETE
+1. [x] BUG-001: Fix size calculation
+2. [x] BUG-002: Fix file reference after CoW
+3. [x] BUG-003: Add mutex to unionFile
+4. [x] BUG-004: Implement Truncate
 
-### Phase 2: Core Operations
-5. [ ] MISSING-001: Implement Setattr
-6. [ ] MISSING-002: Implement Rename
-7. [ ] MISSING-003: Implement Rmdir
-8. [ ] MISSING-004: Symlink support
+### Phase 2: Core Operations ✅ COMPLETE
+5. [x] MISSING-001: Implement Setattr
+6. [x] MISSING-002: Implement Rename
+7. [x] MISSING-003: Implement Rmdir
+8. [x] MISSING-004: Symlink support
 
 ### Phase 3: Robustness
 9. [ ] ROBUST-002: Implement Fsync
@@ -316,16 +316,16 @@ Implement `NodeFsyncer`:
 | Operation | Status | Notes |
 |-----------|--------|-------|
 | Read | ✅ Works | Direct from blobs |
-| Write | ⚠️ Buggy | Size tracking broken |
+| Write | ✅ Works | Size tracking fixed |
 | Create | ✅ Works | |
 | Mkdir | ✅ Works | |
 | Unlink | ✅ Works | Whiteouts handled |
-| Truncate | ❌ Missing | Returns ENOSYS |
-| Setattr | ❌ Missing | chmod/chown broken |
-| Rename | ❌ Missing | mv fails |
-| Rmdir | ❌ Missing | |
-| Symlink | ❌ Missing | |
-| Readlink | ❌ Missing | |
+| Truncate | ✅ Works | Triggers CoW if needed |
+| Setattr | ✅ Works | chmod/chown/truncate |
+| Rename | ✅ Works | Within/cross directory |
+| Rmdir | ✅ Works | Whiteouts for RO dirs |
+| Symlink | ✅ Works | Create symlinks |
+| Readlink | ✅ Works | Read symlink targets |
 | Fsync | ❌ Missing | |
 | Hardlink | ❌ Missing | |
 | Xattr | ❌ Missing | |

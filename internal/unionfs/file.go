@@ -1,6 +1,7 @@
 package unionfs
 
 import (
+	"archive/tar"
 	"context"
 	"io"
 	"log/slog"
@@ -21,6 +22,7 @@ var (
 	_ = (fs.NodeReader)((*unionFile)(nil))
 	_ = (fs.NodeWriter)((*unionFile)(nil))
 	_ = (fs.NodeReleaser)((*unionFile)(nil))
+	_ = (fs.NodeReadlinker)((*unionFile)(nil))
 )
 
 // unionFile represents a file in the filesystem.
@@ -268,4 +270,19 @@ func (uf *unionFile) Release(ctx context.Context, fh fs.FileHandle) syscall.Errn
 		return syscall.EBADF
 	}
 	return fs.ToErrno(h.f.Close())
+}
+
+func (uf *unionFile) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
+	uf.mu.Lock()
+	defer uf.mu.Unlock()
+
+	slog.Debug("Readlink called", "path", uf.pathInFs)
+
+	// Check if this is actually a symlink
+	if uf.file.Hdr.Typeflag != tar.TypeSymlink {
+		return nil, syscall.EINVAL
+	}
+
+	// The target is stored in the header's Linkname field
+	return []byte(uf.file.Hdr.Linkname), fs.OK
 }

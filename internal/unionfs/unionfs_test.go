@@ -855,3 +855,261 @@ func TestEdge_ManyFiles(t *testing.T) {
 		t.Errorf("Expected 26 subdirectories, got %d", len(entries))
 	}
 }
+
+// ==================== RMDIR TESTS ====================
+
+func TestWritable_Rmdir_EmptyDir(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create a directory
+	if err := os.Mkdir(env.path("emptydir"), 0755); err != nil {
+		t.Fatalf("Mkdir failed: %v", err)
+	}
+
+	// Remove it
+	if err := os.Remove(env.path("emptydir")); err != nil {
+		t.Fatalf("Rmdir failed: %v", err)
+	}
+
+	// Verify it's gone
+	if _, err := os.Stat(env.path("emptydir")); !os.IsNotExist(err) {
+		t.Errorf("Directory should not exist after rmdir")
+	}
+}
+
+func TestWritable_Rmdir_NonEmpty(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	// Create a directory with a file
+	os.Mkdir(env.path("nonempty"), 0755)
+	os.WriteFile(env.path("nonempty/file.txt"), []byte("content"), 0644)
+
+	// Try to remove it - should fail
+	err := os.Remove(env.path("nonempty"))
+	if err == nil {
+		t.Errorf("Rmdir should fail on non-empty directory")
+	}
+}
+
+func TestWritable_Rmdir_RODir(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Add a RO directory (implicitly by adding a file)
+	env.addROFile("rodir/file.txt", []byte("content"), 0644)
+	env.mount(true)
+
+	// Delete the file first
+	if err := os.Remove(env.path("rodir/file.txt")); err != nil {
+		t.Fatalf("Remove file failed: %v", err)
+	}
+
+	// Now remove the directory (should create whiteout)
+	if err := os.Remove(env.path("rodir")); err != nil {
+		t.Fatalf("Rmdir failed: %v", err)
+	}
+
+	// Verify it's gone
+	if _, err := os.Stat(env.path("rodir")); !os.IsNotExist(err) {
+		t.Errorf("Directory should not exist after rmdir")
+	}
+}
+
+// ==================== RENAME TESTS ====================
+
+func TestWritable_Rename_SameDir(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	content := []byte("rename me")
+	os.WriteFile(env.path("original.txt"), content, 0644)
+
+	// Rename
+	if err := os.Rename(env.path("original.txt"), env.path("renamed.txt")); err != nil {
+		t.Fatalf("Rename failed: %v", err)
+	}
+
+	// Old name should not exist
+	if _, err := os.Stat(env.path("original.txt")); !os.IsNotExist(err) {
+		t.Errorf("Original file should not exist")
+	}
+
+	// New name should exist with correct content
+	got, err := os.ReadFile(env.path("renamed.txt"))
+	if err != nil {
+		t.Fatalf("Read renamed file failed: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("Renamed file content mismatch: got %q, want %q", got, content)
+	}
+}
+
+func TestWritable_Rename_CrossDir(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	os.Mkdir(env.path("srcdir"), 0755)
+	os.Mkdir(env.path("dstdir"), 0755)
+
+	content := []byte("move me")
+	os.WriteFile(env.path("srcdir/file.txt"), content, 0644)
+
+	// Move file to different directory
+	if err := os.Rename(env.path("srcdir/file.txt"), env.path("dstdir/file.txt")); err != nil {
+		t.Fatalf("Rename failed: %v", err)
+	}
+
+	// Old path should not exist
+	if _, err := os.Stat(env.path("srcdir/file.txt")); !os.IsNotExist(err) {
+		t.Errorf("Original file should not exist")
+	}
+
+	// New path should exist with correct content
+	got, err := os.ReadFile(env.path("dstdir/file.txt"))
+	if err != nil {
+		t.Fatalf("Read moved file failed: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("Moved file content mismatch: got %q, want %q", got, content)
+	}
+}
+
+func TestWritable_Rename_ROFile(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	content := []byte("read-only content")
+	env.addROFile("rofile.txt", content, 0644)
+	env.mount(true)
+
+	// Rename the RO file
+	if err := os.Rename(env.path("rofile.txt"), env.path("moved.txt")); err != nil {
+		t.Fatalf("Rename RO file failed: %v", err)
+	}
+
+	// Old path should not exist
+	if _, err := os.Stat(env.path("rofile.txt")); !os.IsNotExist(err) {
+		t.Errorf("Original file should not exist")
+	}
+
+	// New path should exist with correct content
+	got, err := os.ReadFile(env.path("moved.txt"))
+	if err != nil {
+		t.Fatalf("Read moved file failed: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("Moved file content mismatch: got %q, want %q", got, content)
+	}
+
+	// Original blob should be unchanged
+	blobContent, _ := os.ReadFile(env.roFiles["rofile.txt"].Path)
+	if !bytes.Equal(blobContent, content) {
+		t.Errorf("Original blob was modified!")
+	}
+}
+
+func TestWritable_Rename_Overwrite(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	os.WriteFile(env.path("src.txt"), []byte("source"), 0644)
+	os.WriteFile(env.path("dst.txt"), []byte("destination"), 0644)
+
+	// Rename should overwrite destination
+	if err := os.Rename(env.path("src.txt"), env.path("dst.txt")); err != nil {
+		t.Fatalf("Rename failed: %v", err)
+	}
+
+	got, _ := os.ReadFile(env.path("dst.txt"))
+	if string(got) != "source" {
+		t.Errorf("Rename didn't overwrite: got %q", got)
+	}
+}
+
+// ==================== SYMLINK TESTS ====================
+
+func TestWritable_Symlink_Create(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	content := []byte("target content")
+	os.WriteFile(env.path("target.txt"), content, 0644)
+
+	// Create symlink
+	if err := os.Symlink("target.txt", env.path("link.txt")); err != nil {
+		t.Fatalf("Symlink failed: %v", err)
+	}
+
+	// Verify symlink exists
+	info, err := os.Lstat(env.path("link.txt"))
+	if err != nil {
+		t.Fatalf("Lstat failed: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("link.txt should be a symlink")
+	}
+
+	// Read through symlink
+	got, err := os.ReadFile(env.path("link.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile through symlink failed: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("Symlink content mismatch: got %q, want %q", got, content)
+	}
+}
+
+func TestWritable_Symlink_Readlink(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	target := "../some/relative/path"
+	if err := os.Symlink(target, env.path("relative-link")); err != nil {
+		t.Fatalf("Symlink failed: %v", err)
+	}
+
+	// Read the link target
+	got, err := os.Readlink(env.path("relative-link"))
+	if err != nil {
+		t.Fatalf("Readlink failed: %v", err)
+	}
+	if got != target {
+		t.Errorf("Readlink: got %q, want %q", got, target)
+	}
+}
+
+func TestWritable_Symlink_Absolute(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	env.mount(true)
+
+	target := "/absolute/path/to/target"
+	if err := os.Symlink(target, env.path("abs-link")); err != nil {
+		t.Fatalf("Symlink failed: %v", err)
+	}
+
+	got, err := os.Readlink(env.path("abs-link"))
+	if err != nil {
+		t.Fatalf("Readlink failed: %v", err)
+	}
+	if got != target {
+		t.Errorf("Readlink: got %q, want %q", got, target)
+	}
+}
