@@ -27,4 +27,13 @@ Deliberately out: subuid/subgid range support. The xattr mode alone
 requires no /etc/subuid, no setuid helpers, and works for a plain user
 on any box.
 
+Scope note (from the projection design): this xattr mechanism
+belongs to the provider-mediated write model (FUSE/FSKit) — those
+backends intercept chown/mknod and can record intent. ProjFS's
+OS-native upper has no interception point, so commit-from-windows
+carries the platform's fidelity envelope (defaulted POSIX
+modes/ownership, like any Windows tar tool) per the fidelity matrix
+in `docs/specs/projection.md`; that is a declared envelope, not a
+gap this issue must close.
+
 Lands: with the fs-native upper (see writable-upper-fs-native.md).

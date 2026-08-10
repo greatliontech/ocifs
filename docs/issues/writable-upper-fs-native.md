@@ -27,5 +27,22 @@ filesystem; a database under a filesystem is indirection unless the
 filesystem genuinely cannot hold the data — and with the xattr escape
 hatch, it can.
 
+Cross-platform framing (settled with the projection design —
+`docs/specs/projection.md` REQ-proj-upper-truth /
+REQ-proj-commit-neutral): this upper-dir-as-truth design is the
+**provider-mediated** write model, shared by FUSE (linux) and FSKit
+(darwin) — both route every write through ocifs code, which applies
+it to the POSIX upper. Windows/ProjFS is the **OS-native** model:
+the virtualization root *is* the upper (NTFS writes land directly;
+deletions are ProjFS tombstones, not `.wh.` files; notifications are
+cache/journal, on-disk state is truth). Upper-dir-as-truth is what
+makes both models commit through one walk-and-tar core reading an
+abstract upper diff (added / modified / deleted / metadata-changed)
+with two dialect readers: POSIX upper (literal `.wh.` + fidelity
+xattrs) and ProjFS upper (full files + tombstones). An
+authoritative in-memory or metadata-file record would be
+unimplementable on ProjFS — the OS writes behind the provider —
+which is an independent reason the metadata.json design is dead.
+
 Lands: before the writable layer serves as a live container root
 (weaver consumes it as the environment mechanism).

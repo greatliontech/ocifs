@@ -23,6 +23,17 @@ lexical cleaning (`./x`, `x/`, `/x`, and `x` are the same path),
 relative to the image root — leading slashes are stripped, exactly as
 tar extraction into a root directory treats them.
 
+**REQ-unify-contained** (invariant): The unified view MUST contain
+only clean, root-relative paths: an entry whose cleaned path escapes
+the image root (`..` traversal, or a path that cleans to the root
+itself claiming non-directory type) fails unification with an error
+identifying the entry — such an entry cannot exist in any real root
+filesystem, and rejecting it at the model means every consumer
+(mount, export, commit) inherits containment instead of re-checking
+it. Unification has no other failure mode: hostile but representable
+input (whiteout games, duplicates, type flips) resolves by the rules
+below, never by error.
+
 ## Precedence
 
 **REQ-unify-precedence** (behavior): Layers MUST resolve top-down —
@@ -45,7 +56,11 @@ lower `x` and ship a replacement `x` in either order). An opaque
 whiteout discards all of its
 directory's contents contributed by lower layers while the directory
 itself remains; entries in the *same* layer as the marker are kept —
-opacity scopes strictly to lower layers. Neither marker kind ever
+opacity scopes strictly to lower layers. A degenerate or reserved
+marker — one whose stripped name is empty, `.`, `..`, or itself
+begins with the whiteout prefix (the reserved `.wh..wh.*` namespace,
+excepting the opaque marker defined above) — has no whiteout effect
+and is dropped. Neither marker kind, degenerate or well-formed, ever
 appears in the unified view.
 
 ## Output
@@ -60,12 +75,18 @@ resurrects deleted content (a secret whited out in a later layer
 reappears in the mount) or presents a tree no real filesystem could
 hold (children under a symlink), which export must then reject.
 
+Regular-file entries name their content by **digest** — the store's
+content-CAS key (`store.md`) — never by a filesystem path: the model
+stays pure, the store stays relocatable, and every consumer resolves
+content through the same content-addressed primitive.
+
 **REQ-unify-sorted** (behavior): The unified view MUST be sorted by
 cleaned path name; because names are relative and cleaned, a
 directory's entry sorts before everything beneath it. A directory
 may be *implied* (entries exist beneath a path that has no entry of
-its own); each presentation synthesizes implied directories under
-its own contract (`api.md` for the mount, `export.md` for export).
+its own); every consumer synthesizes implied directories as plain
+directories with mode 0755 — the one implied-directory presentation,
+shared by projections and export alike.
 
 ## Hardlinks
 

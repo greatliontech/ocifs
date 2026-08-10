@@ -35,22 +35,27 @@ verifier is configured.
 
 ## Mount
 
-**REQ-api-mount-ro** (behavior): Mounting a materialized image MUST
-produce a read-only FUSE filesystem of the unified view
-(`layer-semantics.md`), private to the invoking user (no
-`allow_other`), with regular-file reads served directly from
-content-CAS blobs.
+Mounting produces a **projection** — presentation semantics,
+per-backend fidelity, identity, enumeration, and read-only
+enforcement are pinned in `projection.md`; this section pins only
+the consumer-facing surface around it.
 
-**REQ-api-mount-attrs** (behavior): The mount MUST present
-attributes (mode, uid/gid, size, times) from the recorded tar
-headers, for directories as well as files; implied directories
-(`layer-semantics.md` REQ-unify-sorted) are synthesized as plain
-directories. Symlinks and hardlinks are
-presented per `layer-semantics.md`; FIFOs are presented as FIFO
-nodes with their recorded attributes. Character and block
-device nodes are presented as nodes of the recorded type, but device
-numbers are **not** preserved (a mount is not a bootable rootfs;
-consumers needing devices provide their own `/dev`).
+**REQ-api-mount-ro** (behavior): Mounting a materialized image MUST
+produce a read-only projection (`projection.md`) of its unified
+view; on linux the FUSE mount is additionally private to the
+invoking user (no `allow_other`).
+
+**REQ-api-mount-darwin** (behavior): On darwin, mounting MUST be
+appex-mediated: the library provides the filesystem (volume)
+implementation and orchestration, the signed FSKit app extension is
+the server the platform spawns when the volume is mounted
+(`mount -F -t <type>`), and its configuration arrives per
+`projection.md` REQ-proj-server — there is no in-process darwin
+mount call. A store the sandboxed extension cannot open (anywhere
+outside the app-group container, including the default temp-dir
+work directory) cannot serve appex mounts: consumers intending
+darwin mounts configure the work directory inside the app-group
+container, and mounting against an inaccessible store fails.
 
 **REQ-api-mountpoint** (behavior): The mountpoint MUST be the
 caller's target path, or a store-managed mount directory when none
@@ -79,6 +84,8 @@ store-managed export cache, per `export.md`.
 **REQ-api-cli** (behavior): The `ocifs` CLI MUST mount an image at a
 required mountpoint from a required image reference, with optional
 work directory and extra directories, using the ambient default
-keychain; it serves until unmounted or signalled (SIGINT/SIGTERM
-trigger unmount). The CLI is a consumer of the library surface and
-adds no semantics of its own.
+keychain; on platforms with in-process mounting (linux, windows) it
+serves until unmounted or signalled (SIGINT/SIGTERM trigger
+unmount), while on darwin it orchestrates the appex-mediated mount
+(REQ-api-mount-darwin) and does not serve. The CLI is a consumer of
+the library surface and adds no semantics of its own.

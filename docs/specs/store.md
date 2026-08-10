@@ -2,10 +2,11 @@
 
 The store is ocifs's on-disk home for pulled OCI images: the original
 OCI content, per-file extracted contents, reference cache, and mount
-scaffolding. It is a cache: every byte in it is re-derivable from a
-registry (or from the retained OCI content for the extraction tiers),
-and wiping the store is safe whenever no mounts are live (live mounts
-serve reads from the store and would see I/O errors).
+scaffolding. Its content tiers are a cache — every byte re-derivable
+from a registry, or from the retained OCI content for the extraction
+tiers — while per-mount state is ephemeral bookkeeping that dies with
+its mount; wiping the store is safe whenever no mounts are live (live
+mounts serve reads from the store and would see I/O errors).
 
 **store root** (term): The configured work directory under which all
 store state lives.
@@ -34,9 +35,12 @@ written and shared freely across layers and images; `layers/<algorithm>/<hex>`
 `refs/<registry>/<repository>/<identifier>` — one plain file per
 resolved reference (identifier = tag or digest) containing the digest
 string of the top-level artifact it resolved to; `mounts/<id>` —
-store-managed mountpoint directories; `exports/<algorithm>/<hex>` —
-materialized root filesystems keyed by the digest of the manifest
-actually materialized (behavioral contract in `export.md`).
+per-mount state: the store-managed mountpoint directory plus the
+mount's bookkeeping (registration, projection report —
+`projection.md`), written only by that mount's serving and
+orchestrating processes; `exports/<algorithm>/<hex>` — materialized
+root filesystems keyed by the digest of the manifest actually
+materialized (behavioral contract in `export.md`).
 
 **REQ-store-ns** (invariant): Layer indexes and content-CAS entries
 MUST occupy disjoint on-disk keyspaces; no path is ever interpreted
@@ -140,9 +144,15 @@ platform whose child is materialized.
 
 ## Concurrency
 
-**REQ-store-single-writer** (behavior): The store assumes a single
-writer process; cross-process locking and shared bookkeeping are out
-of scope (`docs/issues/store-metadata-gmdb.md`). Concurrent pulls of
-the same image within one process MUST NOT corrupt any tier:
-identical content races benignly in the CAS, and a CAS entry is
-published only by atomic rename of a fully written temporary.
+**REQ-store-single-writer** (behavior): The content tiers (`oci/`,
+`blobs/`, `layers/`, `refs/`) assume a single ingesting process at a
+time; any number of processes read them concurrently (projection
+servers are ordinary readers — `projection.md` REQ-proj-server), and
+per-mount state under `mounts/<id>` is written only by that mount's
+own processes — ownership partitioning, not locking. Cross-process
+ingest locking and shared transactional bookkeeping are deferred
+until store bookkeeping moves to shared, cross-process-capable
+storage. Concurrent pulls of the same image within one process MUST
+NOT corrupt any tier: identical content races benignly in the CAS,
+and a CAS entry is published only by atomic rename of a fully
+written temporary.

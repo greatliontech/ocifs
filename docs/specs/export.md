@@ -13,8 +13,14 @@ into — caller-supplied, or a store-managed entry under `exports/`.
 
 **REQ-export-fidelity** (behavior): An export MUST place every
 unified entry at its path: directories, regular files, symlinks,
-hardlinks, and FIFOs. Implied directories are created with mode
-0755. Permission bits — including setuid, setgid, and sticky — are
+hardlinks, and FIFOs. Implied directories are created as the shared
+implied-directory presentation prescribes (`layer-semantics.md`:
+plain directories, mode 0755). On a target filesystem that cannot
+hold two of the view's paths as distinct entries (case-insensitive
+hosts), the export fails naming the colliding paths — a rootfs is
+either exact or refused, never silently substituted (contrast the
+live projection's resolve-and-report policy, `projection.md`
+REQ-proj-case). Permission bits — including setuid, setgid, and sticky — are
 applied from each entry's recorded header, to files and directories
 alike (directory permissions may be applied after the directory's
 contents are written, so restrictive modes cannot block the export
@@ -51,17 +57,17 @@ from it.
 
 **REQ-export-contained** (invariant): Every filesystem write
 performed by an export MUST resolve to a path strictly inside the
-export root. An entry whose cleaned path escapes the root (absolute
-after cleaning, or containing `..` traversal) fails the export —
-it is not skipped: a layer crafted to escape is evidence of hostile
-input, not noise. No write traverses a symlink: every directory
-component of every created entry's path is a real directory
-created by this export (or the root itself), so a layer that plants
-a symlink where a later entry needs a directory cannot redirect
-writes through it. Hardlink targets resolve strictly within the
-export root under the same rules. Without this, a layer entry
-`../../home/user/.bashrc`, or a symlink `x → /etc` followed by entry
-`x/cron.d/job`, writes to the host.
+export root. Path escapes cannot reach export — the unified view
+rejects them at unification (`layer-semantics.md`
+REQ-unify-contained) — so export's own obligation is the write-time
+hazards only the host filesystem can express: no write traverses a
+symlink (every directory component of every created entry's path is
+a real directory created by this export or the root itself, so a
+layer that plants a symlink where a later entry needs a directory
+cannot redirect writes through it), and hardlink targets resolve
+strictly within the export root under the same rules. Without this,
+a symlink `x → /etc` followed by entry `x/cron.d/job` writes to the
+host.
 
 ## Atomicity and caching
 

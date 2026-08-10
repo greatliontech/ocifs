@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-unify-sorted"
+reason: "Sorting itself holds and is tested, but the parent-before-child guarantee depends on path cleaning (gapped REQ-unify-paths): mixed slash spellings across layers sort /app/x before the app directory entry on main"
+lands { covered: "REQ-unify-sorted" }

@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-unify-contained"
+reason: "Unification does not reject escaping paths yet; the rebuilt core lands containment at the model so every consumer inherits it"
+lands { covered: "REQ-unify-contained" }

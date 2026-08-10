@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-api-mount-darwin"
+reason: "Appex-mediated darwin mounting lands with the FSKit backend and the ocifs.app host-bundle recipe"
+lands { covered: "REQ-api-mount-darwin" }
