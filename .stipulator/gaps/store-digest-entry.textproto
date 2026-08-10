@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-store-digest-entry"
+reason: "Multiarch machinery not on main: no index retention, no platform selection (transport defaults to linux/amd64), no digest-addressed entry"
+lands { covered: "REQ-store-digest-entry" }

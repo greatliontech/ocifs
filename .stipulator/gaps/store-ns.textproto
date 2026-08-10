@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-store-ns"
+reason: "Layer indexes currently share the content-CAS namespace (blobs/), a demonstrated collision; layers/ and exports/ tiers do not exist yet"
+lands { covered: "REQ-store-ns" }

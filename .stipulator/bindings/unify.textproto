@@ -1,0 +1,20 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "8daa92544da6adbbde222d86bb65d2e5d7fb07e0162232d44383c323e9b67da1"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Image.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "97b6f31689762291dc9c741473f1b477046b6f41cb417c88200d4780f94ea9ad"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "8daa92544da6adbbde222d86bb65d2e5d7fb07e0162232d44383c323e9b67da1"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestUnify"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "14450c502b7952c2113851336256cbf949f44cf280c5b11604ede9d1560100e7"
+}

@@ -1,8 +1,9 @@
 # Store bookkeeping on gmdb
 
 The store's cold-path metadata is file-based today (refs under
-`refs/`, ad-hoc layout elsewhere). Move it to gmdb
-(`github.com/thegrumpylion/gmdb`), which fits this exactly:
+`refs/`, ad-hoc layout elsewhere). Move it to gmdb (the
+`greatliontech/gmdb` repository; import path per its go.mod when
+adopted), which fits this exactly:
 
 - ref → digest cache, image records, mount registry as keyspaces;
 - **blob refcounts for GC** — the need that grows teeth once

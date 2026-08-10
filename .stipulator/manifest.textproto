@@ -1,0 +1,4 @@
+# proto-file: proto/stipulator/v1/manifest.proto
+# proto-message: stipulator.v1.Manifest
+
+include: "docs/specs/**/*.md"

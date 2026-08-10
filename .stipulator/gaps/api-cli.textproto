@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-api-cli"
+reason: "Implemented on main but unpinned; a network-free CLI smoke test lands with the mount-presentation test work"
+lands { covered: "REQ-api-cli" }

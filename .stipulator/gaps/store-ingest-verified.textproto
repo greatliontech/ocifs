@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-store-ingest-verified"
+reason: "Implemented on main (hash-then-rename, ref-written-last ordering, verified remote reads) but no store test harness pins them yet"
+lands { covered: "REQ-store-ingest-verified" }

@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-unify-paths"
+reason: "Cleaning lacks leading-slash unification (/x and x stay distinct paths) and no test pins mixed spellings of one path across layers"
+lands { covered: "REQ-unify-paths" }

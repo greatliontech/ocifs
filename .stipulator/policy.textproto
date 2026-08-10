@@ -1,0 +1,14 @@
+# proto-file: proto/stipulator/v1/policy.proto
+# proto-message: stipulator.v1.TestPolicy
+
+invocations {
+  name: "default"
+  timeout {
+    seconds: 3600
+  }
+  go {
+    packages: "./..."
+    race: true
+    args: "-test.timeout=15m"
+  }
+}
