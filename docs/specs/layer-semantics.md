@@ -17,6 +17,10 @@ directory `d`, discarding all of `d`'s lower-layer contents.
 
 Input: an image's layers, ordered base → top, each presented as its
 recorded tar entries in tar order (from the store's layer indexes).
+Archive-metadata entries (PAX extended and global headers, GNU
+long-name records) are not filesystem entries and are ignored
+wholesale — their names are never interpreted, exempting them from
+every rule below, containment included.
 
 **REQ-unify-paths** (behavior): Entry names MUST be interpreted after
 lexical cleaning (`./x`, `x/`, `/x`, and `x` are the same path),

@@ -200,7 +200,6 @@ func Unify(layers []Layer) (*View, error) {
 			}
 
 			e.Header.Name = name
-			base = components[len(components)-1]
 			existing := parent.children[base]
 			switch {
 			case isDir && existing != nil && existing.isDir():
@@ -252,9 +251,10 @@ func buildView(root *node) *View {
 			}
 			switch {
 			case child.entry != nil:
-				e := *child.entry
-				e.Header.Name = full
-				entries = append(entries, e)
+				// The placement site already wrote the cleaned full
+				// path; a second write here would be a redundant
+				// source that could silently disagree.
+				entries = append(entries, *child.entry)
 			case child.isDir():
 				// Implied directory: extraction made it real, so
 				// the view carries it as a synthesized plain

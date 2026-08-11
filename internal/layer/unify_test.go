@@ -439,6 +439,14 @@ func TestNameLengthCapFails(t *testing.T) {
 	if !errors.Is(err, ErrPathEscape) {
 		t.Fatalf("err = %v, want ErrPathEscape for over-long name", err)
 	}
+	// Exactly 4096 bytes is within the bound ("exceeds" fails).
+	exact := strings.Repeat("a/", 2047) + "aa"
+	if len(exact) != 4096 {
+		t.Fatalf("test bug: len = %d", len(exact))
+	}
+	if _, err := Unify([]Layer{{file(exact, "x")}}); err != nil {
+		t.Fatalf("exactly-4096 name rejected: %v", err)
+	}
 }
 
 func TestDiscardedEntryLeavesParents(t *testing.T) {
@@ -495,8 +503,23 @@ func TestDeviceEntriesCarried(t *testing.T) {
 }
 
 func TestSelfLinkNoop(t *testing.T) {
-	v := mustUnify(t, Layer{file("a", "keep"), hardlink("a", "a")})
-	checkView(t, v, []want{{name: "a", flag: tar.TypeReg, content: "keep"}})
+	// The entry after the self-link pins that a self-link skips one
+	// entry, not the rest of the layer.
+	v := mustUnify(t, Layer{file("a", "keep"), hardlink("a", "a"), file("b", "after")})
+	checkView(t, v, []want{
+		{name: "a", flag: tar.TypeReg, content: "keep"},
+		{name: "b", flag: tar.TypeReg, content: "after"},
+	})
+}
+
+func TestMetaEntryNamedLikeMarkerHasNoEffect(t *testing.T) {
+	v := mustUnify(t,
+		Layer{file("ok", "keep")},
+		Layer{{Header: tar.Header{Name: ".wh.ok", Typeflag: tar.TypeXGlobalHeader}}},
+	)
+	// Archive metadata is not a filesystem entry; a marker-shaped
+	// name on one must not whiteout anything.
+	checkView(t, v, []want{{name: "ok", flag: tar.TypeReg, content: "keep"}})
 }
 
 func TestHardlinkUnresolvableOmitted(t *testing.T) {
@@ -530,6 +553,9 @@ func TestMetaEntriesIgnored(t *testing.T) {
 	v := mustUnify(t, Layer{
 		{Header: tar.Header{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader}},
 		{Header: tar.Header{Name: "ignored", Typeflag: tar.TypeXHeader}},
+		// Metadata names are never interpreted — even escaping ones
+		// are exempt from containment.
+		{Header: tar.Header{Name: "../evil", Typeflag: tar.TypeXGlobalHeader}},
 		file("real", "x"),
 	})
 	checkView(t, v, []want{{name: "real", flag: tar.TypeReg, content: "x"}})
