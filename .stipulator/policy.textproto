@@ -10,5 +10,64 @@ invocations {
     packages: "./..."
     race: true
     args: "-test.timeout=15m"
+    # Oracle-test scratch: created and consumed by the tests
+    # themselves, never an independent witness input.
+    excluded_paths: ".scratch"
+    # rapid's package-level state, vouched as a complete family (the
+    # strings.go var block plus vis.go): generator singletons, default
+    # alphabets, and colors are initialized once and immutable after;
+    # the sync.Map caches and the template are populated lazily during
+    # any property run, deterministically, from rapid's own
+    # version-pinned code, independent of the code under test.
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "charClassGens"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "compiledRegexps"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "expandedTables"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "regexpNames"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "visTmpl"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "anyRuneGen"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "anyRuneGenNoNL"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "defaultRunes"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "defaultTables"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "visBitSetColor"
+    }
+    dynamic_state_vouches {
+      package: "pgregory.net/rapid"
+      variable: "visBitUnsetColor"
+    }
+    # A package-level sentinel authenticator, assigned once at init
+    # and never reassigned.
+    dynamic_state_vouches {
+      package: "github.com/google/go-containerregistry/pkg/authn"
+      variable: "Anonymous"
+    }
   }
 }

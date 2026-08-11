@@ -10,3 +10,11 @@ tasks:
     desc: Run tests
     cmd: go test -cover ./...
     silent: true
+
+  mutate:
+    desc: Mutation-test the working-tree delta (oracle scratch bracketed)
+    cmds:
+      - mkdir -p .scratch/layer
+      - >-
+        gomutant run --changed HEAD --timeout 0
+        --bracket-path .scratch/layer

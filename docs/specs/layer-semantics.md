@@ -26,8 +26,9 @@ tar extraction into a root directory treats them.
 **REQ-unify-contained** (invariant): The unified view MUST contain
 only clean, root-relative paths: an entry whose cleaned path escapes
 the image root (`..` traversal, or a path that cleans to the root
-itself claiming non-directory type) fails unification with an error
-identifying the entry — such an entry cannot exist in any real root
+itself claiming non-directory type), or whose cleaned path exceeds
+4096 bytes (no materializable root filesystem holds longer paths),
+fails unification with an error identifying the entry — such an entry cannot exist in any real root
 filesystem, and rejecting it at the model means every consumer
 (mount, export, commit) inherits containment instead of re-checking
 it. Unification has no other failure mode: hostile but representable
@@ -60,7 +61,11 @@ opacity scopes strictly to lower layers. A degenerate or reserved
 marker — one whose stripped name is empty, `.`, `..`, or itself
 begins with the whiteout prefix (the reserved `.wh..wh.*` namespace,
 excepting the opaque marker defined above) — has no whiteout effect
-and is dropped. Neither marker kind, degenerate or well-formed, ever
+and is dropped. An entry with a marker-prefixed name in a
+*non-basename* component (`.wh.x/y`) is inert and dropped entirely:
+a directory literally named with the whiteout prefix is
+unrepresentable in the layer dialect — re-serializing it would read
+back as markers — so the view never holds one. Neither marker kind, degenerate or well-formed, ever
 appears in the unified view.
 
 ## Output
@@ -82,23 +87,45 @@ content through the same content-addressed primitive.
 
 **REQ-unify-sorted** (behavior): The unified view MUST be sorted by
 cleaned path name; because names are relative and cleaned, a
-directory's entry sorts before everything beneath it. A directory
-may be *implied* (entries exist beneath a path that has no entry of
-its own); every consumer synthesizes implied directories as plain
-directories with mode 0755 — the one implied-directory presentation,
-shared by projections and export alike.
+directory's entry sorts before everything beneath it — except the
+root entry: when a layer carries the root directory itself, the view
+contains a `.` entry holding the root's attributes, which
+participates in plain byte order (`!x` sorts before `.`) and is
+never a child entry — consumers treat it positionally independent. The view is
+**complete**: a directory a layer only *implied* (created because
+entries were placed beneath it, with no entry of its own) appears in
+the view as a synthesized plain directory entry with mode 0755 —
+extraction makes implied directories real, so one that loses all its
+children to a later whiteout or opaque still exists, which no
+consumer could reconstruct from the surviving entries alone. The
+same holds for parents materialized by an entry that was itself
+discarded at a deeper obstruction or omitted as an unresolvable
+hardlink — extraction creates parents before it can fail, and they
+stay. Consumers present the view as-is and synthesize nothing.
 
 ## Hardlinks
 
-**REQ-unify-hardlink** (behavior): A hardlink entry's target MUST be
-resolved against the unified view after the same lexical cleaning as
-entry names. A hardlink whose target resolves to a regular-file
-entry denotes the same **content** as the target; link identity
-(shared inode number, `st_nlink`) is not part of the contract —
-presentations may render the link as an independent node with the
-target's content and size. A hardlink whose target is absent from
-the unified view or resolves to anything other than a regular-file
-entry is omitted from presentations; it is not an error.
+**REQ-unify-hardlink** (behavior): A hardlink entry MUST resolve at
+its own position in extraction order: its target — after the same
+lexical cleaning as entry names — is looked up in the state existing
+when the link entry is applied, exactly as physical extraction links
+to the inode existing then. A target replaced later (by a higher
+layer, or by a later entry in the same layer) therefore leaves the
+link carrying the **old** content, matching kernel union-filesystem
+behavior. A resolved link appears in the unified view as a hardlink
+entry carrying its captured content identity (digest and size) and
+the target's inode attributes (mode, ownership, times, and extended
+attributes — a hardlink shares its target's inode, so the link
+header's own attributes are extraction noise); link
+identity (shared inode number, `st_nlink`) is not part of the
+contract — presentations may render an independent node with the
+captured content. A link whose target at that moment does not carry
+regular-file content (absent, or a directory, symlink, device, or
+FIFO — an earlier resolved hardlink does carry it, so chains
+resolve) is omitted from the unified view; it is not an error. A
+link whose cleaned target equals its own path changes nothing —
+linking a path to its own inode is a no-op, and the existing entry
+stands.
 
 ## Special file types
 

@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.5.0
 	github.com/spf13/cobra v1.9.1
+	pgregory.net/rapid v1.3.0
 )
 
 require (

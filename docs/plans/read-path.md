@@ -9,7 +9,7 @@ entry, the verification seam, and Export.
 
 - [x] 1. Author `docs/specs/` in stipulator markup; compile the
       corpus, declare gaps, bind what exists; fix stale gmdb cite.
-- [ ] 2. `internal/layer` — the pure semantic core: value-typed
+- [x] 2. `internal/layer` — the pure semantic core: value-typed
       entries addressing content by digest; bottom-up two-pass
       unification (whiteouts-first and tar-order-independent,
       intra-layer last-wins, non-directory-ancestor discard,

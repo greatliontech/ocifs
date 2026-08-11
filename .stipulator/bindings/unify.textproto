@@ -1,0 +1,353 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-unify-paths"
+  content_hash: "692122ddf2ae72d28ac40c45640a00cd0a71a701b72d7f233c666aed5a9a4642"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-paths"
+  content_hash: "692122ddf2ae72d28ac40c45640a00cd0a71a701b72d7f233c666aed5a9a4642"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestSpellingsUnify"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "23baba70183ab8d902fbd38926ce5a69bb72431c5abe8082d6b09f234b237ad5"
+}
+
+bindings {
+  requirement_id: "REQ-unify-contained"
+  content_hash: "873db3d4a07661ecef7088b580dd9aa1b71f2e71039242069663114dddf99ab7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-contained"
+  content_hash: "873db3d4a07661ecef7088b580dd9aa1b71f2e71039242069663114dddf99ab7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestEscapeFailsUnification"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "bf283688834868f25c91807a4ace323d67b8b54ff117afaa02e60dafff492ab6"
+}
+
+bindings {
+  requirement_id: "REQ-unify-contained"
+  content_hash: "873db3d4a07661ecef7088b580dd9aa1b71f2e71039242069663114dddf99ab7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyEscapeRejected"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "de15754b2dc5236e26f7de4ce4a8b49ee9e6b746c8f00372f9096b6abe7abe63"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestIntraLayerLastWins"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c0a0dcff105a1c038ffdb300f6f94a9e5ca1a85f5a86c34d2810aee4245a0f38"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestTopLayerOverrides"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "4ee9bd14ba014c5dc4b0ddd3fcb277d9ec2371e195bb2faeed8d13cc5fd85fd4"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestFileReplacesDirectoryDropsSubtree"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a2fe94c21b57b9e3b5abf6fac265689494bd3b73ad23d7c669c7ae501dc190d8"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestDirOverDirKeepsChildrenUpdatesAttrs"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "cdbd129f7f9dffe348ad067b64bc7526f11b89c50d030fe2f09fd9676d19ddf8"
+}
+
+bindings {
+  requirement_id: "REQ-unify-precedence"
+  content_hash: "7802e35abfd1d95244f814647dfd1a1a257fdf1b9c7307f7accf73c6fe30fed6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyOracle"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3ae4e69be01f06e30d2e39528cf13f17bd4ad27019179c27c8b53f1cbac6d529"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestWhiteoutDeletesLowerSubtree"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "53ab11c869517de4b391ceb8ddb41c12c3fe6d5742829639f0d398cccf4934f0"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestWhiteoutOrderIndependentWithinLayer"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "57600ec11244decb147c43fcdf6a1ce80ecd219e40f5b528e638c615ff36ffe4"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestWhiteoutThenReplacementFile"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "da93f8cd6853e7bff17fac8a239ff088e21eaf7129f0bb221142e6db12e54324"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestOpaqueRemovesLowerKeepsSameLayer"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "7e0d6335729ee8b11f8a051b45c8414090f2fea9b3eaa4b5014273c99c7e6563"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestDegenerateMarkersHaveNoEffect"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "382a2fe11e3c999f2ca6b11c4437a15fc4cca6d332629aa9ab8d4a5c690e5331"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyMarkerOrderIndependence"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c9b5e9fc9192a764ff569452df1fc37c4f06c201bc05c3742d070248e4b13cdc"
+}
+
+bindings {
+  requirement_id: "REQ-unify-clean"
+  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-clean"
+  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestNonDirAncestorDiscardsDescendants"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1b8c212e3756ccff9d73b5a6d2c874bf71d2e4216f5fbb9a9988433f2f04b529"
+}
+
+bindings {
+  requirement_id: "REQ-unify-clean"
+  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyOracle"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3ae4e69be01f06e30d2e39528cf13f17bd4ad27019179c27c8b53f1cbac6d529"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestFlatByteSortOrder"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9560000e8ec81cc25a4b28360cdb3f4e3a33665c99b443c875b7ba3032ab993e"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestWhiteoutUnderImpliedDir"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "742fff1fe6dab2e011c187b5dbf6ad1d827d6f58e0eebd10df83b54a70d33d9f"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyOracle"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3ae4e69be01f06e30d2e39528cf13f17bd4ad27019179c27c8b53f1cbac6d529"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestHardlinkCapturesContentAtPosition"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "31abe2fba4afaa81181875e32500060102718111bccb5588f2cc2a69e5959406"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestHardlinkChainsResolve"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "39bb0b61a8568c14919f779f325e60770826d6177df567b0eb90dcc5afbb878b"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestHardlinkUnresolvableOmitted"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b928870a48a0c8a249cd37c50a5ee0961b1ac16e796730a899961157f3ca1480"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestHardlinkTargetSpellingCleaned"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "720f9a8a371a1472b7e2722d3e8f051cc421c5e21557107a1cf856ce4b529205"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestSelfLinkNoop"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "59f56a8bca78ed2a6a752c5f9490f8e49957aac038c5c2926fbf8f17d0bcdfd8"
+}
+
+bindings {
+  requirement_id: "REQ-unify-symlink"
+  content_hash: "524fa5a1510d4ca6821cb890e1e659f11d4b4dec08bf6c8ec476dac93dd1aa11"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "fbf43bbd31c916049108ed9b35f304b8fc4ace103913dfd689e7944f2428f4d2"
+}
+
+bindings {
+  requirement_id: "REQ-unify-symlink"
+  content_hash: "524fa5a1510d4ca6821cb890e1e659f11d4b4dec08bf6c8ec476dac93dd1aa11"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestSymlinkTargetVerbatim"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "90c71fce2a636e13d13dac5f4203293ed24626e82f38dd01ecb9a79b47bc0f1d"
+}
+
+bindings {
+  requirement_id: "REQ-unify-contained"
+  content_hash: "873db3d4a07661ecef7088b580dd9aa1b71f2e71039242069663114dddf99ab7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestNameLengthCapFails"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "2427700455958e9a5e18730851a01e118771e1c71567fb2a1b11aa9f52cd1323"
+}
+
+bindings {
+  requirement_id: "REQ-unify-whiteout"
+  content_hash: "8313be4d1d609eb0c883175fe533142d4549c01dde806a9d7eba86f8dd63659f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestReservedComponentInert"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "fb385e54bdbdbb43582e004d465c2ba44fa3ec142b0fbc06aebb1cf607ac9a16"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestRootEntryCarriesRootAttrs"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "862a905bcb4f275e44b870c65e55ef0feae11ee7af264d69f2a0b435385870b5"
+}
+
+bindings {
+  requirement_id: "REQ-unify-hardlink"
+  content_hash: "dfa2a27e2c543cc3d047b7845e766228be8bbd7ea5df201b1aec86595b737fa0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestHardlinkCapturesInodeAttributes"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9a042a88681d5c64e3d685e7a83b01e58cc5db72cbe7c9af09be73ce1095f78b"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestDiscardedEntryLeavesParents"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "862fea7c142adfde9b261d54629feac5049da175165f437d8968021c41994408"
+}
+
+bindings {
+  requirement_id: "REQ-unify-sorted"
+  content_hash: "b00b8943ba94431fd938cb9ec03f5ef24fec867daa081a55d933954178a8b976"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/layer.TestUnresolvableLinkLeavesParents"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e356853feca4af692e3c197c05a50029cff2fe8b9aaef4bf608c7c899e499edc"
+}

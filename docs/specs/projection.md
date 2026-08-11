@@ -27,9 +27,9 @@ projection's local modifications; the unified view is its **lower**.
 ## One tree, declared differences
 
 **REQ-proj-model** (behavior): Every backend MUST present the same
-logical tree — the unified view, with implied directories
-synthesized (as plain directories, `layer-semantics.md`) and any
-consumer-configured extra directories added
+logical tree — the unified view (complete with its synthesized
+implied directories, `layer-semantics.md`) plus any
+consumer-configured extra directories
 (`api.md`) — differing from another backend only in ways the
 fidelity envelope table below declares. An entry visible on one
 platform and missing on another without a matrix row saying so is a

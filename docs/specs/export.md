@@ -40,9 +40,12 @@ boundary.
 **REQ-export-copy** (behavior): Regular-file content MUST be copied
 out of the content CAS — never hardlinked to it. Copy-on-write
 cloning (reflink) is a permitted copy mechanism where the filesystem
-supports it. Hardlinks whose target resolves within the unified view
-are created as links to the exported target file — fidelity within
-the tree, still no links into the CAS.
+supports it. Hardlinks are created as links to the exported target
+file only when the target entry carries the same content identity
+the link captured (`layer-semantics.md` REQ-unify-hardlink);
+a link whose captured content the target no longer holds
+materializes as an independent copy of the captured content —
+fidelity within the tree, still no links into the CAS.
 
 **REQ-export-immutable** (invariant): Export MUST NOT mutate store
 state: CAS bytes, modes, and link counts are identical before and

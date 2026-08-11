@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-unify-whiteout"
-reason: "Violated on main in both tar orders: a same-layer entry before its own marker neutralizes delete-lower, and a marker before a same-layer replacement suppresses the replacement; whiteouts-first (tar-order-independent) application lands with unification hardening"
-lands { covered: "REQ-unify-whiteout" }

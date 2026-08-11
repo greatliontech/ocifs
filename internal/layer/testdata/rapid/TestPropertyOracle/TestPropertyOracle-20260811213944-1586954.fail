@@ -1,0 +1,137 @@
+# 2026/08/11 21:39:44.730417 [TestPropertyOracle] [rapid] draw layers: 3
+# 2026/08/11 21:39:44.730420 [TestPropertyOracle] [rapid] draw entries: 3
+# 2026/08/11 21:39:44.730421 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:39:44.730421 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:39:44.730422 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:39:44.730424 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:39:44.730424 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730425 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:39:44.730426 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:39:44.730426 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:39:44.730427 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:39:44.730427 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:39:44.730427 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730428 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:39:44.730428 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:39:44.730428 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:39:44.730429 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:39:44.730429 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:39:44.730431 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730431 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:39:44.730431 [TestPropertyOracle] [rapid] draw entries: 1
+# 2026/08/11 21:39:44.730432 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:39:44.730432 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:39:44.730432 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:39:44.730433 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:39:44.730433 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:39:44.730433 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:39:44.730434 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730434 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:39:44.730435 [TestPropertyOracle] [rapid] draw entries: 1
+# 2026/08/11 21:39:44.730435 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:39:44.730435 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:39:44.730435 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:39:44.730436 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730436 [TestPropertyOracle] [rapid] draw ltarget-depth: 3
+# 2026/08/11 21:39:44.730436 [TestPropertyOracle] [rapid] draw ltarget-comp: "b"
+# 2026/08/11 21:39:44.730437 [TestPropertyOracle] [rapid] draw ltarget-comp: "b"
+# 2026/08/11 21:39:44.730437 [TestPropertyOracle] [rapid] draw ltarget-comp: "c"
+# 2026/08/11 21:39:44.730438 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:39:44.730484 [TestPropertyOracle] path "b": in view presentation, missing from oracle
+# 
+v0.4.8#7098020047193687162
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x1
+0x0
+0x1
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x6b74f03291620
+0x7
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x1
+0x0
+0x1
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0

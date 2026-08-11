@@ -1,0 +1,688 @@
+# 2026/08/11 21:35:35.216231 [TestPropertyOracle] [rapid] draw layers: 3
+# 2026/08/11 21:35:35.216235 [TestPropertyOracle] [rapid] draw entries: 4
+# 2026/08/11 21:35:35.216239 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216239 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216241 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216243 [TestPropertyOracle] [rapid] draw kind: 6
+# 2026/08/11 21:35:35.216244 [TestPropertyOracle] [rapid] draw starget-depth: 3
+# 2026/08/11 21:35:35.216244 [TestPropertyOracle] [rapid] draw starget-comp: "a"
+# 2026/08/11 21:35:35.216245 [TestPropertyOracle] [rapid] draw starget-comp: "a"
+# 2026/08/11 21:35:35.216247 [TestPropertyOracle] [rapid] draw starget-comp: "c"
+# 2026/08/11 21:35:35.216248 [TestPropertyOracle] [rapid] draw abs: true
+# 2026/08/11 21:35:35.216249 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216249 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216250 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216250 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216251 [TestPropertyOracle] [rapid] draw kind: 4
+# 2026/08/11 21:35:35.216252 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216252 [TestPropertyOracle] [rapid] draw dmode: 384
+# 2026/08/11 21:35:35.216255 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216255 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216256 [TestPropertyOracle] [rapid] draw kind: 4
+# 2026/08/11 21:35:35.216256 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216257 [TestPropertyOracle] [rapid] draw dmode: 420
+# 2026/08/11 21:35:35.216257 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216258 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216258 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216259 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:35:35.216260 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216261 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216261 [TestPropertyOracle] [rapid] draw fmode: 420
+# 2026/08/11 21:35:35.216262 [TestPropertyOracle] [rapid] draw entries: 10
+# 2026/08/11 21:35:35.216263 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216263 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216264 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216264 [TestPropertyOracle] [rapid] draw kind: 8
+# 2026/08/11 21:35:35.216265 [TestPropertyOracle] [rapid] draw degen: 2
+# 2026/08/11 21:35:35.216265 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216266 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216270 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216271 [TestPropertyOracle] [rapid] draw kind: 4
+# 2026/08/11 21:35:35.216272 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216272 [TestPropertyOracle] [rapid] draw dmode: 448
+# 2026/08/11 21:35:35.216273 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:35:35.216273 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216274 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216274 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216275 [TestPropertyOracle] [rapid] draw kind: 4
+# 2026/08/11 21:35:35.216275 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216276 [TestPropertyOracle] [rapid] draw dmode: 384
+# 2026/08/11 21:35:35.216276 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216277 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216277 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:35:35.216278 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216278 [TestPropertyOracle] [rapid] draw ltarget-depth: 2
+# 2026/08/11 21:35:35.216279 [TestPropertyOracle] [rapid] draw ltarget-comp: "d"
+# 2026/08/11 21:35:35.216279 [TestPropertyOracle] [rapid] draw ltarget-comp: "a"
+# 2026/08/11 21:35:35.216279 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216280 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216280 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216281 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216281 [TestPropertyOracle] [rapid] draw kind: 1
+# 2026/08/11 21:35:35.216282 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216283 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216283 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:35:35.216284 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216284 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216285 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216285 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:35:35.216286 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216286 [TestPropertyOracle] [rapid] draw ltarget-depth: 3
+# 2026/08/11 21:35:35.216287 [TestPropertyOracle] [rapid] draw ltarget-comp: "d"
+# 2026/08/11 21:35:35.216287 [TestPropertyOracle] [rapid] draw ltarget-comp: "d"
+# 2026/08/11 21:35:35.216288 [TestPropertyOracle] [rapid] draw ltarget-comp: "a"
+# 2026/08/11 21:35:35.216288 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216296 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216296 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216297 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:35:35.216297 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216298 [TestPropertyOracle] [rapid] draw ltarget-depth: 3
+# 2026/08/11 21:35:35.216298 [TestPropertyOracle] [rapid] draw ltarget-comp: "c"
+# 2026/08/11 21:35:35.216301 [TestPropertyOracle] [rapid] draw ltarget-comp: "c"
+# 2026/08/11 21:35:35.216302 [TestPropertyOracle] [rapid] draw ltarget-comp: "a"
+# 2026/08/11 21:35:35.216302 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216303 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216304 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216304 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216305 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:35:35.216305 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216306 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216307 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:35:35.216307 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:35:35.216308 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216308 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216309 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216309 [TestPropertyOracle] [rapid] draw kind: 5
+# 2026/08/11 21:35:35.216310 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216311 [TestPropertyOracle] [rapid] draw dmode: 448
+# 2026/08/11 21:35:35.216311 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:35:35.216312 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216312 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216313 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216313 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:35:35.216315 [TestPropertyOracle] [rapid] draw content: "zzx"
+# 2026/08/11 21:35:35.216316 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216316 [TestPropertyOracle] [rapid] draw fmode: 488
+# 2026/08/11 21:35:35.216317 [TestPropertyOracle] [rapid] draw entries: 10
+# 2026/08/11 21:35:35.216318 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216318 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216318 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:35:35.216319 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216319 [TestPropertyOracle] [rapid] draw ltarget-depth: 2
+# 2026/08/11 21:35:35.216320 [TestPropertyOracle] [rapid] draw ltarget-comp: "c"
+# 2026/08/11 21:35:35.216320 [TestPropertyOracle] [rapid] draw ltarget-comp: "d"
+# 2026/08/11 21:35:35.216321 [TestPropertyOracle] [rapid] draw spelling: 3
+# 2026/08/11 21:35:35.216321 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216322 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216322 [TestPropertyOracle] [rapid] draw kind: 4
+# 2026/08/11 21:35:35.216323 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216323 [TestPropertyOracle] [rapid] draw dmode: 420
+# 2026/08/11 21:35:35.216327 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216327 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216328 [TestPropertyOracle] [rapid] draw kind: 6
+# 2026/08/11 21:35:35.216328 [TestPropertyOracle] [rapid] draw starget-depth: 1
+# 2026/08/11 21:35:35.216329 [TestPropertyOracle] [rapid] draw starget-comp: "c"
+# 2026/08/11 21:35:35.216329 [TestPropertyOracle] [rapid] draw abs: false
+# 2026/08/11 21:35:35.216330 [TestPropertyOracle] [rapid] draw spelling: 2
+# 2026/08/11 21:35:35.216330 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216331 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216331 [TestPropertyOracle] [rapid] draw kind: 3
+# 2026/08/11 21:35:35.216332 [TestPropertyOracle] [rapid] draw content: "xyy"
+# 2026/08/11 21:35:35.216333 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216334 [TestPropertyOracle] [rapid] draw fmode: 493
+# 2026/08/11 21:35:35.216334 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216335 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216335 [TestPropertyOracle] [rapid] draw kind: 3
+# 2026/08/11 21:35:35.216336 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216337 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216337 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:35:35.216338 [TestPropertyOracle] [rapid] draw p-depth: 2
+# 2026/08/11 21:35:35.216338 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216339 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216339 [TestPropertyOracle] [rapid] draw kind: 7
+# 2026/08/11 21:35:35.216340 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216340 [TestPropertyOracle] [rapid] draw ltarget-depth: 3
+# 2026/08/11 21:35:35.216340 [TestPropertyOracle] [rapid] draw ltarget-comp: "b"
+# 2026/08/11 21:35:35.216341 [TestPropertyOracle] [rapid] draw ltarget-comp: "d"
+# 2026/08/11 21:35:35.216341 [TestPropertyOracle] [rapid] draw ltarget-comp: "b"
+# 2026/08/11 21:35:35.216342 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216342 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216357 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216358 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:35:35.216359 [TestPropertyOracle] [rapid] draw content: "yy"
+# 2026/08/11 21:35:35.216360 [TestPropertyOracle] [rapid] draw spelling: 0
+# 2026/08/11 21:35:35.216361 [TestPropertyOracle] [rapid] draw fmode: 448
+# 2026/08/11 21:35:35.216361 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:35:35.216362 [TestPropertyOracle] [rapid] draw p-comp: "a"
+# 2026/08/11 21:35:35.216362 [TestPropertyOracle] [rapid] draw p-comp: "b"
+# 2026/08/11 21:35:35.216363 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216363 [TestPropertyOracle] [rapid] draw kind: 1
+# 2026/08/11 21:35:35.216364 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216365 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216365 [TestPropertyOracle] [rapid] draw fmode: 493
+# 2026/08/11 21:35:35.216366 [TestPropertyOracle] [rapid] draw p-depth: 1
+# 2026/08/11 21:35:35.216366 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216367 [TestPropertyOracle] [rapid] draw kind: 0
+# 2026/08/11 21:35:35.216367 [TestPropertyOracle] [rapid] draw content: ""
+# 2026/08/11 21:35:35.216368 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216368 [TestPropertyOracle] [rapid] draw fmode: 384
+# 2026/08/11 21:35:35.216369 [TestPropertyOracle] [rapid] draw p-depth: 3
+# 2026/08/11 21:35:35.216369 [TestPropertyOracle] [rapid] draw p-comp: "d"
+# 2026/08/11 21:35:35.216370 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216370 [TestPropertyOracle] [rapid] draw p-comp: "c"
+# 2026/08/11 21:35:35.216371 [TestPropertyOracle] [rapid] draw kind: 3
+# 2026/08/11 21:35:35.216372 [TestPropertyOracle] [rapid] draw content: "z"
+# 2026/08/11 21:35:35.216372 [TestPropertyOracle] [rapid] draw spelling: 1
+# 2026/08/11 21:35:35.216373 [TestPropertyOracle] [rapid] draw fmode: 448
+# 2026/08/11 21:35:35.216646 [TestPropertyOracle] walk oracle: lstat /tmp/layer-oracle-1868062736/b/b: permission denied
+# 
+v0.4.8#6473702625770507688
+0x13877b236b9943
+0xafe3b9362a829
+0x2
+0x167537fb26e773
+0x147f24760c80ca
+0xf
+0xc
+0xc
+0x4
+0x1f0a98490ec2ef
+0xc3efd4c48950d
+0x3
+0x1
+0x1c98508be6092d
+0x3
+0x872105b253897
+0x2
+0x1522c243a64725
+0x18dab2a4de0aed
+0xb
+0xc
+0xd
+0x6
+0x5fdfa21902d64
+0x109b704ad447b9
+0x3
+0x3
+0x2
+0x1c31f73ebb8a3e
+0x0
+0x1584b822697a7c
+0x0
+0x184ee7608845b8
+0x2
+0x1
+0x1cecf27ef88d49
+0xdf3e335bc6175
+0x3
+0xe322a689ab659
+0x1b6ad19650dd0d
+0x1
+0x1c90497d60eef0
+0x1
+0xe97a8de48f423
+0x2
+0x13626f070347ff
+0xfcc67a328b713
+0xa
+0xb
+0xc
+0xd
+0x4
+0x35ca11f206d62
+0x11be83be832f7d
+0x2
+0x10806cf6de5301
+0x0
+0x118c8e8331ae
+0xf642c5748a41d
+0x0
+0x38ec0e4ef917e
+0x3
+0x79225229cac
+0xd7a7edb54e6f0
+0xa
+0xb
+0xf
+0x4
+0x13d4eb05475654
+0x1511a1969b9a78
+0x0
+0x6ba8c65e6e36
+0x1
+0x8f2e267f396e7
+0x1c2d392d2a74f3
+0x1
+0x1e3011f362e3bf
+0x3
+0xc027373ad2a06
+0x0
+0xbe65013029585
+0xe8e032c62d65
+0x0
+0x99c83613c15b2
+0x1ee2604b6d21cf
+0x1c64ab6cffb792
+0x3
+0x1d8f46b769730a
+0x1
+0xbe88a1d23a55b
+0x1f9cac53c5bc1f
+0xffffffffffffffff
+0x18ca564f675507
+0xfb375dc3a192a
+0x1
+0x2112f7491f3f5
+0x0
+0x145109044425e
+0x1
+0x1a0c73d13881b9
+0x1b09583f79dc5c
+0x8
+0x29d234a168c60
+0x13a86e6d5bf79c
+0x2
+0x12a94d420853f8
+0x138434c3f5337f
+0x1
+0x4f1d86600d9f
+0x1
+0x40a35c5049496
+0x1
+0x10bc7be9be496
+0x1e4049c6268cc9
+0x4
+0xb5ef6a0a32f27
+0xd0ec02980f82b
+0x3
+0x1c8a590532bfd9
+0x2
+0x18780133b74a9
+0x1f8d42b1a07b33
+0xffffffffffffffff
+0x19837fea9de282
+0x3
+0x1656407c3f8bd0
+0x3
+0xb48be2a915831
+0x2
+0x130db530431ab7
+0xb317b6b1f5d75
+0x4
+0x3dedb77db0885
+0x2d6019a2550cb
+0x1
+0x1e62a138f06fa7
+0x6
+0x0
+0x176121e452bb91
+0x1826740f30260f
+0x0
+0x1c97775e1ec299
+0x2
+0x21ca1b4ff7bd8
+0xbafff84fa73f0
+0xb
+0x7
+0x319b85349b0ba
+0x17afbcc519ece5
+0x0
+0xd925b77cdbb8c
+0x51930599e862
+0x1
+0x3f7f214aa501d
+0x3
+0x122c1886bf12b9
+0x0
+0x147103bfadb965
+0x1bfc6facfe92c5
+0x2
+0xd4330326bfa22
+0x133be9ae1b6d60
+0x1
+0x1b7c9efbbbea6d
+0x3
+0x808763b920889
+0x3
+0x10794067389aa9
+0x3c7633cb26f2c
+0x1
+0x1a4dd2c1718da
+0x1cf68476704825
+0x1deea2bdadfd31
+0x2
+0xadd90e5167615
+0x5
+0x6
+0x7
+0x0
+0x52f19dac828bc
+0x119bd5b282e67c
+0x3
+0x1
+0x10c63d0fc3c62c
+0x3
+0x162d3dabeda71e
+0x3
+0x59cb88ad7278c
+0xaf539f61682ed
+0x7
+0x1e69046025c311
+0x1dd59a7e20fec8
+0x3
+0x1ae5e963984048
+0x704bf13ef390c
+0x2
+0x3fac8f89022e6
+0x3
+0x1d5a71c7eca80d
+0x3
+0x19b050b4208962
+0x0
+0x1823c4da9a701d
+0x1c7ef50aa6c8bb
+0x0
+0x84a7e85d58ed0
+0x17293e65e6d417
+0x3
+0x0
+0x2ccaa7e3ac3d
+0x1
+0x159a9f655fcdb9
+0x101334b1e594b0
+0x7
+0x1223956bb82ae8
+0x47bcf2c789da8
+0x2
+0x9da82b39b46d8
+0x14ffee22aebb3c
+0x2
+0xc49d39ca1142a
+0x2
+0x15c660c1654f91
+0x2
+0x544e32548eb6c
+0x0
+0x5ecb2d7070f3e
+0x13d503091c71a0
+0x2
+0xbae8615b0777e
+0x115ccc05c14677
+0x1
+0x18346895e2c351
+0x0
+0x54bce4f7eb75a
+0x0
+0xe00ff52967c17
+0xcd9b9c2cd3617
+0xb
+0x0
+0xc71e90a6e96a
+0x1526aa87e06d95
+0x1ef0699e43d726
+0x1
+0x5c750f2cef25e
+0x0
+0x1d5c46d5503c8a
+0x118273c625c3ff
+0x3
+0x2
+0x4a7b76f4fc158
+0x3
+0x1b9f30c35ccc58
+0x0
+0xae914f0aa491d
+0x1
+0x22fcd884e467
+0x1aa56a262f176e
+0xa
+0xd
+0x5
+0x17368f8a39ff2
+0x109a12a0c4f8d5
+0x3
+0x12ca038b1feab5
+0x7
+0x7
+0x7
+0x5
+0x2
+0x150bef538f957b
+0x1f75d4f2c9608d
+0xffffffffffffffff
+0x977f1e41d1858
+0x3
+0x8de6bf48330cd
+0x0
+0x1baab15b22a805
+0x0
+0xf47ebe53a326f
+0x10acdc46e4aafc
+0x0
+0x188ce2b21868ea
+0x0
+0xc056e2a965f37
+0x2
+0x1a2e73492fbc15
+0x0
+0x1f4afb07379eb3
+0xffffffffffffffff
+0x1e405a7dbc33f0
+0x0
+0x17abd8d3cd7a9
+0x0
+0xdd1eb488ccb5b
+0x9dc0dc66faebe
+0x42412a3185c24
+0x1
+0xdd9c884a24fd8
+0x7
+0x4
+0x15929b8a603e31
+0xe4e7e54abaae1
+0xa
+0x10da9231335c8a
+0x1cc9a9d708bf09
+0x0
+0xf2360f2264c01
+0x0
+0x153117ff68853c
+0xae8090ddc7ba8
+0xe
+0x7
+0x1f9c9325585d18
+0x1addbb001e526c
+0x1
+0x11faeb6aad368e
+0x1e0855474f3d82
+0x3
+0x3
+0x1
+0x1e87d2bb3bf099
+0x2
+0x140bc8626e48a0
+0x3
+0x1acca06a388747
+0x1b94322fefd720
+0x3
+0x11a797023a565c
+0x1a3bbf10d901d2
+0x0
+0x9e01ff7ed3faa
+0x1
+0x3b92d1a3efb23
+0xcc97fdc10df50
+0xd
+0xd
+0x4
+0x1286c45aec26c5
+0xa2bbddb75ad6e
+0x2
+0x191b16422f7afb
+0x1
+0xf620b97e7d172
+0x6bb7bf6edfab7
+0x0
+0x182520e4dacc7
+0x1
+0x1abc0985cc28b2
+0x12befe48d4bb86
+0x6
+0xab899f5d3a3e8
+0x1514d3ad1fb8e6
+0x3
+0x0
+0x897ddb666f969
+0x2
+0x0
+0x112e5255e0e168
+0x524b413f4d617
+0x2
+0xe1eb3047eb1d0
+0x15ab7ec168515f
+0x0
+0x11502f947e0593
+0x2
+0x118c0cbd9c7537
+0x683a4d6b103ed
+0x3
+0xf013b8cabffcc
+0x0
+0x57c81aea7eb59
+0x0
+0x1b5338184fa0e2
+0x0
+0x1f147b587684c8
+0x1
+0x10ac2faa2834f8
+0x0
+0x1409edeb04fbb4
+0x1
+0xadb6eb4b6d817
+0xc53af0789d563
+0x13ca531d2ab9a1
+0x1
+0x1cd16bc0dff108
+0x7
+0x3
+0x189f35e574c699
+0x1b58d0b7597bea
+0x0
+0x116011b17af641
+0x1
+0x3c5822f307bd0
+0x15be90c098effa
+0xf
+0x3
+0x29f681009795f
+0x14c276c1318624
+0x32a2ec6c8b0bd
+0x0
+0x1e148836053329
+0x0
+0xd663656f2a36c
+0xf2f1c0f9d23f5
+0x1
+0x13c27606a275f0
+0x2
+0xa6a119261b47
+0x0
+0x1480b82a0d9066
+0x155c12bd34fd3f
+0x7
+0x174627b5a78f
+0x155099b85b0acb
+0x0
+0x12a37ff5fad94f
+0x17bdaf3785cc16
+0x2
+0x15f2511d9ff182
+0x1
+0x113d566cbaa633
+0x3
+0x1dad8b1c6945ad
+0x1
+0x1bfac8e3f1ac78
+0xd01df2f9c50b1
+0x1
+0xda2099f409702
+0x1ecab8154ae9ea
+0x3
+0x0
+0x10ac6b33a5dc6e
+0x1
+0x1fbf6c0fd36047
+0xb4f22dcf23d6
+0x0
+0x133a0a98433ccc
+0x0
+0x2f03f7f791ddf
+0x1
+0x19c99db8fa840e
+0x0
+0x1a3e211e5b9e09
+0x1
+0x1c40587db366
+0xcdb93da91a5e
+0x325c88efb3f6a
+0x0
+0xffa8b49efbbcb
+0x5
+0x2
+0x16222c9355242e
+0xbd2802191bbc8
+0x3
+0x2
+0x1acb17768b5765
+0x0
+0xcd7ba214d976c
+0x1
+0x1d526525e36b9c
+0x2
+0x9fe1e96d8dc63
+0x1add1b8e816266
+0xe
+0x1
+0x3fe0345378006
+0x1aae439bfc00a
+0x1e04a34708d568
+0x1
+0x914841db2da4f
+0x3
+0x16b094d889ea46
+0x1d64e66f235a3
+0x0
+0x1c985e253dacd3
+0x3
+0x3e4945afd7b85
+0x604285a585cce
+0x0
+0x9e423343d2741
+0x127601200c9b0f
+0x5b82249df7374
+0x1
+0xb9d539533faa7
+0x0
+0x2e9e420c4193
+0x65e9055528e15
+0x2
+0x640667bdd2c7e
+0x3
+0x177efe57469ca1
+0x2
+0xb2a7284e551c1
+0x2
+0x1d0d7f50545ce7
+0x11ba83e89c00ff
+0x3
+0xecfe537e1f037
+0x0
+0x172dd1281a8cef
+0x2
+0x9593f9727677d
+0x19fa67c92571b8
+0x372a0f2f91ca5
+0x1
+0x174e56805e068c
+0x6
+0x2
