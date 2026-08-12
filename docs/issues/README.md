@@ -1,5 +1,8 @@
 # Issues
 
+- `docs/issues/store-oci-absent-pull-through.md` — self-heal cannot
+  recover a missing `oci/` blob under an intact ref; digest
+  pull-through per policy. Lands: 4.
 - `docs/issues/writable-upper-fs-native.md` — writable layer: fs-native
   upper dir as truth; metadata.json removed. Lands: before the writable
   layer serves as a live container root.

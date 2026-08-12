@@ -1,3 +1,9 @@
+// Package unionfs presents a unified view (internal/layer) as a
+// read-only FUSE filesystem. It consumes the view as-is — entries
+// arrive cleaned, sorted, complete, and with hardlinks already
+// resolved to their content digests — and resolves regular-file
+// content through a caller-supplied digest-to-path resolver, keeping
+// the package ignorant of store layout.
 package unionfs
 
 import (
@@ -11,29 +17,26 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/greatliontech/ocifs/internal/store"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+
+	"github.com/greatliontech/ocifs/internal/layer"
 )
 
 type ociFS struct {
 	fs.Inode
-	img       *store.Image
-	files     []*store.File
-	lookup    map[string]*store.File
+	view      *layer.View
+	blobPath  func(v1.Hash) string
 	extraDirs []string
 }
 
-func Init(img *store.Image, extraDirs []string) fs.InodeEmbedder {
-	files := img.Unify()
-	lookup := make(map[string]*store.File, len(files))
-	for _, f := range files {
-		lookup[f.Hdr.Name] = f
-	}
+// Init builds the FUSE root for a unified view. blobPath resolves a
+// regular-file entry's content digest to its on-disk blob.
+func Init(view *layer.View, blobPath func(v1.Hash) string, extraDirs []string) fs.InodeEmbedder {
 	return &ociFS{
-		img:       img,
-		files:     files,
-		lookup:    lookup,
+		view:      view,
+		blobPath:  blobPath,
 		extraDirs: extraDirs,
 	}
 }
@@ -50,31 +53,29 @@ func headerToFileInfo(out *fuse.Attr, h *tar.Header) {
 var _ = (fs.NodeOnAdder)((*ociFS)(nil))
 
 func (ofs *ociFS) OnAdd(ctx context.Context) {
-	for _, file := range ofs.files {
-		fileName := file.Hdr.Name
-		dir, base := path.Split(fileName)
-
-		// create parent directories as needed. TODO: we might not need this since we sort on
-		// unifications
-		p := &ofs.Inode
-		for part := range strings.SplitSeq(dir, "/") {
-			if len(part) == 0 {
-				continue
-			}
-			ch := p.GetChild(part)
-			if ch == nil {
-				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
-				p.AddChild(part, ch, true)
-			}
-			p = ch
+	for _, entry := range ofs.view.Entries() {
+		fileName := entry.Header.Name
+		if fileName == "." {
+			// Root attributes are not yet projected onto the FUSE
+			// root; the entry is positional, not a child.
+			continue
 		}
+		dir, base := path.Split(fileName)
+		p := ofs.ensureDir(ctx, dir)
 
-		hdr := file.Hdr
+		hdr := entry.Header
 
 		attr := fuse.Attr{}
-		headerToFileInfo(&attr, hdr)
+		headerToFileInfo(&attr, &hdr)
 
 		switch hdr.Typeflag {
+
+		case tar.TypeDir:
+			ch := p.GetChild(base)
+			if ch == nil {
+				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
+				p.AddChild(base, ch, true)
+			}
 
 		case tar.TypeSymlink:
 			l := &fs.MemSymlink{
@@ -83,18 +84,13 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			l.Attr = attr
 			p.AddChild(base, p.NewPersistentInode(ctx, l, fs.StableAttr{Mode: syscall.S_IFLNK}), false)
 
-		// for hardlinks we create an inode pointing to the link file in it's layer whith it's size
-		case tar.TypeLink:
-			linkEntry, ok := ofs.lookup[hdr.Linkname]
-			if !ok {
-				slog.Debug("Missing link", "path", hdr.Linkname, "filepath", hdr.Name)
-				break
-			}
-			attr.Size = uint64(linkEntry.Hdr.Size)
+		case tar.TypeReg, tar.TypeLink:
+			// Hardlinks arrive pre-resolved: Digest and Size carry
+			// the content captured at the link's position.
 			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:     hdr.Linkname,
+				path:     fileName,
 				attr:     attr,
-				fullPath: linkEntry.Path,
+				fullPath: ofs.blobPath(entry.Digest),
 			}, fs.StableAttr{})
 			p.AddChild(base, ch, true)
 
@@ -113,13 +109,6 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 			rf.Attr = attr
 			p.AddChild(base, p.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFIFO}), false)
 
-		case tar.TypeReg:
-			ch := p.NewPersistentInode(ctx, &ociFile{
-				path:     fileName,
-				attr:     attr,
-				fullPath: file.Path,
-			}, fs.StableAttr{})
-			p.AddChild(base, ch, true)
 		default:
 			slog.Debug("Unsupported file type", "path", fileName, "type", hdr.Typeflag)
 		}
@@ -127,19 +116,26 @@ func (ofs *ociFS) OnAdd(ctx context.Context) {
 	}
 
 	for _, d := range ofs.extraDirs {
-		p := &ofs.Inode
-		for part := range strings.SplitSeq(d, "/") {
-			if len(part) == 0 {
-				continue
-			}
-			ch := p.GetChild(part)
-			if ch == nil {
-				ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
-				p.AddChild(part, ch, true)
-			}
-			p = ch
-		}
+		ofs.ensureDir(ctx, d)
 	}
+}
+
+// ensureDir walks a slash-separated path from the root, creating
+// plain directory inodes as needed, and returns the final inode.
+func (ofs *ociFS) ensureDir(ctx context.Context, dir string) *fs.Inode {
+	p := &ofs.Inode
+	for part := range strings.SplitSeq(dir, "/") {
+		if len(part) == 0 {
+			continue
+		}
+		ch := p.GetChild(part)
+		if ch == nil {
+			ch = p.NewPersistentInode(ctx, &fs.Inode{}, fs.StableAttr{Mode: fuse.S_IFDIR})
+			p.AddChild(part, ch, true)
+		}
+		p = ch
+	}
+	return p
 }
 
 type ociFile struct {
@@ -152,7 +148,7 @@ type ociFile struct {
 var _ = (fs.NodeOpener)((*ociFile)(nil))
 
 func (of *ociFile) Open(ctx context.Context, openFlags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	slog.Debug("Open", "path", of.path, "flags", openFlags, "layerPath", of.fullPath, "size", of.attr.Size)
+	slog.Debug("Open", "path", of.path, "flags", openFlags, "blobPath", of.fullPath, "size", of.attr.Size)
 
 	f, err := os.Open(of.fullPath)
 	if err != nil {

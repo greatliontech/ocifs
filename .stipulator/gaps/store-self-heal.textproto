@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-store-self-heal"
-reason: "Ingest diverges from spec: index.json descriptors duplicate on re-append, no self-heal re-unpack, top-level artifact not retained"
-lands { covered: "REQ-store-self-heal" }
+reason: "The pull-through clause (absent oci/ blobs re-fetched by digest per policy) is spec-tier only until the digest-addressed fetch machinery exists; local re-derivation is implemented and pinned"
+lands { manual { condition: "digest pull-through implemented with the digest-entry machinery (docs/issues/store-oci-absent-pull-through.md)" } }

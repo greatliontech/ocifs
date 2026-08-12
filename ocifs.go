@@ -147,7 +147,12 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	}
 	im.img = img
 
-	root := unionfs.Init(img, o.extraDirs)
+	view, err := img.Unify()
+	if err != nil {
+		return nil, err
+	}
+
+	root := unionfs.Init(view, o.store.BlobPath, o.extraDirs)
 
 	// Create a FUSE server
 	srv, err := fs.Mount(im.mountPoint, root, &fs.Options{

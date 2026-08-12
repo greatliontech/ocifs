@@ -1,9 +1,5 @@
 package store
 
-import (
-	"archive/tar"
-)
-
 type PullPolicy int
 
 func (s PullPolicy) String() string {
@@ -24,8 +20,3 @@ const (
 	PullAlways
 	PullNever
 )
-
-type File struct {
-	Hdr  *tar.Header
-	Path string `json:",omitempty"`
-}

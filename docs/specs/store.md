@@ -33,14 +33,54 @@ their OCI digests), append-only except for garbage collection;
 written and shared freely across layers and images; `layers/<algorithm>/<hex>`
 — layer indexes keyed by the layer digest the manifest lists;
 `refs/<registry>/<repository>/<identifier>` — one plain file per
-resolved reference (identifier = tag or digest) containing the digest
-string of the top-level artifact it resolved to; `mounts/<id>` —
+resolved reference at a fixed depth of exactly three encoded path
+components: the registry (lowercased — DNS names are
+case-insensitive), the whole repository path as a single component
+(its `/` separators encoded like any other byte), and the identifier
+(tag or digest), the file containing the digest string of the
+top-level artifact the reference resolved to. Fixed depth means no
+reference's directory chain is a prefix of another reference's file —
+variable-depth nesting would let a tag file and a sub-repository
+directory claim the same path. Within each component every byte
+outside `[a-z0-9._-]` — plus any leading or trailing `.`, plus the
+first byte of a Windows reserved device name (`con`, `prn`, `aux`,
+`nul`, `com0`–`com9`, `lpt0`–`lpt9` as the first dot-segment) — is
+percent-encoded as lowercase `%xx`; a component whose encoding would
+exceed 200 bytes is instead stored as `%h` followed by the lowercase
+hex SHA-256 of the raw component. Escaping `%` itself makes the plain
+encoding injective, and `%h` begins no plain encoding (every plain
+escape is followed by two hex digits), so the plain and hashed forms
+never collide — hashed-form distinctness rests on the same collision
+resistance the content CAS already assumes. Escaping a leading dot
+keeps every component an ordinary path element (`.` and `..` never
+reach path resolution, so no reference can address another tier);
+escaping a trailing dot keeps distinct names distinct under Windows
+path normalization, which silently strips them; reserved-name
+escaping keeps every element creatable on Windows; the length bound
+keeps every element within common 255-byte filesystem name limits;
+the all-lowercase result avoids bytes not every supported filesystem
+can hold (`:` in digest identifiers and registry ports) and cannot
+collide under case folding; `mounts/<id>` —
 per-mount state: the store-managed mountpoint directory plus the
 mount's bookkeeping (registration, projection report —
 `projection.md`), written only by that mount's serving and
 orchestrating processes; `exports/<algorithm>/<hex>` — materialized
 root filesystems keyed by the digest of the manifest actually
 materialized (behavioral contract in `export.md`).
+
+**REQ-store-adopt** (behavior): Store initialization MUST refuse a
+work directory holding store state it does not recognize as this
+layout — including stores written by ocifs versions predating the
+tier split — with an error directing deletion; unrecognized state is
+never adopted, migrated, or deleted, because the store destroys
+nothing it cannot prove is its own cache (wiping is the user's
+documented remedy). Recognition is by layout signature and therefore
+best-effort: state that carries the signature is trusted, consistent
+with the local-filesystem integrity boundary
+(REQ-store-ingest-verified). The one incomplete signature treated as
+ocifs's own is the OCI layout marker with no `index.json` beside it —
+an interrupted first creation — which is completed in place with an
+empty index; content tiers are never touched by the completion.
 
 **REQ-store-ns** (invariant): Layer indexes and content-CAS entries
 MUST occupy disjoint on-disk keyspaces; no path is ever interpreted
@@ -81,8 +121,12 @@ mount that hits a missing blob mid-read.
 **REQ-store-self-heal** (behavior): A missing or unreadable layer
 index (or missing content blob) for an image whose compressed layers
 `oci/` retains MUST NOT be fatal: the store re-derives it by
-re-unpacking the retained layer, with no network access. Only
-content absent from `oci/` requires a pull.
+re-unpacking the retained layer, with no network access. Content
+absent from `oci/` itself is beyond local re-derivation: when the
+pull policy permits network access, the store re-fetches exactly the
+missing blobs by digest through the cached resolution — never by tag
+re-resolution — and resumes the heal; under `Never`, the heal fails
+identifying the missing blob.
 
 ## Trust model
 

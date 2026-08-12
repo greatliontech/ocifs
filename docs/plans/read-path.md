@@ -17,7 +17,7 @@ entry, the verification seam, and Export.
       mutation); hardlink resolution; sorted View with path lookup.
       Layer-stack generator, filesystem-extraction oracle, property
       tests.
-- [ ] 3. `internal/cas` + `internal/store` rework: tier split
+- [x] 3. `internal/cas` + `internal/store` rework: tier split
       (`layers/` out of the content CAS, per-mount `mounts/<id>`
       state), layer indexes record CAS keys (relocatable store),
       ingest idempotence (no duplicate `index.json` descriptors),

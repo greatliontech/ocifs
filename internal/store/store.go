@@ -1,57 +1,135 @@
+// Package store is ocifs's on-disk home for pulled OCI images
+// (docs/specs/store.md): the retained OCI content under oci/, the
+// content CAS under blobs/, layer indexes under layers/, the
+// reference cache under refs/, and per-mount state under mounts/.
+// Content tiers are a cache — re-derivable from a registry, or from
+// the retained OCI content for the extraction tiers.
+//
+// The OCI append is written here rather than through
+// layout.AppendImage: the library call appends a duplicate index
+// descriptor on every ingest and rewrites index.json in place
+// (non-atomic, never fsynced), which would break both ingest
+// idempotence and the crash story — the reference-cache entry is
+// only a valid completion barrier if everything written before it is
+// durable in order. Blobs and index.json go through
+// internal/atomicfile instead, and the descriptor append deduplicates
+// by digest.
 package store
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/google/uuid"
+
+	"github.com/greatliontech/ocifs/internal/atomicfile"
+	"github.com/greatliontech/ocifs/internal/cas"
+	"github.com/greatliontech/ocifs/internal/layer"
 )
+
+// ErrPreLayoutStore reports a work directory written by an ocifs
+// version predating the tiered store layout; its blobs/ tier mixed
+// layer indexes into the content keyspace, so it cannot be adopted.
+// The store is a cache: delete the directory (safe with no live
+// mounts) and re-pull.
+var ErrPreLayoutStore = errors.New("work directory holds a pre-layout ocifs store; delete it and re-pull")
 
 type Store struct {
 	path       string
 	auth       authn.Keychain
 	pullPolicy PullPolicy
 	refs       referenceStore
+	cas        *cas.CAS
+	layers     layerIndexes
 	lp         layout.Path
+	// transport overrides the registry transport when non-nil; the
+	// injection seam that lets the test harness serve a registry
+	// in-process with no sockets.
+	transport http.RoundTripper
+
+	// ingestMu serializes writers to the content tiers within this
+	// process (REQ-store-single-writer): index.json is a
+	// read-modify-write document, and idempotence checks assume no
+	// concurrent mutation between check and write. Shared per store
+	// root, not per Store instance — two instances over one root are
+	// still one ingesting process.
+	ingestMu *sync.Mutex
+}
+
+// ingestLocks maps a cleaned store root to its in-process ingest
+// mutex. Path aliases (symlinks, relative vs absolute spellings) map
+// to distinct keys — the same residual the spec accepts for
+// cross-process writers, resolved when bookkeeping moves to shared
+// storage.
+var ingestLocks sync.Map
+
+func ingestLockFor(root string) *sync.Mutex {
+	m, _ := ingestLocks.LoadOrStore(filepath.Clean(root), &sync.Mutex{})
+	return m.(*sync.Mutex)
 }
 
 func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, error) {
-	// if dir does not exist, create it
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.MkdirAll(path, 0755); err != nil {
+	ociDir := filepath.Join(path, "oci")
+	idxPath := filepath.Join(ociDir, "index.json")
+	markerPath := filepath.Join(ociDir, "oci-layout")
+
+	if _, err := os.Stat(idxPath); err == nil {
+		if _, err := os.Stat(markerPath); errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%s: %w", path, ErrPreLayoutStore)
+		} else if err != nil {
 			return nil, err
 		}
-	} else if err != nil {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 
-	dirs := []string{"refs", "blobs/sha256", "oci", "mounts"}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(path, dir), 0755); err != nil {
+	for _, dir := range []string{"refs", "blobs", "layers", "oci", "mounts"} {
+		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return nil, err
 		}
 	}
 
-	// creat index.json for oci layout if it does not exist
-	ociDir := filepath.Join(path, "oci")
-	idxFilePath := filepath.Join(ociDir, "index.json")
-	if _, err := os.Stat(idxFilePath); os.IsNotExist(err) {
-		// create index.json
-		if err := os.WriteFile(idxFilePath, []byte("{}"), 0644); err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+	// The layout's two files are written individually, atomically,
+	// and without replacement, marker first: index.json-without-marker
+	// stays the unambiguous pre-layout signature above, a crash after
+	// the marker leaves marker-without-index — uniquely a crashed
+	// first creation, completed by the index write on the next open —
+	// and no-replace publication means a concurrent opener that
+	// already populated index.json can never be clobbered.
+	if err := atomicfile.WriteNew(markerPath, strings.NewReader(`{"imageLayoutVersion": "1.0.0"}`), 0o644); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, err
+	}
+	emptyIdx, err := json.MarshalIndent(v1.IndexManifest{
+		SchemaVersion: 2,
+		MediaType:     types.OCIImageIndex,
+		Manifests:     []v1.Descriptor{},
+	}, "", "   ")
+	if err != nil {
+		return nil, err
+	}
+	if err := atomicfile.WriteNew(idxPath, bytes.NewReader(emptyIdx), 0o644); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, err
+	}
+	lp := layout.Path(ociDir)
+
+	contentCAS, err := cas.New(filepath.Join(path, "blobs"))
+	if err != nil {
 		return nil, err
 	}
 
@@ -60,7 +138,10 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy) (*Store, 
 		auth:       auth,
 		pullPolicy: pullPolicy,
 		refs:       referenceStore(filepath.Join(path, "refs")),
-		lp:         layout.Path(ociDir),
+		cas:        contentCAS,
+		layers:     layerIndexes{root: filepath.Join(path, "layers")},
+		lp:         lp,
+		ingestMu:   ingestLockFor(path),
 	}, nil
 }
 
@@ -73,54 +154,60 @@ func (s *Store) NewMountDir(id string) (string, error) {
 		id = uid.String()
 	}
 	path := filepath.Join(s.path, "mounts", id)
-	if err := os.Mkdir(path, 0755); err != nil {
+	if err := os.Mkdir(path, 0o755); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
+// BlobPath returns the on-disk path of the content-CAS blob a
+// unified-view entry names by digest. The blob may not exist if the
+// store was damaged; consumers surface read errors.
+func (s *Store) BlobPath(h v1.Hash) string {
+	return s.cas.Path(h)
+}
+
 func (s *Store) Image(ctx context.Context, imageRef string) (*Image, error) {
-	// pull image if needed
 	h, err := s.pullImage(ctx, imageRef)
 	if err != nil {
 		return nil, err
 	}
-
-	// get image from store
-	return s.getImage(h)
+	return s.getImage(ctx, h)
 }
 
-func (s *Store) getImage(h v1.Hash) (*Image, error) {
+func (s *Store) getImage(ctx context.Context, h v1.Hash) (*Image, error) {
 	img, err := s.lp.Image(h)
 	if err != nil {
 		return nil, err
 	}
 
-	layers, err := img.Layers()
+	v1Layers, err := img.Layers()
 	if err != nil {
 		return nil, err
 	}
 
-	outLayers := make([]*Layer, len(layers))
-
-	// loop through layers to get their hashes
-	for i, layer := range layers {
-		lh, err := layer.Digest()
+	layers := make([]layer.Layer, len(v1Layers))
+	for i, vl := range v1Layers {
+		ld, err := vl.Digest()
 		if err != nil {
 			return nil, err
 		}
-		blobPath := s.blobPath(lh)
-		outLayer := &Layer{
-			path: blobPath,
+		l, err := s.layers.Get(ld)
+		if err != nil || !s.blobsPresent(l) {
+			// Missing or unreadable index, or an index naming a
+			// content blob that is gone: re-derive both from the
+			// retained compressed layer, no network involved
+			// (REQ-store-self-heal).
+			s.ingestMu.Lock()
+			l, err = s.unpackLayer(ctx, vl)
+			s.ingestMu.Unlock()
+			if err != nil {
+				return nil, fmt.Errorf("self-heal of layer %s: %w", ld, err)
+			}
 		}
-		if err := outLayer.Load(); err != nil {
-			return nil, err
-		}
-		outLayers[i] = outLayer
+		layers[i] = l
 	}
 
-	// read the config file here to avoid exposing a method
-	// that will return (Conf, error)
 	conf, err := img.ConfigFile()
 	if err != nil {
 		return nil, err
@@ -129,35 +216,31 @@ func (s *Store) getImage(h v1.Hash) (*Image, error) {
 	return &Image{
 		h:      h,
 		img:    img,
-		layers: outLayers,
+		layers: layers,
 		conf:   conf,
 	}, nil
 }
 
 func (s *Store) pullImage(ctx context.Context, imageRef string) (v1.Hash, error) {
-	// parse reference string
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
 		return emptyHash, err
 	}
 
-	// check in cache
 	h, refFound, err := s.refs.Get(ref)
 	if err != nil {
 		return emptyHash, err
 	}
 
-	// no ref found, only matters if pull policy is never
 	if !refFound && s.pullPolicy == PullNever {
 		return emptyHash, fmt.Errorf("image %s not found in cache and pull policy is 'Never'", imageRef)
 	}
 
-	// ref found, return hash if no pull needed
 	if refFound {
-		if s.pullPolicy == PullIfNotPresent {
+		if s.pullPolicy == PullIfNotPresent || s.pullPolicy == PullNever {
 			return h, nil
 		}
-		desc, err := remote.Head(ref, remote.WithAuthFromKeychain(s.auth))
+		desc, err := remote.Head(ref, append(s.remoteOpts(), remote.WithContext(ctx))...)
 		if err != nil {
 			return emptyHash, err
 		}
@@ -166,158 +249,241 @@ func (s *Store) pullImage(ctx context.Context, imageRef string) (v1.Hash, error)
 		}
 	}
 
-	// at this point, we need to pull the image
-	rmtImg, err := remote.Image(ref, remote.WithAuthFromKeychain(s.auth))
+	return s.ingest(ctx, ref)
+}
+
+func (s *Store) remoteOpts() []remote.Option {
+	opts := []remote.Option{remote.WithAuthFromKeychain(s.auth)}
+	if s.transport != nil {
+		opts = append(opts, remote.WithTransport(s.transport))
+	}
+	return opts
+}
+
+// ingest pulls ref and materializes it across the content tiers in
+// the spec's order (REQ-store-ingest-order): OCI content first, then
+// unpacked layers (content blobs, then the layer index), and the
+// reference-cache entry strictly last — a crash at any earlier point
+// leaves no ref entry, and the next pull re-runs ingest, which is
+// idempotent over whatever survived (REQ-store-ingest-idempotent).
+func (s *Store) ingest(ctx context.Context, ref name.Reference) (v1.Hash, error) {
+	s.ingestMu.Lock()
+	defer s.ingestMu.Unlock()
+
+	rmtImg, err := remote.Image(ref, append(s.remoteOpts(), remote.WithContext(ctx))...)
+	if err != nil {
+		return emptyHash, err
+	}
+	h, err := rmtImg.Digest()
 	if err != nil {
 		return emptyHash, err
 	}
 
-	// store in local oci layout
-	if err := s.lp.AppendImage(rmtImg); err != nil {
+	if err := s.appendImage(rmtImg, h); err != nil {
 		return emptyHash, err
 	}
 
-	// get the image hash to query local layout
-	h, err = rmtImg.Digest()
-	if err != nil {
-		return emptyHash, err
-	}
-
-	// find local image
+	// Unpack from the retained layout, not the remote: the same code
+	// path self-heal uses, so ingest proves the retained content is
+	// sufficient to derive the extraction tiers.
 	img, err := s.lp.Image(h)
 	if err != nil {
 		return emptyHash, err
 	}
-
-	// get layers and unpack them
-	layers, err := img.Layers()
+	v1Layers, err := img.Layers()
 	if err != nil {
 		return emptyHash, err
 	}
-	for _, layer := range layers {
-		if err := s.unpackLayer(ctx, layer); err != nil {
+	for _, vl := range v1Layers {
+		ld, err := vl.Digest()
+		if err != nil {
+			return emptyHash, err
+		}
+		if l, err := s.layers.Get(ld); err == nil && s.blobsPresent(l) {
+			continue // already fully unpacked
+		}
+		if _, err := s.unpackLayer(ctx, vl); err != nil {
 			return emptyHash, err
 		}
 	}
 
-	// store ref
 	if err := s.refs.Put(ref, h); err != nil {
 		return emptyHash, err
 	}
-
 	return h, nil
 }
 
-func (s *Store) unpackLayer(ctx context.Context, layer v1.Layer) error {
-	// tar reader
-	rc, err := layer.Uncompressed()
+// appendImage retains img's manifest, config, and compressed layers
+// in oci/ and appends its index.json descriptor, deduplicating by
+// digest. Blobs are written before the descriptor that names them,
+// each atomically, so a descriptor never dangles.
+func (s *Store) appendImage(img v1.Image, h v1.Hash) error {
+	layers, err := img.Layers()
+	if err != nil {
+		return err
+	}
+	for _, l := range layers {
+		ld, err := l.Digest()
+		if err != nil {
+			return err
+		}
+		if err := s.writeOCIBlob(ld, l.Compressed); err != nil {
+			return err
+		}
+	}
+
+	cfgName, err := img.ConfigName()
+	if err != nil {
+		return err
+	}
+	rawCfg, err := img.RawConfigFile()
+	if err != nil {
+		return err
+	}
+	if err := s.writeOCIBlob(cfgName, func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(rawCfg)), nil
+	}); err != nil {
+		return err
+	}
+
+	rawManifest, err := img.RawManifest()
+	if err != nil {
+		return err
+	}
+	if err := s.writeOCIBlob(h, func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(rawManifest)), nil
+	}); err != nil {
+		return err
+	}
+
+	mt, err := img.MediaType()
+	if err != nil {
+		return err
+	}
+	return s.appendDescriptor(v1.Descriptor{
+		MediaType: mt,
+		Size:      int64(len(rawManifest)),
+		Digest:    h,
+	})
+}
+
+// writeOCIBlob publishes one oci/blobs entry atomically, skipping
+// blobs already present (their content is fixed by their digest).
+func (s *Store) writeOCIBlob(h v1.Hash, open func() (io.ReadCloser, error)) error {
+	path := filepath.Join(string(s.lp), "blobs", h.Algorithm, h.Hex)
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	rc, err := open()
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
-
-	// get unpacked layer files
-	files, err := s.extractTar(ctx, rc)
-	if err != nil {
-		return err
-	}
-
-	// layer hash
-	h, err := layer.Digest()
-	if err != nil {
-		return err
-	}
-	blobPath := s.blobPath(h)
-
-	intLayer := &Layer{
-		files: files,
-		path:  blobPath,
-	}
-
-	// persist layer data
-	if err := intLayer.Persist(); err != nil {
-		return err
-	}
-
-	return nil
+	return atomicfile.Write(path, rc, 0o644)
 }
 
-func (s *Store) extractTar(ctx context.Context, rc io.ReadCloser) ([]*File, error) {
-	tr := tar.NewReader(rc)
-	ret := []*File{}
-	buf := make([]byte, 256*1024)
-	blobsDir := filepath.Join(s.path, "blobs")
+// appendDescriptor adds desc to oci/index.json unless a descriptor
+// with the same digest is already listed, and publishes the new
+// index atomically.
+func (s *Store) appendDescriptor(desc v1.Descriptor) error {
+	idxPath := filepath.Join(string(s.lp), "index.json")
+	data, err := os.ReadFile(idxPath)
+	if err != nil {
+		return err
+	}
+	var idx v1.IndexManifest
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return fmt.Errorf("oci/index.json: %w", err)
+	}
+	for _, d := range idx.Manifests {
+		if d.Digest == desc.Digest {
+			return nil
+		}
+	}
+	idx.Manifests = append(idx.Manifests, desc)
+	out, err := json.MarshalIndent(idx, "", "   ")
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(idxPath, bytes.NewReader(out), 0o644)
+}
 
-	// iterate through entries in the tar archive
+// blobsPresent reports whether every content blob a layer index
+// names exists in the CAS; a false answer is a self-heal trigger.
+func (s *Store) blobsPresent(l layer.Layer) bool {
+	for _, e := range l {
+		if e.Digest == (v1.Hash{}) {
+			continue
+		}
+		if _, err := os.Stat(s.cas.Path(e.Digest)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// unpackLayer extracts vl into the content CAS and publishes its
+// layer index, returning the recorded entries. Serves both ingest
+// and self-heal; the input is always a layer backed by the retained
+// oci/ content or a verified remote.
+func (s *Store) unpackLayer(ctx context.Context, vl v1.Layer) (layer.Layer, error) {
+	ld, err := vl.Digest()
+	if err != nil {
+		return nil, err
+	}
+	rc, err := vl.Uncompressed()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	l, err := s.extractTar(ctx, rc)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.layers.Put(ld, l); err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
+// extractTar records every tar entry in order and streams
+// regular-file bytes into the content CAS. Each entry's temporary
+// lives only for that entry (cas.Put closes and removes it before
+// returning), so archives of any size hold one temporary at a time.
+func (s *Store) extractTar(ctx context.Context, r io.Reader) (layer.Layer, error) {
+	tr := tar.NewReader(r)
+	var l layer.Layer
+
 	for {
-		// check for context cancellation
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
 
-		// get next hdr
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			break // End of archive
+			break
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		outFile := &File{
-			Hdr: hdr,
+		e := layer.Entry{Header: *hdr}
+
+		if hdr.Typeflag == tar.TypeReg {
+			key, _, err := s.cas.Put(tr)
+			if err != nil {
+				return nil, err
+			}
+			e.Digest = key
 		}
 
-		// we add this erly
-		ret = append(ret, outFile)
-
-		// we only care about regular files
-		if hdr.Typeflag != tar.TypeReg {
-			continue
-		}
-
-		// temp file
-		tf, err := os.CreateTemp(blobsDir, "blob-*")
-		if err != nil {
-			return nil, err
-		}
-		defer tf.Close()
-		defer os.Remove(tf.Name())
-
-		hasher := sha256.New()
-
-		// stream file bytes -> [temp file, hasher]
-		mw := io.MultiWriter(tf, hasher)
-		if _, err := io.CopyBuffer(mw, tr, buf); err != nil {
-			return nil, err
-		}
-
-		h := v1.Hash{
-			Algorithm: "sha256",
-			Hex:       hex.EncodeToString(hasher.Sum(make([]byte, 0, hasher.Size()))),
-		}
-		blobPath := s.blobPath(h)
-
-		outFile.Path = blobPath
-
-		// check if blob already exists
-		if _, err := os.Stat(blobPath); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return nil, err
-		}
-
-		// move temp file to final location
-		if err := os.Rename(tf.Name(), blobPath); err != nil {
-			return nil, err
-		}
+		l = append(l, e)
 	}
 
-	return ret, nil
-}
-
-func (s *Store) blobPath(h v1.Hash) string {
-	return filepath.Join(s.path, "blobs", h.Algorithm, h.Hex)
+	return l, nil
 }

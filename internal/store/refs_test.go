@@ -30,7 +30,7 @@ func pareseTestRefs() (map[name.Reference]v1.Hash, error) {
 }
 
 func TestPrsedRef(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := scratchDir(t)
 	refStore := referenceStore(tmpDir)
 
 	testCases, err := pareseTestRefs()

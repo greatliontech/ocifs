@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-store-layout"
-reason: "Layer indexes currently share the content-CAS namespace (blobs/), a demonstrated collision; layers/ and exports/ tiers do not exist yet"
-lands { covered: "REQ-store-layout" }
+reason: "The exports/ tier the layout names is unexercised until export lands; the landed tiers (oci/, blobs/, layers/, refs/, mounts/) are implemented and pinned"
+lands { manual { condition: "exports/ tier created and pinned by the export work (docs/specs/export.md coverage)" } }
