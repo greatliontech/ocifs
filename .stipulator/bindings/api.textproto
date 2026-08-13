@@ -3,7 +3,7 @@
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "f8ecddd75a6bc92ec7caea818156910f64110fb2c6d321ca6157ca23dca25efa"
+  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.New"
   role: BINDING_ROLE_IMPLEMENTS
@@ -12,7 +12,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "f8ecddd75a6bc92ec7caea818156910f64110fb2c6d321ca6157ca23dca25efa"
+  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPullSurface"
   role: BINDING_ROLE_TESTS
@@ -66,7 +66,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "f8ecddd75a6bc92ec7caea818156910f64110fb2c6d321ca6157ca23dca25efa"
+  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestConstructionFailsOnUninitializableStore"
   role: BINDING_ROLE_TESTS

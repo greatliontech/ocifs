@@ -453,7 +453,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-platform-default"
-  content_hash: "96fb6597da74c4149c383be12812dd0c5b894b29c73130ce1ba9df9190de82ec"
+  content_hash: "dd629c1ce9cc786f3fac046ea060aea825cd352b1a36a346807175588bd624a6"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
@@ -462,7 +462,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-platform-default"
-  content_hash: "96fb6597da74c4149c383be12812dd0c5b894b29c73130ce1ba9df9190de82ec"
+  content_hash: "dd629c1ce9cc786f3fac046ea060aea825cd352b1a36a346807175588bd624a6"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestIndexPullServesHostDefaultChild"
   role: BINDING_ROLE_TESTS
@@ -471,7 +471,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-platform-default"
-  content_hash: "96fb6597da74c4149c383be12812dd0c5b894b29c73130ce1ba9df9190de82ec"
+  content_hash: "dd629c1ce9cc786f3fac046ea060aea825cd352b1a36a346807175588bd624a6"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestConfiguredDefaultPlatform"
   role: BINDING_ROLE_TESTS
@@ -503,4 +503,22 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.TestSecondPlatformPulledByDigestThroughCachedIndex"
   role: BINDING_ROLE_TESTS
   shape_hash: "02110252906b8bac21d316fcd1d29a5df290354d48eba12f20bf57ae669af35f"
+}
+
+bindings {
+  requirement_id: "REQ-store-platform-default"
+  content_hash: "dd629c1ce9cc786f3fac046ea060aea825cd352b1a36a346807175588bd624a6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.fallbackPlatform"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "02060a6df0bdbc91b6755ef0e9a1799ff73ae00e2b51000bde8968f68702f31f"
+}
+
+bindings {
+  requirement_id: "REQ-store-platform-default"
+  content_hash: "dd629c1ce9cc786f3fac046ea060aea825cd352b1a36a346807175588bd624a6"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestFallbackPlatform"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "0b464291f846f30b9ae4f703e8b0e2db962056410ea739d1a5566cbdee7d5647"
 }

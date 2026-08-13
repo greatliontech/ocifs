@@ -183,10 +183,14 @@ No fallback, no closest match, no normalization of platform names.
 
 **REQ-store-platform-default** (behavior): When no explicit platform
 is requested, the request MUST use the configured default platform
-(REQ-api-construction), which itself defaults to the host's os/arch.
-Selection against an index follows the same match rule as an
-explicit request; a top-level manifest is served as-is — only an
-explicit platform constrains a direct manifest.
+(REQ-api-construction), which itself defaults to the host's os/arch
+— except on darwin, where the fallback is `linux` with the host's
+architecture: an `os=darwin` request could never match published
+images (no darwin container-image ecosystem exists), and darwin
+mounts serve linux root filesystems. Selection against an index
+follows the same match rule as an explicit request; a top-level
+manifest is served as-is — only an explicit platform constrains a
+direct manifest.
 
 **REQ-store-platform-serves-child** (behavior): The platform-selected
 child manifest's digest — not the index digest — MUST name the

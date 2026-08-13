@@ -62,7 +62,9 @@ var WithPullPolicy = func(p PullPolicy) Option {
 }
 
 // WithDefaultPlatform sets the platform used when an acquisition
-// names none (default: the host's os/arch).
+// names none. Unset, the default derives from the host: its os/arch,
+// except on darwin, where it is linux with the host's architecture
+// (docs/specs/store.md REQ-store-platform-default).
 var WithDefaultPlatform = func(p v1.Platform) Option {
 	return func(o *OCIFS) {
 		o.defaultPlatform = p

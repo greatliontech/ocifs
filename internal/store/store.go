@@ -100,7 +100,8 @@ func ingestLockFor(root string) *sync.Mutex {
 }
 
 // NewStore opens or creates the store at path. A zero defaultPlatform
-// falls back to the host's os/arch (REQ-store-platform-default).
+// falls back to the host-derived platform — host os/arch, linux on
+// darwin (REQ-store-platform-default).
 func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform) (*Store, error) {
 	switch pullPolicy {
 	case PullIfNotPresent, PullAlways, PullNever:

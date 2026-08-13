@@ -1,10 +1,9 @@
 # Issues
 
 - `docs/issues/platform-default-variant-hosts.md` — default-platform
-  pulls fail loudly on 32-bit arm (variant-ambiguous) and darwin
-  (foreign-OS) hosts; fork over default-request semantics. Lands:
-  user decision, at the latest before darwin mounting serves
-  default-platform pulls.
+  pulls on 32-bit arm hosts are variant-ambiguous; host variant
+  detection for the default request. Lands: when default-platform
+  pulls on 32-bit arm hosts are first needed.
 - `docs/issues/writable-upper-fs-native.md` — writable layer: fs-native
   upper dir as truth; metadata.json removed. Lands: before the writable
   layer serves as a live container root.

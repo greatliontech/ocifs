@@ -13,9 +13,10 @@ configure at construction: a work directory (store root; default:
 synthesize in mounts; registry credentials as a map of registry or
 registry/repository prefixes to credentials plus an opt-in to the
 ambient default keychain; a pull policy (default `IfNotPresent`,
-semantics in `store.md`); and a default platform (default: host
-os/arch, semantics in `store.md`). Construction initializes the
-store and fails if the store cannot be initialized.
+semantics in `store.md`); and a default platform (default derived
+from the host — semantics and the darwin fallback in `store.md`).
+Construction initializes the store and fails if the store cannot be
+initialized.
 
 **REQ-api-keychain** (behavior): Credential resolution MUST pick the
 longest matching configured prefix, where a prefix matches only at a

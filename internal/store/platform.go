@@ -11,7 +11,19 @@ import (
 // hostPlatform is the fallback request platform when construction
 // configures none (REQ-store-platform-default).
 func hostPlatform() v1.Platform {
-	return v1.Platform{OS: runtime.GOOS, Architecture: runtime.GOARCH}
+	return fallbackPlatform(runtime.GOOS, runtime.GOARCH)
+}
+
+// fallbackPlatform derives the built-in default platform from the
+// host. On darwin the fallback is linux with the host's
+// architecture: an os=darwin request could never match published
+// images, and darwin mounts serve linux root filesystems
+// (REQ-store-platform-default).
+func fallbackPlatform(goos, goarch string) v1.Platform {
+	if goos == "darwin" {
+		goos = "linux"
+	}
+	return v1.Platform{OS: goos, Architecture: goarch}
 }
 
 // platformMatches reports whether cand satisfies the requested

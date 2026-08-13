@@ -155,7 +155,8 @@ func offlineTransport() handlerTransport {
 // --- platform selection ---
 
 // TestIndexPullServesHostDefaultChild pins REQ-store-platform-default
-// (host os/arch with no explicit request and no configured default),
+// (the host-derived fallback with no explicit request and no
+// configured default),
 // REQ-store-platform-serves-child (the child digest names the image),
 // and the ingest-order retention shape: refs hold the index digest,
 // oci/ retains the index alongside the platform-selected child only.
@@ -765,5 +766,26 @@ func TestDigestlessIndexChildRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "has no digest") {
 		t.Fatalf("unclassified failure: %v", err)
+	}
+}
+
+// TestFallbackPlatform pins the built-in default derivation
+// (REQ-store-platform-default): the host's os/arch, except darwin
+// falls back to linux — an os=darwin request could never match
+// published images.
+func TestFallbackPlatform(t *testing.T) {
+	for _, tc := range []struct {
+		goos, goarch string
+		want         v1.Platform
+	}{
+		{"linux", "amd64", v1.Platform{OS: "linux", Architecture: "amd64"}},
+		{"linux", "arm64", v1.Platform{OS: "linux", Architecture: "arm64"}},
+		{"windows", "amd64", v1.Platform{OS: "windows", Architecture: "amd64"}},
+		{"darwin", "arm64", v1.Platform{OS: "linux", Architecture: "arm64"}},
+		{"darwin", "amd64", v1.Platform{OS: "linux", Architecture: "amd64"}},
+	} {
+		if got := fallbackPlatform(tc.goos, tc.goarch); !got.Equals(tc.want) {
+			t.Fatalf("fallbackPlatform(%s, %s) = %s, want %s", tc.goos, tc.goarch, got.String(), tc.want.String())
+		}
 	}
 }
