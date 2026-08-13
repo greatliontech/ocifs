@@ -35,7 +35,7 @@ entry, the verification seam, and Export.
       identity scheme, sorted snapshots + resumable enumeration,
       case-collision policy, fidelity mapping, store-persisted
       projection report, symbolic error space; kernel-level tests.
-- [ ] 6. FUSE backend: glue replacing `internal/unionfs` on the
+- [x] 6. FUSE backend: glue replacing `internal/unionfs` on the
       kernel (short-read fix, directory attributes, mount-id
       validation); unionfs-equivalent tests over fixtures plus a
       network-free CLI smoke test.

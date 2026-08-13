@@ -137,6 +137,9 @@ Each backend MUST present recorded
 entry attributes and kinds exactly to the extent of its envelope in
 the table below — outside the envelope, the table's stated omission
 or default applies, and nothing is silently approximated beyond it.
+Within the timestamps row, an unrecorded access or change time
+presents as the entry's modification time, and an unrecorded
+modification time as the Unix epoch — never as a zero-time artifact.
 
 | Aspect | FUSE (linux) | FSKit (darwin) | ProjFS (windows) |
 |---|---|---|---|

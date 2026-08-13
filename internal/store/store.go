@@ -174,19 +174,38 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 	}, nil
 }
 
-func (s *Store) NewMountDir(id string) (string, error) {
+// NewMountState creates the per-mount state directory mounts/<id> —
+// the mount's bookkeeping beside its mnt/ mountpoint subdirectory
+// (REQ-store-layout), a sibling layout so a live mount cannot shadow
+// its own state. An empty id draws a random one; a supplied id must
+// be a single path element — no separators, not "." or ".." — so no
+// id can place the state outside the mounts/ tier
+// (api.md REQ-api-mount-id).
+func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) {
 	if id == "" {
 		uid, err := uuid.NewRandom()
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		id = uid.String()
 	}
-	path := filepath.Join(s.path, "mounts", id)
-	if err := os.Mkdir(path, 0o755); err != nil {
-		return "", err
+	if !validMountID(id) {
+		return "", "", fmt.Errorf("mount id %q is not a single path element", id)
 	}
-	return path, nil
+	stateDir = filepath.Join(s.path, "mounts", id)
+	if err := os.Mkdir(stateDir, 0o755); err != nil {
+		return "", "", err
+	}
+	mountDir = filepath.Join(stateDir, "mnt")
+	if err := os.Mkdir(mountDir, 0o755); err != nil {
+		os.Remove(stateDir)
+		return "", "", err
+	}
+	return stateDir, mountDir, nil
+}
+
+func validMountID(id string) bool {
+	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, `/\`)
 }
 
 // BlobPath returns the on-disk path of the content-CAS blob a

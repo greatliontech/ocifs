@@ -1,0 +1,13 @@
+# 2026/08/13 20:56:17.826726 [TestPropertyReadEqualsBlobBytes] [rapid] draw content: []byte{}
+# 2026/08/13 20:56:17.826855 [TestPropertyReadEqualsBlobBytes] [rapid] draw off: 0
+# 2026/08/13 20:56:17.826891 [TestPropertyReadEqualsBlobBytes] [rapid] draw len: 1
+# 2026/08/13 20:56:17.826919 [TestPropertyReadEqualsBlobBytes] read(off=0,len=1) = ee, want 
+# 
+v0.4.8#17226805467455219988
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

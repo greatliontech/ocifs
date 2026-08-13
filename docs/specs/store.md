@@ -61,10 +61,12 @@ keeps every element within common 255-byte filesystem name limits;
 the all-lowercase result avoids bytes not every supported filesystem
 can hold (`:` in digest identifiers and registry ports) and cannot
 collide under case folding; `mounts/<id>` —
-per-mount state: the store-managed mountpoint directory plus the
-mount's bookkeeping (registration, projection report —
-`projection.md`), written only by that mount's serving and
-orchestrating processes; `exports/<algorithm>/<hex>` — materialized
+per-mount state: the mount's bookkeeping (registration, projection
+report — `projection.md`) beside a `mnt/` subdirectory serving as
+the store-managed mountpoint when the caller supplies none — the
+mountpoint is a sibling of the bookkeeping, never its parent, so a
+live mount cannot shadow its own state; written only by that mount's
+serving and orchestrating processes; `exports/<algorithm>/<hex>` — materialized
 root filesystems keyed by the digest of the manifest actually
 materialized (behavioral contract in `export.md`).
 

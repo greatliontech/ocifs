@@ -13,9 +13,17 @@ tasks:
 
   mutate:
     desc: Mutation-test the working-tree delta (oracle scratch bracketed)
+    env:
+      # mount(2) is a system-global side effect the observation
+      # bracket cannot contain: a mutant of mount-orchestration code
+      # can mount anywhere (once: over the repo root), and killed
+      # mutant processes leak live mounts. Mount-performing tests
+      # skip under campaigns; that code path is verified by the
+      # normal suite and hand probes instead.
+      OCIFS_MUTATION_CAMPAIGN: "1"
     cmds:
-      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection
+      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection .scratch/fusefs
       - >-
         gomutant run --changed HEAD --timeout 0
         --bracket-path .scratch/layer --bracket-path .scratch/store --bracket-path .scratch/cas
-        --bracket-path .scratch/projection
+        --bracket-path .scratch/projection --bracket-path .scratch/fusefs

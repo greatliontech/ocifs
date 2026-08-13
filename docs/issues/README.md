@@ -1,5 +1,10 @@
 # Issues
 
+- `docs/issues/mount-state-lifecycle.md` — per-mount state is never
+  reclaimed and mount ids are single-use; reclamation design shares
+  the dead-state recognition problem with store GC. Lands: when
+  mount-state reclamation or mount-id reuse is first needed — at the
+  latest with store GC.
 - `docs/issues/platform-default-variant-hosts.md` — default-platform
   pulls on 32-bit arm hosts are variant-ambiguous; host variant
   detection for the default request. Lands: when default-platform

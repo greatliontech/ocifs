@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-content"
-reason: "The portable kernel (internal/projection) builds the one tree, envelope omissions, and report; serving them — presented bytes, read-only enforcement, declarative out-of-process configuration, per-backend envelopes — lands with the FUSE, ProjFS, and FSKit backends"
-lands { covered: "REQ-proj-content" }
+reason: "The kernel and the FUSE backend pin the linux arm (tree, envelope, content reads, kernel-ro); the ProjFS and FSKit arms — their envelope columns, read paths, veto/error enforcement, and same-tree parity — land with those backends"
+lands { manual { condition: "ProjFS and FSKit backends land and pin their fidelity, content, read-only, and same-tree clauses" } }

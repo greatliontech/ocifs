@@ -1,0 +1,12 @@
+# 2026/08/13 20:55:07.706606 [TestPropertyMountMutationsDenied] [rapid] draw path: "."
+# 2026/08/13 20:55:07.706655 [TestPropertyMountMutationsDenied] [rapid] draw dir: ""
+# 2026/08/13 20:55:07.706692 [TestPropertyMountMutationsDenied] [rapid] draw op: "rename"
+# 2026/08/13 20:55:07.706798 [TestPropertyMountMutationsDenied] mutation on /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/afa5e872-6008-4863-ae44-4371d577dd9e/mnt failed with rename /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/afa5e872-6008-4863-ae44-4371d577dd9e/mnt /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/afa5e872-6008-4863-ae44-4371d577dd9e/mnt/zz-new: invalid cross-device link, want EROFS-class denial
+# 
+v0.4.8#2972593782945282250
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x3

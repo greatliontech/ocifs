@@ -12,8 +12,9 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/ocifs/internal/fusefs"
+	"github.com/greatliontech/ocifs/internal/projection"
 	"github.com/greatliontech/ocifs/internal/store"
-	"github.com/greatliontech/ocifs/internal/unionfs"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -214,8 +215,10 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		opt(im)
 	}
 
-	// Acquire the image before creating any store-managed mount
-	// directory, so a failed pull leaves no orphan under mounts/.
+	// Acquire the image and build the projection before creating any
+	// per-mount state, so a failed pull or a configuration conflict
+	// (extra dirs, api.md REQ-api-extra-dirs) leaves no orphan under
+	// mounts/.
 	img, err := o.store.Image(im.ctx, imgRef, im.platform)
 	if err != nil {
 		return nil, err
@@ -226,22 +229,27 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	if err != nil {
 		return nil, err
 	}
+	proj, err := projection.New(view, o.extraDirs, fusefs.Capabilities())
+	if err != nil {
+		return nil, err
+	}
 
-	if im.mountPoint == "" {
-		path, err := o.store.NewMountDir(im.id)
-		if err != nil {
-			return nil, err
+	// Every mount owns per-mount state — the projection report's home
+	// (REQ-proj-report) — whether or not the caller supplied a
+	// mountpoint. Removed again on any later failure (im.srv is set
+	// only on success); a caller-supplied target is caller-owned and
+	// never touched.
+	stateDir, mountDir, err := o.store.NewMountState(im.id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if im.srv == nil {
+			os.RemoveAll(stateDir)
 		}
-		im.mountPoint = path
-		// Remove the just-created store-managed directory on any
-		// later failure (im.srv is set only on success), so no path
-		// out of this function strands an orphan under mounts/. A
-		// caller-supplied target is caller-owned and never touched.
-		defer func() {
-			if im.srv == nil {
-				os.Remove(im.mountPoint)
-			}
-		}()
+	}()
+	if im.mountPoint == "" {
+		im.mountPoint = mountDir
 	}
 
 	im.mountPoint = filepath.Clean(im.mountPoint)
@@ -253,11 +261,21 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	root := unionfs.Init(view, o.store.BlobPath, o.extraDirs)
+	if err := proj.Report().WriteFile(filepath.Join(stateDir, projection.ReportFileName)); err != nil {
+		return nil, err
+	}
 
-	// Create a FUSE server
-	srv, err := fs.Mount(im.mountPoint, root, &fs.Options{
+	srv, err := fs.Mount(im.mountPoint, fusefs.New(proj, o.store.BlobPath), &fs.Options{
+		RootStableAttr: fusefs.RootStableAttr(),
+		// Recorded modes serve verbatim: without this, go-fuse
+		// rewrites a recorded 0000 mode (/etc/shadow-class entries)
+		// to 0644 (REQ-proj-fidelity).
+		NullPermissions: true,
 		MountOptions: fuse.MountOptions{
+			// Kernel-level read-only is FUSE's strongest denial
+			// (REQ-api-mount-ro, REQ-proj-ro); the mount is private
+			// to the invoking user (no allow_other).
+			Options:     []string{"ro"},
 			AllowOther:  false,
 			Name:        "ocifs",
 			DirectMount: true,

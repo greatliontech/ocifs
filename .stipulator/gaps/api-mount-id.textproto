@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-api-mount-id"
-reason: "Mount ids are joined unvalidated (a traversal id escapes the mounts/ tier)"
-lands { covered: "REQ-api-mount-id" }

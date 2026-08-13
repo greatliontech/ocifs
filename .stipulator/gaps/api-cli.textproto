@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-api-cli"
-reason: "Implemented on main but unpinned; a network-free CLI smoke test lands with the mount-presentation test work"
-lands { covered: "REQ-api-cli" }
+reason: "The linux serve-until-signalled arm is pinned by the network-free smoke test; the darwin orchestrate-and-do-not-serve arm lands with the FSKit backend"
+lands { manual { condition: "darwin appex orchestration lands and pins the CLI's darwin arm" } }

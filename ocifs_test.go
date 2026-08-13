@@ -26,6 +26,7 @@ import (
 // mountpoint: the full pull → store → unify → mount path with no
 // external network.
 func TestMountLocalImage(t *testing.T) {
+	skipUnderMutationCampaign(t)
 	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(srv.Close)
 	u, err := url.Parse(srv.URL)

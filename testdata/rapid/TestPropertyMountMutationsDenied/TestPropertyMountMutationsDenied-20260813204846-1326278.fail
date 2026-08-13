@@ -1,0 +1,12 @@
+# 2026/08/13 20:48:46.021584 [TestPropertyMountMutationsDenied] [rapid] draw path: "."
+# 2026/08/13 20:48:46.021623 [TestPropertyMountMutationsDenied] [rapid] draw dir: ""
+# 2026/08/13 20:48:46.021648 [TestPropertyMountMutationsDenied] [rapid] draw op: "remove"
+# 2026/08/13 20:48:46.021683 [TestPropertyMountMutationsDenied] mutation on /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/1d9df73a-1417-48a1-9ba8-3150e13955c0/mnt failed with remove /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/1d9df73a-1417-48a1-9ba8-3150e13955c0/mnt: device or resource busy, want EROFS-class denial
+# 
+v0.4.8#7451635308676989713
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2

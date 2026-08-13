@@ -59,25 +59,25 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Register the signal handler before mounting: a TERM landing in
+	// the mount window parks in the buffered channel instead of
+	// killing the process with the mount half-served.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
 	// Mount the OCI image
 	im, err := ofs.Mount(rootFlags.ImageRef, ocifs.MountWithTargetPath(rootFlags.MountPoint))
 	if err != nil {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}
 
-	sigtermHandler := func() chan os.Signal {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		return c
-	}
 	go func() {
-		for {
-			<-sigtermHandler()
-			err := im.Unmount()
-			if err == nil {
-				break
+		for range sigs {
+			if err := im.Unmount(); err == nil {
+				return
+			} else {
+				slog.Error("Failed to unmount", "error", err)
 			}
-			slog.Error("Failed to unmount", "error", err)
 		}
 	}()
 

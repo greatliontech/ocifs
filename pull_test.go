@@ -162,6 +162,7 @@ func TestPullSurface(t *testing.T) {
 // must not strand an orphan directory under the store's mounts/
 // tier.
 func TestFailedMountLeavesNoMountDir(t *testing.T) {
+	skipUnderMutationCampaign(t)
 	scratch := filepath.Join(".scratch", "ocifs-mountfail")
 	if err := os.MkdirAll(scratch, 0o755); err != nil {
 		t.Fatal(err)

@@ -144,3 +144,129 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "2c8d6a02d533c8524995aba11795798de5663ca348d7cded05b6ff805536979b"
 }
+
+bindings {
+  requirement_id: "REQ-proj-content"
+  content_hash: "e0ab85df59595600e6f2ed0e68cb474cdbd53f75130368e4c1186d8980b772b3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fusefs.New"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "3fd890965b2dc01b6939b9e52c657138b8d807fa7390f7c99f8988ce02d6f3ff"
+}
+
+bindings {
+  requirement_id: "REQ-proj-content"
+  content_hash: "e0ab85df59595600e6f2ed0e68cb474cdbd53f75130368e4c1186d8980b772b3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountShortReadOnlyAtEOF"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "308bd4c9820c73190fe470b239d0db4b14dd4b7390afb841435a7d00f9fbde1b"
+}
+
+bindings {
+  requirement_id: "REQ-proj-fidelity"
+  content_hash: "e40bf3f1fcfe0c9ee120b57f7071792b78621b38c8ed446ba83c30661d70c853"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fusefs.Capabilities"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "2452864d4fa75c526c3767c6c8aa0dcbdaabc529fa712486182ea5d35f423c9e"
+}
+
+bindings {
+  requirement_id: "REQ-proj-fidelity"
+  content_hash: "e40bf3f1fcfe0c9ee120b57f7071792b78621b38c8ed446ba83c30661d70c853"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountFidelityEnvelope"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "40ea5e0c8eda388a996d3e7aa9395924ddc07ea956f1052ebe303e3088e66d0d"
+}
+
+bindings {
+  requirement_id: "REQ-proj-ro"
+  content_hash: "a7619e5a0eb4410b6a7697a0f94156c65b3da7efa7c53a5a435037a1245ac6f8"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a7dc195d31c5e9654f03c5045e1c0d3ce4874521f3e31b59d68365d7af31f0c8"
+}
+
+bindings {
+  requirement_id: "REQ-proj-ro"
+  content_hash: "a7619e5a0eb4410b6a7697a0f94156c65b3da7efa7c53a5a435037a1245ac6f8"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountReadOnlyKernelEnforced"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "016183b56d79b0f66b0b7c3ba1e0300efcc370c427190c348c29be81be528dac"
+}
+
+bindings {
+  requirement_id: "REQ-proj-model"
+  content_hash: "ecfccc698d87f185eedb7cdce77d862dede4aff1640e08c08263bb80f601e9c3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.New"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "48651389eefeb2bea6bfa8dc78fee12ca3809d42bcbe32f28cfc3ea9f38334d9"
+}
+
+bindings {
+  requirement_id: "REQ-proj-model"
+  content_hash: "ecfccc698d87f185eedb7cdce77d862dede4aff1640e08c08263bb80f601e9c3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountFidelityEnvelope"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "40ea5e0c8eda388a996d3e7aa9395924ddc07ea956f1052ebe303e3088e66d0d"
+}
+
+bindings {
+  requirement_id: "REQ-proj-model"
+  content_hash: "ecfccc698d87f185eedb7cdce77d862dede4aff1640e08c08263bb80f601e9c3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyPresentedOrReported"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "2c8d6a02d533c8524995aba11795798de5663ca348d7cded05b6ff805536979b"
+}
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountInodesAreKernelIDs"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a52f19b78e5aeba65358ef657eae58d3d4a05bb4e42bf7406c692e5356de07cc"
+}
+
+bindings {
+  requirement_id: "REQ-proj-content"
+  content_hash: "e0ab85df59595600e6f2ed0e68cb474cdbd53f75130368e4c1186d8980b772b3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fusefs.TestPropertyReadEqualsBlobBytes"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "eebda6ef68582d2d0905348250fa9d1b4a835a0dca540fa0c128115322a6ae7a"
+}
+
+bindings {
+  requirement_id: "REQ-proj-ro"
+  content_hash: "a7619e5a0eb4410b6a7697a0f94156c65b3da7efa7c53a5a435037a1245ac6f8"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestPropertyMountMutationsDenied"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b9d2e89f36672f2c8a69502231da346f9ebef3786530483f7447b333099f9623"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a7dc195d31c5e9654f03c5045e1c0d3ce4874521f3e31b59d68365d7af31f0c8"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountReportPersisted"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "495d53c65f7a52c67ded2ff327297759e541f8522da5b80cfd89bd8926a661e4"
+}

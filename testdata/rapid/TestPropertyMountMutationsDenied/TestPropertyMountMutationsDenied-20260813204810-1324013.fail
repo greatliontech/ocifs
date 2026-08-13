@@ -1,0 +1,9 @@
+# 2026/08/13 20:48:10.933468 [TestPropertyMountMutationsDenied] [rapid] draw path: "."
+# 2026/08/13 20:48:10.933507 [TestPropertyMountMutationsDenied] [rapid] draw op: "mkdir"
+# 2026/08/13 20:48:10.933528 [TestPropertyMountMutationsDenied] mutation on /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/5aaab6f8-d071-40bf-bf14-369b6aed2858/mnt failed with mkdir /home/nikolas/repos/github.com/greatliontech/ocifs/.scratch/ocifs-roprop/work/mounts/5aaab6f8-d071-40bf-bf14-369b6aed2858/mnt.dir: file exists, want EROFS-class denial
+# 
+v0.4.8#4740681603361423359
+0x0
+0x0
+0x0
+0x1
