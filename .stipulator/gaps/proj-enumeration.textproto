@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-enumeration"
-reason: "The projection kernel and its backends are not yet built — main has a single FUSE-only mount predating the projection contract"
-lands { covered: "REQ-proj-enumeration" }
+reason: "The kernel pins immutable sorted snapshots and exact resume; the backend cookie/session glue and the change-verifier clause are pinned by the FUSE, ProjFS, and FSKit backends"
+lands { manual { condition: "backend enumeration glue lands and pins cookies, sessions, and change verifiers" } }

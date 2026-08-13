@@ -1,0 +1,36 @@
+# 2026/08/13 20:28:02.235604 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw n: 1
+# 2026/08/13 20:28:02.235630 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw rootRecord: false
+# 2026/08/13 20:28:02.235646 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw depth: 1
+# 2026/08/13 20:28:02.235660 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw seg: "a"
+# 2026/08/13 20:28:02.235672 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw kind: 0x32
+# 2026/08/13 20:28:02.235691 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw symlinks: false
+# 2026/08/13 20:28:02.235701 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw fifos: false
+# 2026/08/13 20:28:02.235709 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw devices: false
+# 2026/08/13 20:28:02.235719 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw extras: 1
+# 2026/08/13 20:28:02.235882 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw edepth: 1
+# 2026/08/13 20:28:02.235905 [TestPropertyExtraDirConflictIffViewNonDir] [rapid] draw eseg: "a"
+# 2026/08/13 20:28:02.235946 [TestPropertyExtraDirConflictIffViewNonDir] extras [a] over view: err=<nil>, oracle wantErr=true
+# 
+v0.4.8#5614500146626400642
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

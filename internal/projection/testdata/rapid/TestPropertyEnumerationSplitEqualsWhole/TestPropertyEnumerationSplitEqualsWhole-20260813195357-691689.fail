@@ -1,0 +1,33 @@
+# 2026/08/13 19:53:57.729453 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw n: 1
+# 2026/08/13 19:53:57.729480 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw depth: 1
+# 2026/08/13 19:53:57.729495 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw seg: "a"
+# 2026/08/13 19:53:57.729513 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:57.729537 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw symlinks: false
+# 2026/08/13 19:53:57.729549 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw fifos: false
+# 2026/08/13 19:53:57.729560 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw devices: false
+# 2026/08/13 19:53:57.729571 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw folded: false
+# 2026/08/13 19:53:57.729587 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw dir: 0
+# 2026/08/13 19:53:57.729603 [TestPropertyEnumerationSplitEqualsWhole] [rapid] draw split: 1
+# 2026/08/13 19:53:57.729614 [TestPropertyEnumerationSplitEqualsWhole] split at 1 yields [a a], whole is [a]
+# 
+v0.4.8#6587287201053016183
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

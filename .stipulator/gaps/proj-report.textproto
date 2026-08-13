@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-report"
-reason: "The projection kernel and its backends are not yet built — main has a single FUSE-only mount predating the projection contract"
-lands { covered: "REQ-proj-report" }
+reason: "The kernel pins report construction, the persisted encoding, and the read surface; wiring the write into every mount's per-mount state lands with the FUSE backend glue"
+lands { manual { condition: "mount orchestration persists the report for every projection" } }

@@ -1,0 +1,35 @@
+# 2026/08/13 19:53:48.090728 [TestPropertyPresentedOrReported] [rapid] draw n: 2
+# 2026/08/13 19:53:48.090759 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:48.090776 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:48.090795 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:48.090818 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:48.090832 [TestPropertyPresentedOrReported] [rapid] draw seg: "A"
+# 2026/08/13 19:53:48.090843 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x32
+# 2026/08/13 19:53:48.090866 [TestPropertyPresentedOrReported] [rapid] draw symlinks: false
+# 2026/08/13 19:53:48.090886 [TestPropertyPresentedOrReported] [rapid] draw fifos: false
+# 2026/08/13 19:53:48.090901 [TestPropertyPresentedOrReported] [rapid] draw devices: false
+# 2026/08/13 19:53:48.090909 [TestPropertyPresentedOrReported] [rapid] draw folded: false
+# 2026/08/13 19:53:48.090924 [TestPropertyPresentedOrReported] view entry "A": presented=false reported=false — the partition is broken
+# 
+v0.4.8#2703357071435434856
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0

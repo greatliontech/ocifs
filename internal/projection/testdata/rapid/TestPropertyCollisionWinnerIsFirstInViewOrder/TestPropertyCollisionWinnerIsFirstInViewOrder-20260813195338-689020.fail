@@ -1,0 +1,41 @@
+# 2026/08/13 19:53:38.444727 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw n: 4
+# 2026/08/13 19:53:38.444756 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw depth: 1
+# 2026/08/13 19:53:38.444773 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw seg: "a"
+# 2026/08/13 19:53:38.444790 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:38.444811 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw depth: 1
+# 2026/08/13 19:53:38.444822 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw seg: "a"
+# 2026/08/13 19:53:38.444835 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw depth: 1
+# 2026/08/13 19:53:38.444846 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw seg: "a"
+# 2026/08/13 19:53:38.444860 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw depth: 1
+# 2026/08/13 19:53:38.444877 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw seg: "A"
+# 2026/08/13 19:53:38.444887 [TestPropertyCollisionWinnerIsFirstInViewOrder] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:38.444933 [TestPropertyCollisionWinnerIsFirstInViewOrder] loser "a" not reported as case collision (got "")
+# 
+v0.4.8#16206834568266173416
+0x0
+0x6b74f03291620
+0x4
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0

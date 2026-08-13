@@ -31,7 +31,7 @@ entry, the verification seam, and Export.
       direct-manifest cases), entry by (repo, digest, platform) with
       no tag re-resolution, pull-policy and default-platform library
       options, longest-prefix keychain resolution.
-- [ ] 5. `internal/projection` kernel (portable, no backend): stable
+- [x] 5. `internal/projection` kernel (portable, no backend): stable
       identity scheme, sorted snapshots + resumable enumeration,
       case-collision policy, fidelity mapping, store-persisted
       projection report, symbolic error space; kernel-level tests.

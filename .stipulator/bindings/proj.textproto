@@ -1,0 +1,146 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.New"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "48651389eefeb2bea6bfa8dc78fee12ca3809d42bcbe32f28cfc3ea9f38334d9"
+}
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyIdentityDeterministic"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1e234604276c64d0c3f9760425ccf8283be83aed294ceb4b90f22d8444bb2601"
+}
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestIdentityAssignment"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8ad0c49009b9f547f36a5ec6bdc44a0f0e244d17b49315393fd553e59a7137e0"
+}
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestExtraDirs"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "261e850b68b6e31fc597963421c3faca111eac2592e10763957e45841173225d"
+}
+
+bindings {
+  requirement_id: "REQ-proj-enumeration"
+  content_hash: "a61e4bd9dfe1167d261fbbd8039500de137b41074f169eabcdb396d8fc282b82"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Projection.Seek"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "7c6245be25568e3344154bece4fea3fbafb88efb7226ef6a601eb892a947636b"
+}
+
+bindings {
+  requirement_id: "REQ-proj-enumeration"
+  content_hash: "a61e4bd9dfe1167d261fbbd8039500de137b41074f169eabcdb396d8fc282b82"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestSeekResumesAfterName"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "879bbe316b0fb8fc97515dcd0fc698872796dd63ad0d16b1948badc65d417dcf"
+}
+
+bindings {
+  requirement_id: "REQ-proj-enumeration"
+  content_hash: "a61e4bd9dfe1167d261fbbd8039500de137b41074f169eabcdb396d8fc282b82"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyEnumerationSplitEqualsWhole"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "48f12f3a0e73e03cbade9d7db861330f72979beeed515abe525cd42521d88d64"
+}
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.New"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "48651389eefeb2bea6bfa8dc78fee12ca3809d42bcbe32f28cfc3ea9f38334d9"
+}
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestCaseCollisionFirstInViewOrderWins"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "31f69651b43bd9724a910a136ab1258b4da1ce6c9ea1fd09ae324610ba647ad7"
+}
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestOmittedDirectoryContainment"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "63c99bcd21daca96bf47b6eff421798342300ff9e22ad4e9cdeb4ce63fa80f85"
+}
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyCollisionWinnerIsFirstInViewOrder"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "691c1bf5dc0977a25e16cff691f1e1536be6cd809b8e82b56265280bff6ccabc"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Report.WriteFile"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "06803f62a2e96b2a6af3e0cfbc93ccab8b6800910f986c6e15bfb001e600cec7"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.New"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "48651389eefeb2bea6bfa8dc78fee12ca3809d42bcbe32f28cfc3ea9f38334d9"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestReportRoundtrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c8112b41e253e99138b4fb8ea0cf6d63cca465e84f9b95fe64a068ab5353813b"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestKindOmissionsReported"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "7db5062a3daf02180ffbf9d0ec656be1227753902f09adb957e521acccc944ea"
+}
+
+bindings {
+  requirement_id: "REQ-proj-report"
+  content_hash: "72b81dcc47cf62ea19b942c848db73fb72e10092cfca9f5fe2e2ad938ab7c419"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyPresentedOrReported"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "2c8d6a02d533c8524995aba11795798de5663ca348d7cded05b6ff805536979b"
+}

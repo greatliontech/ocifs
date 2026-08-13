@@ -14,7 +14,8 @@ tasks:
   mutate:
     desc: Mutation-test the working-tree delta (oracle scratch bracketed)
     cmds:
-      - mkdir -p .scratch/layer .scratch/store .scratch/cas
+      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection
       - >-
         gomutant run --changed HEAD --timeout 0
         --bracket-path .scratch/layer --bracket-path .scratch/store --bracket-path .scratch/cas
+        --bracket-path .scratch/projection

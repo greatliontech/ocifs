@@ -37,13 +37,19 @@ defect, not a platform quirk.
 
 **REQ-proj-report** (behavior): Every omission or alteration a
 projection makes relative to the unified view (unsupported symlinks,
-devices, FIFOs, unresolvable hardlinks, case collisions, read-only
-residual foreign files) MUST be recorded in the projection report,
+devices, FIFOs, case collisions, read-only residual foreign files)
+MUST be recorded in the projection report,
 enumerable by the consumer — never only logged, never silent. The
 report is persisted in the store's per-mount state for every
 projection, so any process — the in-process consumer, the
 orchestrator of an out-of-process backend (REQ-proj-server), or an
-inspecting CLI — reads the same record.
+inspecting CLI — reads the same record. The persisted encoding is
+`projection-report.json` in the mount's state directory: a JSON
+document whose `entries` array (always present — an empty report is
+`{"entries":[]}`, distinguishable from an absent file) carries per
+entry the view `path`, a `disposition` (`omitted` or `altered`), a
+symbolic `reason`, and an optional free-text `detail`; the file is
+published atomically.
 
 ## Out-of-process serving
 
@@ -73,8 +79,10 @@ place — content or metadata replacing the same logical object
 (identity follows the logical path-entry, not the storage) — while
 a view path that is deleted in the upper and later recreated is a
 new object and draws upper-born identity, exactly like paths absent
-from the view, whose IDs come from a disjoint upper-born range. Because images are
-immutable, the same image projects the same IDs across remounts;
+from the view, whose IDs come from a disjoint non-view range —
+consumer-configured extra directories now, upper-born entries in a
+partition of their own when a writable stage lands. Because images
+are immutable, the same image projects the same IDs across remounts;
 unstable IDs break resumable enumeration cookies and any consumer
 caching by inode. Path-addressed backends (ProjFS) have no IDs and
 ignore this scheme.

@@ -74,9 +74,12 @@ else is rejected, so an id cannot place the mount directory outside
 the store's `mounts/` tier.
 
 **REQ-api-extra-dirs** (behavior): Extra directories configured at
-construction MUST appear as empty directories in every mount —
-anchor points for consumers that bind or overlay onto the mounted
-tree.
+construction MUST appear as directories in every mount — empty
+unless the view already provides the path — anchor points for
+consumers that bind or overlay onto the mounted tree. A configured
+path that exists in the view as a non-directory, escapes the root,
+or is absolute is a configuration error and fails mount
+construction.
 
 ## Export
 

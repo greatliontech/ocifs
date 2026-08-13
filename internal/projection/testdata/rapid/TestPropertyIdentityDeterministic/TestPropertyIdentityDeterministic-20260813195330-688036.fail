@@ -1,0 +1,79 @@
+# 2026/08/13 19:53:30.984719 [TestPropertyIdentityDeterministic] [rapid] draw n: 7
+# 2026/08/13 19:53:30.984751 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984769 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984786 [TestPropertyIdentityDeterministic] [rapid] draw kind: 0x35
+# 2026/08/13 19:53:30.984802 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984815 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984829 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984841 [TestPropertyIdentityDeterministic] [rapid] draw seg: "A"
+# 2026/08/13 19:53:30.984850 [TestPropertyIdentityDeterministic] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:30.984868 [TestPropertyIdentityDeterministic] [rapid] draw depth: 2
+# 2026/08/13 19:53:30.984892 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984905 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984922 [TestPropertyIdentityDeterministic] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:30.984942 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984952 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984961 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984972 [TestPropertyIdentityDeterministic] [rapid] draw seg: "a"
+# 2026/08/13 19:53:30.984983 [TestPropertyIdentityDeterministic] [rapid] draw depth: 1
+# 2026/08/13 19:53:30.984992 [TestPropertyIdentityDeterministic] [rapid] draw seg: "b"
+# 2026/08/13 19:53:30.985016 [TestPropertyIdentityDeterministic] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:30.985052 [TestPropertyIdentityDeterministic] [rapid] draw symlinks: false
+# 2026/08/13 19:53:30.985063 [TestPropertyIdentityDeterministic] [rapid] draw fifos: false
+# 2026/08/13 19:53:30.985073 [TestPropertyIdentityDeterministic] [rapid] draw devices: false
+# 2026/08/13 19:53:30.985083 [TestPropertyIdentityDeterministic] [rapid] draw folded: false
+# 2026/08/13 19:53:30.985120 [TestPropertyIdentityDeterministic] ID("b") = 18, want 19 (caps folded=true)
+# 
+v0.4.8#3285351681004319332
+0x0
+0x6b74f03291620
+0x7
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-model"
-reason: "The projection kernel and its backends are not yet built — main has a single FUSE-only mount predating the projection contract"
+reason: "The portable kernel (internal/projection) builds the one tree, envelope omissions, and report; serving them — presented bytes, read-only enforcement, declarative out-of-process configuration, per-backend envelopes — lands with the FUSE, ProjFS, and FSKit backends"
 lands { covered: "REQ-proj-model" }

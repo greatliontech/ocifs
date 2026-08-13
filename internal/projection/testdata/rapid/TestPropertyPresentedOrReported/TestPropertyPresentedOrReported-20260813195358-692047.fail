@@ -1,0 +1,42 @@
+# 2026/08/13 19:53:58.823515 [TestPropertyPresentedOrReported] [rapid] draw n: 3
+# 2026/08/13 19:53:58.823542 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:58.823559 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:58.823577 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:58.823598 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:58.823613 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:58.823624 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:58.823634 [TestPropertyPresentedOrReported] [rapid] draw seg: "Data"
+# 2026/08/13 19:53:58.823643 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:58.823681 [TestPropertyPresentedOrReported] [rapid] draw symlinks: false
+# 2026/08/13 19:53:58.823693 [TestPropertyPresentedOrReported] [rapid] draw fifos: false
+# 2026/08/13 19:53:58.823703 [TestPropertyPresentedOrReported] [rapid] draw devices: false
+# 2026/08/13 19:53:58.823711 [TestPropertyPresentedOrReported] [rapid] draw folded: true
+# 2026/08/13 19:53:58.823741 [TestPropertyPresentedOrReported] children of "." unsorted or colliding: "Data", "a"
+# 
+v0.4.8#14153188564890891119
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x4
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

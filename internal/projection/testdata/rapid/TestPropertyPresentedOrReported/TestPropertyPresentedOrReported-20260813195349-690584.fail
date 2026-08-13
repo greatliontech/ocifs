@@ -1,0 +1,100 @@
+# 2026/08/13 19:53:49.199371 [TestPropertyPresentedOrReported] [rapid] draw n: 10
+# 2026/08/13 19:53:49.199408 [TestPropertyPresentedOrReported] [rapid] draw depth: 2
+# 2026/08/13 19:53:49.199428 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199446 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199464 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:49.199493 [TestPropertyPresentedOrReported] [rapid] draw depth: 2
+# 2026/08/13 19:53:49.199505 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199516 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199530 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199545 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199554 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x35
+# 2026/08/13 19:53:49.199566 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199576 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199586 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199596 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199605 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199613 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199642 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199651 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199659 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199669 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199681 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199688 [TestPropertyPresentedOrReported] [rapid] draw seg: "a"
+# 2026/08/13 19:53:49.199697 [TestPropertyPresentedOrReported] [rapid] draw depth: 1
+# 2026/08/13 19:53:49.199705 [TestPropertyPresentedOrReported] [rapid] draw seg: "A"
+# 2026/08/13 19:53:49.199715 [TestPropertyPresentedOrReported] [rapid] draw kind: 0x30
+# 2026/08/13 19:53:49.199761 [TestPropertyPresentedOrReported] [rapid] draw symlinks: false
+# 2026/08/13 19:53:49.199774 [TestPropertyPresentedOrReported] [rapid] draw fifos: false
+# 2026/08/13 19:53:49.199785 [TestPropertyPresentedOrReported] [rapid] draw devices: false
+# 2026/08/13 19:53:49.199795 [TestPropertyPresentedOrReported] [rapid] draw folded: true
+# 2026/08/13 19:53:49.199829 [TestPropertyPresentedOrReported] view entry "a/a": presented=false reported=false — the partition is broken
+# 
+v0.4.8#5706290992438790397
+0x0
+0x1f2b5a0e61c3a6
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
