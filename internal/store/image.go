@@ -7,20 +7,17 @@ import (
 )
 
 // Image is a materialized image: its manifest digest, config, and
-// recorded layer entries, base to top.
+// recorded layer entries, base to top. The digest is the
+// platform-selected manifest's, never an index's
+// (REQ-store-platform-serves-child).
 type Image struct {
 	h      v1.Hash
-	img    v1.Image
 	conf   *v1.ConfigFile
 	layers []layer.Layer
 }
 
 func (i *Image) Hash() v1.Hash {
 	return i.h
-}
-
-func (i *Image) Image() v1.Image {
-	return i.img
 }
 
 func (i *Image) ConfigFile() *v1.ConfigFile {

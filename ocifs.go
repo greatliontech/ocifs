@@ -1,3 +1,8 @@
+// Package ocifs mounts OCI images as read-only filesystems. The
+// public surface is pinned by docs/specs/api.md; construction
+// configures the store root, credentials, pull policy, and default
+// platform, and acquisition works by reference string (tag or digest
+// form) with an optional explicit platform.
 package ocifs
 
 import (
@@ -11,6 +16,16 @@ import (
 	"github.com/greatliontech/ocifs/internal/unionfs"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+)
+
+// PullPolicy controls when acquisition consults the registry;
+// semantics are pinned by docs/specs/store.md (REQ-store-pull-policy).
+type PullPolicy = store.PullPolicy
+
+const (
+	PullIfNotPresent = store.PullIfNotPresent
+	PullAlways       = store.PullAlways
+	PullNever        = store.PullNever
 )
 
 type Option func(*OCIFS)
@@ -39,11 +54,28 @@ var WithEnableDefaultKeychain = func() Option {
 	}
 }
 
+// WithPullPolicy sets the pull policy (default PullIfNotPresent).
+var WithPullPolicy = func(p PullPolicy) Option {
+	return func(o *OCIFS) {
+		o.pullPolicy = p
+	}
+}
+
+// WithDefaultPlatform sets the platform used when an acquisition
+// names none (default: the host's os/arch).
+var WithDefaultPlatform = func(p v1.Platform) Option {
+	return func(o *OCIFS) {
+		o.defaultPlatform = p
+	}
+}
+
 type OCIFS struct {
-	workDir   string
-	extraDirs []string
-	authn     *ocifsKeychain
-	store     *store.Store
+	workDir         string
+	extraDirs       []string
+	authn           *ocifsKeychain
+	pullPolicy      PullPolicy
+	defaultPlatform v1.Platform
+	store           *store.Store
 }
 
 func New(opts ...Option) (*OCIFS, error) {
@@ -53,6 +85,7 @@ func New(opts ...Option) (*OCIFS, error) {
 		authn: &ocifsKeychain{
 			creds: make(map[string]authn.AuthConfig),
 		},
+		pullPolicy: PullIfNotPresent,
 	}
 
 	// apply options
@@ -61,13 +94,59 @@ func New(opts ...Option) (*OCIFS, error) {
 	}
 
 	// initialize store
-	s, err := store.NewStore(ofs.workDir, ofs.authn, store.PullIfNotPresent)
+	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform)
 	if err != nil {
 		return nil, err
 	}
 	ofs.store = s
 
 	return ofs, nil
+}
+
+// Image is a materialized image: the platform-selected manifest and
+// its config, ready to mount or export.
+type Image struct {
+	img *store.Image
+}
+
+// Digest returns the digest of the platform-selected manifest — the
+// identity of the materialized image (REQ-store-platform-serves-child).
+func (i *Image) Digest() v1.Hash {
+	return i.img.Hash()
+}
+
+func (i *Image) ConfigFile() *v1.ConfigFile {
+	return i.img.ConfigFile()
+}
+
+type PullOption func(*pullReq)
+
+type pullReq struct {
+	platform *v1.Platform
+}
+
+// PullWithPlatform requests an explicit platform: index selection is
+// strict, and a direct manifest must match (REQ-store-platform-strict).
+var PullWithPlatform = func(p v1.Platform) PullOption {
+	return func(r *pullReq) {
+		r.platform = &p
+	}
+}
+
+// Pull materializes imageRef — tag or digest form, resolved per the
+// pull policy — and returns the image. Digest-form references are
+// materialized without any tag re-resolution
+// (REQ-store-digest-entry).
+func (o *OCIFS) Pull(ctx context.Context, imageRef string, opts ...PullOption) (*Image, error) {
+	var r pullReq
+	for _, opt := range opts {
+		opt(&r)
+	}
+	img, err := o.store.Image(ctx, imageRef, r.platform)
+	if err != nil {
+		return nil, err
+	}
+	return &Image{img: img}, nil
 }
 
 type ImageMount struct {
@@ -77,6 +156,7 @@ type ImageMount struct {
 	mountPoint string
 	id         string
 	ctx        context.Context
+	platform   *v1.Platform
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
@@ -115,6 +195,14 @@ var MountWithContext = func(ctx context.Context) MountOption {
 	}
 }
 
+// MountWithPlatform mounts an explicit platform; selection semantics
+// match PullWithPlatform.
+var MountWithPlatform = func(p v1.Platform) MountOption {
+	return func(im *ImageMount) {
+		im.platform = &p
+	}
+}
+
 func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	im := &ImageMount{
 		ofs: o,
@@ -124,12 +212,34 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		opt(im)
 	}
 
+	// Acquire the image before creating any store-managed mount
+	// directory, so a failed pull leaves no orphan under mounts/.
+	img, err := o.store.Image(im.ctx, imgRef, im.platform)
+	if err != nil {
+		return nil, err
+	}
+	im.img = img
+
+	view, err := img.Unify()
+	if err != nil {
+		return nil, err
+	}
+
 	if im.mountPoint == "" {
 		path, err := o.store.NewMountDir(im.id)
 		if err != nil {
 			return nil, err
 		}
 		im.mountPoint = path
+		// Remove the just-created store-managed directory on any
+		// later failure (im.srv is set only on success), so no path
+		// out of this function strands an orphan under mounts/. A
+		// caller-supplied target is caller-owned and never touched.
+		defer func() {
+			if im.srv == nil {
+				os.Remove(im.mountPoint)
+			}
+		}()
 	}
 
 	im.mountPoint = filepath.Clean(im.mountPoint)
@@ -139,17 +249,6 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 			return nil, err
 		}
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
-	}
-
-	img, err := o.store.Image(im.ctx, imgRef)
-	if err != nil {
-		return nil, err
-	}
-	im.img = img
-
-	view, err := img.Unify()
-	if err != nil {
-		return nil, err
 	}
 
 	root := unionfs.Init(view, o.store.BlobPath, o.extraDirs)

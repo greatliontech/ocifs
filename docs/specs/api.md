@@ -18,10 +18,14 @@ os/arch, semantics in `store.md`). Construction initializes the
 store and fails if the store cannot be initialized.
 
 **REQ-api-keychain** (behavior): Credential resolution MUST pick the
-longest matching configured prefix; with no match, the default
-keychain applies if enabled, else anonymous. Resolution is
-deterministic — overlapping prefixes never resolve differently
-across calls.
+longest matching configured prefix, where a prefix matches only at a
+path-segment boundary — the target equals the prefix or continues
+with `/`. A prefix never matches inside a segment: credentials
+scoped to `r.io/team` must not be sent for `r.io/teammate`, a
+foreign repository whose name merely extends the string. With no
+match, the default keychain applies if enabled, else anonymous.
+Resolution is deterministic — overlapping prefixes never resolve
+differently across calls.
 
 ## Image acquisition
 

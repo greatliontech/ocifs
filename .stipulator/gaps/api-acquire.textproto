@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-api-acquire"
-reason: "Acquisition by digest with explicit platform not yet offered; the seam is absent"
-lands { covered: "REQ-api-acquire" }

@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-store-pull-policy"
-reason: "Always revalidates against the child digest (never matches for multiarch); Never lacks the platform-materialization clause"
-lands { covered: "REQ-store-pull-policy" }

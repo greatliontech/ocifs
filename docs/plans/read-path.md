@@ -25,7 +25,7 @@ entry, the verification seam, and Export.
       retained layout, per-entry temp-file lifecycle,
       ref-written-last pinned by test; fixture-based network-free
       store harness.
-- [ ] 4. Platform + digest-addressed entry: retain and record the
+- [x] 4. Platform + digest-addressed entry: retain and record the
       top-level artifact (refs hold the top-level digest),
       host-default platform, strict explicit platform (index and
       direct-manifest cases), entry by (repo, digest, platform) with

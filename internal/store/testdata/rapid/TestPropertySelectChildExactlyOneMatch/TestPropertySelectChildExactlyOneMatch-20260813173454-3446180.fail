@@ -1,0 +1,23 @@
+# 2026/08/13 17:34:54.695084 [TestPropertySelectChildExactlyOneMatch] [rapid] draw children: 2
+# 2026/08/13 17:34:54.695124 [TestPropertySelectChildExactlyOneMatch] [rapid] draw platformless0: true
+# 2026/08/13 17:34:54.695150 [TestPropertySelectChildExactlyOneMatch] [rapid] draw platformless1: true
+# 2026/08/13 17:34:54.695200 [TestPropertySelectChildExactlyOneMatch] [rapid] draw request: v1.Platform{Architecture:"amd64", OS:"linux", OSVersion:"", OSFeatures:[]string(nil), Variant:"", Features:[]string(nil)}
+# 
+v0.4.8#13892190348030462155
+0x0
+0x38e38e38e38e4
+0x2
+0x1
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

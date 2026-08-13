@@ -189,7 +189,7 @@ func (anonKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
 func newTestStore(t *testing.T, policy PullPolicy, rt http.RoundTripper) (*Store, string) {
 	t.Helper()
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, policy)
+	s, err := NewStore(dir, anonKeychain{}, policy, v1.Platform{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestIngestRoundtrip(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, l1, l2))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	img, err := s.Image(context.Background(), refStr)
+	img, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestIngestIdempotent(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, newRawLayer(t, tarBytes(t, tfile("a", "aa")))))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	if _, err := s.Image(context.Background(), refStr); err != nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := descriptorCount(t, dir); n != 1 {
@@ -345,7 +345,7 @@ func TestIngestIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.Image(context.Background(), refStr); err != nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := descriptorCount(t, dir); n != 1 {
@@ -371,7 +371,7 @@ func TestLayerIndexAndContentKeyspacesDisjoint(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, l1, l2))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	img, err := s.Image(context.Background(), refStr)
+	img, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestRefWrittenLast(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, good, garbage))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	if _, err := s.Image(context.Background(), refStr); err == nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err == nil {
 		t.Fatal("ingest of an unparseable layer succeeded")
 	}
 	// The crash story (REQ-store-ingest-order): failure before
@@ -421,7 +421,7 @@ func TestRefWrittenLast(t *testing.T) {
 	// The store is not poisoned: a good image ingests afterwards.
 	goodRef := testHost + "/test/reflast-good:v1"
 	push(t, rt, goodRef, makeImage(t, good))
-	if _, err := s.Image(context.Background(), goodRef); err != nil {
+	if _, err := s.Image(context.Background(), goodRef, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -446,7 +446,7 @@ func TestSelfHeal(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, l))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	img, err := s.Image(context.Background(), refStr)
+	img, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ func TestSelfHeal(t *testing.T) {
 	if err := os.Remove(indexPath); err != nil {
 		t.Fatal(err)
 	}
-	img, err = s.Image(context.Background(), refStr)
+	img, err = s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatalf("heal of missing index: %v", err)
 	}
@@ -487,7 +487,7 @@ func TestSelfHeal(t *testing.T) {
 	if err := os.WriteFile(indexPath, []byte("{torn"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	img, err = s.Image(context.Background(), refStr)
+	img, err = s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatalf("heal of corrupt index: %v", err)
 	}
@@ -499,7 +499,7 @@ func TestSelfHeal(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "blobs", blobKey.Algorithm, blobKey.Hex)); err != nil {
 		t.Fatal(err)
 	}
-	img, err = s.Image(context.Background(), refStr)
+	img, err = s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatalf("heal of missing blob: %v", err)
 	}
@@ -521,12 +521,12 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 	if err := os.MkdirAll(oldDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	s1, err := NewStore(oldDir, anonKeychain{}, PullIfNotPresent)
+	s1, err := NewStore(oldDir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s1.transport = rt
-	if _, err := s1.Image(context.Background(), refStr); err != nil {
+	if _, err := s1.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -537,11 +537,11 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2, err := NewStore(newDir, anonKeychain{}, PullNever)
+	s2, err := NewStore(newDir, anonKeychain{}, PullNever, v1.Platform{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := s2.Image(context.Background(), refStr)
+	img, err := s2.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +554,7 @@ func TestPullNeverUncachedFailsWithoutNetwork(t *testing.T) {
 	// Port 1 on localhost: any network attempt would error with a
 	// connection failure, not the policy error asserted here.
 	s, _ := newTestStore(t, PullNever, nil)
-	_, err := s.Image(context.Background(), "127.0.0.1:1/test/absent:v1")
+	_, err := s.Image(context.Background(), "127.0.0.1:1/test/absent:v1", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -569,7 +569,7 @@ func TestPullAlwaysRevalidates(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, newRawLayer(t, tarBytes(t, tfile("v", "one")))))
 
 	s, _ := newTestStore(t, PullAlways, rt)
-	img1, err := s.Image(context.Background(), refStr)
+	img1, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +578,7 @@ func TestPullAlwaysRevalidates(t *testing.T) {
 	}
 
 	// Unchanged remote: HEAD matches, cached content used.
-	img2, err := s.Image(context.Background(), refStr)
+	img2, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -588,7 +588,7 @@ func TestPullAlwaysRevalidates(t *testing.T) {
 
 	// Tag moved: Always must serve the new content.
 	push(t, rt, refStr, makeImage(t, newRawLayer(t, tarBytes(t, tfile("v", "two")))))
-	img3, err := s.Image(context.Background(), refStr)
+	img3, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -612,7 +612,7 @@ func TestConcurrentPullsSameRef(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			img, err := s.Image(context.Background(), refStr)
+			img, err := s.Image(context.Background(), refStr, nil)
 			if err == nil {
 				if got := string(readEntry(t, s, img, "c")); got != "concurrent" {
 					err = errors.New("wrong content: " + got)
@@ -653,7 +653,7 @@ func TestConcurrentPullsDistinctRefs(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			img, err := s.Image(context.Background(), refs[i])
+			img, err := s.Image(context.Background(), refs[i], nil)
 			if err == nil {
 				if got := string(readEntry(t, s, img, "id")); got != strconv.Itoa(i) {
 					err = errors.New("wrong content: " + got)
@@ -690,7 +690,7 @@ func TestConcurrentInstancesOneRoot(t *testing.T) {
 	dir := scratchDir(t)
 	stores := make([]*Store, 2)
 	for i := range stores {
-		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent)
+		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -705,7 +705,7 @@ func TestConcurrentInstancesOneRoot(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			s := stores[i%len(stores)]
-			img, err := s.Image(context.Background(), refs[i])
+			img, err := s.Image(context.Background(), refs[i], nil)
 			if err == nil {
 				if got := string(readEntry(t, s, img, "id")); got != strconv.Itoa(i) {
 					err = errors.New("wrong content: " + got)
@@ -738,7 +738,7 @@ func TestWhiteoutAcrossLayersEndToEnd(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, l1, l2))
 
 	s, _ := newTestStore(t, PullIfNotPresent, rt)
-	img, err := s.Image(context.Background(), refStr)
+	img, err := s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -785,7 +785,7 @@ func TestTamperedBlobNotPersisted(t *testing.T) {
 	push(t, rt, refStr, makeImage(t, l))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	if _, err := s.Image(context.Background(), refStr); err == nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err == nil {
 		t.Fatal("ingest of tampered content succeeded")
 	}
 	// Nothing failing verification was persisted
@@ -830,7 +830,7 @@ func TestCrashedFirstCreationHeals(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "oci-layout"), []byte(`{"imageLayoutVersion": "1.0.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent)
+	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -842,7 +842,7 @@ func TestCrashedFirstCreationHeals(t *testing.T) {
 	refStr := testHost + "/test/healed-creation:v1"
 	push(t, rt, refStr, makeImage(t, newRawLayer(t, tarBytes(t, tfile("ok", "fine")))))
 	s.transport = rt
-	if _, err := s.Image(context.Background(), refStr); err != nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -857,7 +857,7 @@ func TestPreLayoutStoreRejected(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "index.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewStore(dir, anonKeychain{}, PullIfNotPresent)
+	_, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
 	if !errors.Is(err, ErrPreLayoutStore) {
 		t.Fatalf("err = %v, want ErrPreLayoutStore", err)
 	}
@@ -871,7 +871,7 @@ func TestNoTemporariesAfterIngest(t *testing.T) {
 	))))
 
 	s, dir := newTestStore(t, PullIfNotPresent, rt)
-	if _, err := s.Image(context.Background(), refStr); err != nil {
+	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {

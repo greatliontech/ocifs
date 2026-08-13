@@ -1,0 +1,19 @@
+# 2026/08/13 19:04:47.101520 [TestPropertyKeychainDeterministicLongestPrefix] [rapid] draw n: 2
+# 2026/08/13 19:04:47.101553 [TestPropertyKeychainDeterministicLongestPrefix] [rapid] draw prefix0: "r1.io"
+# 2026/08/13 19:04:47.101570 [TestPropertyKeychainDeterministicLongestPrefix] [rapid] draw prefix1: "r1.io/a"
+# 2026/08/13 19:04:47.101587 [TestPropertyKeychainDeterministicLongestPrefix] [rapid] draw target: "r1.io/ab"
+# 2026/08/13 19:04:47.101600 [TestPropertyKeychainDeterministicLongestPrefix] [rapid] draw suffix: ""
+# 2026/08/13 19:04:47.101615 [TestPropertyKeychainDeterministicLongestPrefix] Resolve("r1.io/ab") = "r1.io/a", want longest prefix "r1.io"
+# 
+v0.4.8#2392794523128927431
+0x0
+0x0
+0x1
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x38e38e38e38e4
+0x3
+0x0
+0x0

@@ -158,11 +158,9 @@ platform not materialized locally, is an error.
 **REQ-store-digest-entry** (behavior): Given (repository, digest,
 platform), the store MUST materialize the image without any tag
 re-resolution — the digest is the identity. The digest can name an
-index or a manifest; for an index, platform selection picks the
-child. When the digest names a manifest directly and an explicit
-platform is also requested, the manifest's config platform is
-checked against it and a mismatch fails the request (strict, like
-REQ-store-platform-strict). A digest-addressed request against fully
+index or a manifest; selection and the direct-manifest platform
+check follow REQ-store-platform-strict and
+REQ-store-platform-default. A digest-addressed request against fully
 cached content
 completes under `Never` with no network access. Fetching by digest
 needs no signature machinery: every fetched byte is verified against
@@ -171,12 +169,24 @@ the requested digest (REQ-store-ingest-verified).
 ## Platform selection
 
 **REQ-store-platform-strict** (behavior): When an explicit platform
-is requested and the top-level artifact is an index, selection MUST
-be strict: the index contains an exact match for the requested
-platform, or the operation fails. No fallback, no closest match.
+is requested, selection MUST be strict. Against an index, a child
+matches when it carries a platform whose value equals the request's
+in every field the request specifies (os, architecture, variant,
+os.version; an unspecified field constrains nothing), and exactly
+one child must match: zero matching children fail the operation, and
+more than one fails it as underspecified — choosing among them would
+be a fallback. Children carrying no platform (attestation and other
+non-platform entries) never match. When the top-level artifact is a
+manifest, the manifest's config platform is checked against the
+request by the same field rule and a mismatch fails the operation.
+No fallback, no closest match, no normalization of platform names.
 
 **REQ-store-platform-default** (behavior): When no explicit platform
-is requested, the default MUST be the host's os/arch.
+is requested, the request MUST use the configured default platform
+(REQ-api-construction), which itself defaults to the host's os/arch.
+Selection against an index follows the same match rule as an
+explicit request; a top-level manifest is served as-is — only an
+explicit platform constrains a direct manifest.
 
 **REQ-store-platform-serves-child** (behavior): The platform-selected
 child manifest's digest — not the index digest — MUST name the

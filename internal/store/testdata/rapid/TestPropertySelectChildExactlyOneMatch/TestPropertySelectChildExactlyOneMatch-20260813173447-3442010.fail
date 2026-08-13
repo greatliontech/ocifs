@@ -1,0 +1,31 @@
+# 2026/08/13 17:34:47.454920 [TestPropertySelectChildExactlyOneMatch] [rapid] draw children: 1
+# 2026/08/13 17:34:47.454949 [TestPropertySelectChildExactlyOneMatch] [rapid] draw platformless0: false
+# 2026/08/13 17:34:47.454973 [TestPropertySelectChildExactlyOneMatch] [rapid] draw plat0: v1.Platform{Architecture:"amd64", OS:"linux", OSVersion:"", OSFeatures:[]string(nil), Variant:"", Features:[]string(nil)}
+# 2026/08/13 17:34:47.455039 [TestPropertySelectChildExactlyOneMatch] [rapid] draw request: v1.Platform{Architecture:"amd64", OS:"linux", OSVersion:"", OSFeatures:[]string(nil), Variant:"v7", Features:[]string(nil)}
+# 2026/08/13 17:34:47.455064 [TestPropertySelectChildExactlyOneMatch] 0 matches but selection succeeded with sha256:0000000000000000000000000000000000000000000000000000000000000000
+# 
+v0.4.8#6998473361350061864
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
