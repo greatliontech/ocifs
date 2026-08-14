@@ -51,7 +51,7 @@ entry, the verification seam, and Export.
       glue, `cmd/ocifs-fskit` appex main, `ocifs.app` host-bundle
       recipe (Tier-2 mount validation runs when the appex is signed
       and enabled — user-side act).
-- [ ] 9. Verification seam: consumer-supplied verifier hook between
+- [x] 9. Verification seam: consumer-supplied verifier hook between
       top-level resolution and content materialization.
 - [ ] 10. Export: materialize the unified view into a directory per
       `export.md` on `os.Root` (write-time symlink containment,

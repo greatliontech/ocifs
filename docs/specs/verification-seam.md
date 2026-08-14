@@ -25,7 +25,11 @@ not exempt: the seam runs per request, whether or not the content
 was already materialized (verifier-side caching is the verifier's
 own concern). The store retains the resolved top-level artifact
 (`store.md` REQ-store-ingest-order), so the seam's inputs are
-available for cached content without network access.
+available for cached content without network access. The seam
+governs consumer acquisition through the library surface (`api.md`
+REQ-api-acquire); platform-initiated serving of already-materialized
+content — the darwin app extension — is downstream of an admitted
+acquisition and runs no seam of its own.
 
 **REQ-seam-input** (behavior): The verifier MUST receive the
 resolved identity: the reference as requested, the resolved
@@ -34,12 +38,19 @@ multi-platform image this is the **image index** — the digest
 signatures are made over; platform selection happens only after the
 seam passes. A verifier whose policy targets per-platform child
 manifests derives the child digests from the index bytes it is
-given.
+given. The bytes are served from the store's retained copy under the
+store's integrity boundary (`store.md` REQ-store-ingest-verified:
+network arrivals are digest-verified, local reads are not
+re-verified); a verifier whose policy requires digest–byte
+correspondence hashes the bytes itself.
 
 **REQ-seam-abort** (behavior): A verifier failure MUST abort the
 request: no content is served and the reference cache records
-nothing for the failed resolution. Verification failure is
-distinguishable from resolution failure in the returned error.
+nothing for the failed resolution. A reference-cache entry recorded
+by an earlier successful resolution survives a later rejected
+resolution unchanged; any serve through the surviving entry runs the
+seam per REQ-seam-position. Verification failure is distinguishable
+from resolution failure in the returned error.
 
 ## Non-goals
 

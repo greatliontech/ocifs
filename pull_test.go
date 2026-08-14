@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http/httptest"
@@ -200,5 +201,92 @@ func TestConstructionFailsOnUninitializableStore(t *testing.T) {
 	}
 	if _, err := New(WithWorkDir(scratch)); err == nil {
 		t.Fatal("construction succeeded over an unrecognized store layout")
+	}
+}
+
+// TestVerifierSeamOnAcquisition pins REQ-api-acquire's seam clause on
+// the public surface: with WithVerifier configured, both acquisition
+// arms — by reference string and by digest with explicit platform —
+// run the verification seam, a rejection surfaces as a
+// VerificationError carrying the resolved identity, and an accepting
+// verifier leaves acquisition unchanged.
+func TestVerifierSeamOnAcquisition(t *testing.T) {
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	arm64v8 := v1.Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}
+	idx := mutate.AppendManifests(empty.Index,
+		mutate.IndexAddendum{Add: testPlatformImage(t, amd64, "seam", "amd64"), Descriptor: v1.Descriptor{Platform: &amd64}},
+		mutate.IndexAddendum{Add: testPlatformImage(t, arm64v8, "seam", "arm64"), Descriptor: v1.Descriptor{Platform: &arm64v8}},
+	)
+	refStr := u.Host + "/test/seam:v1"
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.WriteIndex(ref, idx); err != nil {
+		t.Fatal(err)
+	}
+	idxDigest, err := idx.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scratch := filepath.Join(".scratch", "ocifs-seam")
+	if err := os.MkdirAll(scratch, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(scratch) })
+
+	rejected := errors.New("untrusted")
+	var seen []ResolvedIdentity
+	admit := false
+	ofs, err := New(
+		WithWorkDir(filepath.Join(scratch, "work")),
+		WithDefaultPlatform(amd64),
+		WithVerifier(func(ctx context.Context, id ResolvedIdentity) error {
+			seen = append(seen, id)
+			if !admit {
+				return rejected
+			}
+			return nil
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ofs.Pull(context.Background(), refStr)
+	var verr *VerificationError
+	if !errors.As(err, &verr) || !errors.Is(err, rejected) {
+		t.Fatalf("rejected tag pull returned %v, want VerificationError wrapping the verifier's error", err)
+	}
+	if verr.Reference != refStr || verr.Digest != idxDigest {
+		t.Fatalf("VerificationError identity = (%q, %s), want (%q, %s)", verr.Reference, verr.Digest, refStr, idxDigest)
+	}
+
+	digestRef := u.Host + "/test/seam@" + idxDigest.String()
+	if _, err := ofs.Pull(context.Background(), digestRef, PullWithPlatform(v1.Platform{OS: "linux", Architecture: "arm64"})); !errors.As(err, &verr) {
+		t.Fatalf("rejected digest pull returned %v, want VerificationError", err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("verifier ran %d times for two acquisitions", len(seen))
+	}
+	if seen[1].Reference != digestRef || seen[1].Digest != idxDigest {
+		t.Fatalf("digest-arm identity = (%q, %s), want (%q, %s)", seen[1].Reference, seen[1].Digest, digestRef, idxDigest)
+	}
+
+	admit = true
+	img, err := ofs.Pull(context.Background(), refStr)
+	if err != nil {
+		t.Fatalf("admitted pull failed: %v", err)
+	}
+	if cf := img.ConfigFile(); cf == nil || cf.Architecture != "amd64" {
+		t.Fatalf("admitted pull served wrong image: %+v", cf)
 	}
 }

@@ -189,3 +189,12 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "b9d2e89f36672f2c8a69502231da346f9ebef3786530483f7447b333099f9623"
 }
+
+bindings {
+  requirement_id: "REQ-api-acquire"
+  content_hash: "bd90d4846cbe29ac5bda5488459813387eab82fcd407d6d3d290e1c5cd8cfa79"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestVerifierSeamOnAcquisition"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "6ad254bfb98b8540f7788526297e18dde5930ca8aaba658031835d2bcdddbe6b"
+}

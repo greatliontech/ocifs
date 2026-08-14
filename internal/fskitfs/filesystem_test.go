@@ -116,7 +116,7 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 	// every write inside the campaign's observation bracket).
 	scratch := scratchtest.Dir(t, "fskitfs")
 	storeDir := filepath.Join(scratch, "store")
-	s, err := store.NewStore(storeDir, anonKeychain{}, store.PullIfNotPresent, v1.Platform{})
+	s, err := store.NewStore(storeDir, anonKeychain{}, store.PullIfNotPresent, v1.Platform{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestEnumerateCookieWrapDoesNotPanic(t *testing.T) {
 func TestProbeRecognizesOnlyStoreLayouts(t *testing.T) {
 	scratch := scratchtest.Dir(t, "fskitfs")
 	storeDir := filepath.Join(scratch, "probe-store")
-	if _, err := store.NewStore(storeDir, anonKeychain{}, store.PullNever, v1.Platform{}); err != nil {
+	if _, err := store.NewStore(storeDir, anonKeychain{}, store.PullNever, v1.Platform{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	res, err := FileSystem{}.Probe(fakeResource(storeDir))

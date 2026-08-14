@@ -34,7 +34,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "c1c456f17337fef9fc40e467a838b9675540ee51f106e45b67026c829cffae03"
+  shape_hash: "58d85d121038474a70e8885eb5f6f4fce9b15036ba588bcbfa8b20d357ebf59e"
 }
 
 bindings {
@@ -52,7 +52,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "c1c456f17337fef9fc40e467a838b9675540ee51f106e45b67026c829cffae03"
+  shape_hash: "58d85d121038474a70e8885eb5f6f4fce9b15036ba588bcbfa8b20d357ebf59e"
 }
 
 bindings {
@@ -160,7 +160,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "c1c456f17337fef9fc40e467a838b9675540ee51f106e45b67026c829cffae03"
+  shape_hash: "58d85d121038474a70e8885eb5f6f4fce9b15036ba588bcbfa8b20d357ebf59e"
 }
 
 bindings {
@@ -457,7 +457,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "c1c456f17337fef9fc40e467a838b9675540ee51f106e45b67026c829cffae03"
+  shape_hash: "58d85d121038474a70e8885eb5f6f4fce9b15036ba588bcbfa8b20d357ebf59e"
 }
 
 bindings {

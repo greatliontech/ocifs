@@ -189,7 +189,7 @@ func (anonKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
 func newTestStore(t *testing.T, policy PullPolicy, rt http.RoundTripper) (*Store, string) {
 	t.Helper()
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, policy, v1.Platform{})
+	s, err := NewStore(dir, anonKeychain{}, policy, v1.Platform{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +521,7 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 	if err := os.MkdirAll(oldDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	s1, err := NewStore(oldDir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
+	s1, err := NewStore(oldDir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -537,7 +537,7 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2, err := NewStore(newDir, anonKeychain{}, PullNever, v1.Platform{})
+	s2, err := NewStore(newDir, anonKeychain{}, PullNever, v1.Platform{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -690,7 +690,7 @@ func TestConcurrentInstancesOneRoot(t *testing.T) {
 	dir := scratchDir(t)
 	stores := make([]*Store, 2)
 	for i := range stores {
-		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
+		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -830,7 +830,7 @@ func TestCrashedFirstCreationHeals(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "oci-layout"), []byte(`{"imageLayoutVersion": "1.0.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
+	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -857,7 +857,7 @@ func TestPreLayoutStoreRejected(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "index.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{})
+	_, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil)
 	if !errors.Is(err, ErrPreLayoutStore) {
 		t.Fatalf("err = %v, want ErrPreLayoutStore", err)
 	}

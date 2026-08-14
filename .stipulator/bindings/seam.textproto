@@ -1,0 +1,65 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-seam-position"
+  content_hash: "8f39990449dedb7a833233d86faf99617dcc92c2a41fffa627e768244e43d794"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.verify"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "7458aa88958a360534f05f25e4b2da7fbff5223aa174ff448f27a6b25f4d5289"
+}
+
+bindings {
+  requirement_id: "REQ-seam-position"
+  content_hash: "8f39990449dedb7a833233d86faf99617dcc92c2a41fffa627e768244e43d794"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyVerifierRejectionLeavesNoTrace"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9fa7f11ac2e435a479a9840361468809840ba1ab18f5d8f26ab557a68d96545e"
+}
+
+bindings {
+  requirement_id: "REQ-seam-position"
+  content_hash: "8f39990449dedb7a833233d86faf99617dcc92c2a41fffa627e768244e43d794"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestVerifierRunsPerRequestCachedIncluded"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a22592c021ef40ae77d37903e9dd0f1b72f50b278ff4e2515d7ccbb52f8c8d8d"
+}
+
+bindings {
+  requirement_id: "REQ-seam-input"
+  content_hash: "65a981fac0d566f217cd22e556793a3b7b711ef64c1d312efcc8ea3fae9e3f00"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestVerifierReceivesResolvedIdentity"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "65c1afd981ec71c56b9e91040b56a62d617f15a4306fa9d5bd3c59042f073781"
+}
+
+bindings {
+  requirement_id: "REQ-seam-abort"
+  content_hash: "41226625ae4d5a2c9dad97338b13a387564176d9752f7e9fcbb5131dde898f95"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyVerifierRejectionLeavesNoTrace"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9fa7f11ac2e435a479a9840361468809840ba1ab18f5d8f26ab557a68d96545e"
+}
+
+bindings {
+  requirement_id: "REQ-seam-abort"
+  content_hash: "41226625ae4d5a2c9dad97338b13a387564176d9752f7e9fcbb5131dde898f95"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestResolutionFailureIsNotVerificationError"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "aa306f86d602a1d925bf77dfd186dd2eb2ac63a84a0703e9333f513beff98662"
+}
+
+bindings {
+  requirement_id: "REQ-seam-optional"
+  content_hash: "65d57123d493b1060c129083f306ee5f801b2c387a0db1829056c1d3a99b666f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestPullSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3f1f92d67de4042c735d74a2dd7be7278654127f6c586f2a736ed44be966c9ed"
+}

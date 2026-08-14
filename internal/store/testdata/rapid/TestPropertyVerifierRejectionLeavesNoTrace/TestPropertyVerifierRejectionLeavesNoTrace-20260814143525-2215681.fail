@@ -1,0 +1,9 @@
+# 2026/08/14 14:35:25.273054 [TestPropertyVerifierRejectionLeavesNoTrace] [rapid] draw cached: false
+# 2026/08/14 14:35:25.273079 [TestPropertyVerifierRejectionLeavesNoTrace] [rapid] draw digestForm: false
+# 2026/08/14 14:35:25.273093 [TestPropertyVerifierRejectionLeavesNoTrace] [rapid] draw indexed: false
+# 2026/08/14 14:35:25.297359 [TestPropertyVerifierRejectionLeavesNoTrace] rejected request wrote oci/index.json (only the top-level artifact blobs/sha256/c0ce72f29c462359334f67f39502cf4b3ec75bf4378d5f78a0794e2fc76fa0c1 is resolution's own retention)
+# 
+v0.4.8#15315940867629751900
+0x0
+0x0
+0x0

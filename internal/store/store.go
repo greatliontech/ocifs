@@ -77,6 +77,10 @@ type Store struct {
 	// injection seam that lets the test harness serve a registry
 	// in-process with no sockets.
 	transport http.RoundTripper
+	// verifier is the consumer's verification hook; nil means no
+	// verification and every resolvable image is served
+	// (verification-seam.md REQ-seam-optional).
+	verifier Verifier
 
 	// ingestMu serializes writers to the content tiers within this
 	// process (REQ-store-single-writer): index.json is a
@@ -101,8 +105,9 @@ func ingestLockFor(root string) *sync.Mutex {
 
 // NewStore opens or creates the store at path. A zero defaultPlatform
 // falls back to the host-derived platform — host os/arch, linux on
-// darwin (REQ-store-platform-default).
-func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform) (*Store, error) {
+// darwin (REQ-store-platform-default). A nil verifier disables the
+// verification seam (verification-seam.md REQ-seam-optional).
+func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform, verifier Verifier) (*Store, error) {
 	switch pullPolicy {
 	case PullIfNotPresent, PullAlways, PullNever:
 	default:
@@ -170,6 +175,7 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		cas:             contentCAS,
 		layers:          layerIndexes{root: filepath.Join(path, "layers")},
 		ociDir:          ociDir,
+		verifier:        verifier,
 		ingestMu:        ingestLockFor(path),
 	}, nil
 }
@@ -222,6 +228,10 @@ func (s *Store) BlobPath(h v1.Hash) string {
 // means the configured default; only explicit requests constrain a
 // direct manifest).
 type request struct {
+	// ref parses the reference as the consumer requested it;
+	// ref.String() returns that original spelling — the seam's
+	// Reference input (verification-seam.md REQ-seam-input) — while
+	// name resolution uses the parsed form.
 	ref      name.Reference
 	digest   *v1.Hash
 	platform v1.Platform
@@ -251,6 +261,14 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 
 	top, needRecord, err := s.resolveTop(ctx, req)
 	if err != nil {
+		return nil, err
+	}
+
+	// The verification seam sits between top-level resolution and any
+	// materialization for this request (REQ-seam-position); a
+	// rejection returns before assemble touches layer content and
+	// before the reference-cache record below (REQ-seam-abort).
+	if err := s.verify(ctx, req, top); err != nil {
 		return nil, err
 	}
 

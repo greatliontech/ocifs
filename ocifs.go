@@ -1,8 +1,10 @@
 // Package ocifs mounts OCI images as read-only filesystems. The
 // public surface is pinned by docs/specs/api.md; construction
-// configures the store root, credentials, pull policy, and default
-// platform, and acquisition works by reference string (tag or digest
-// form) with an optional explicit platform.
+// configures the store root, credentials, pull policy, default
+// platform, and an optional verification hook
+// (docs/specs/verification-seam.md), and acquisition works by
+// reference string (tag or digest form) with an optional explicit
+// platform.
 package ocifs
 
 import (
@@ -68,12 +70,43 @@ var WithDefaultPlatform = func(p v1.Platform) Option {
 	}
 }
 
+// Verifier is the verification seam's consumer-supplied hook
+// (docs/specs/verification-seam.md): it judges every acquisition's
+// resolved identity against the consumer's trust policy, after
+// top-level resolution and before any content is materialized for
+// the request — cached content included. ocifs ships no
+// implementation and depends on no signature tooling; without a
+// configured Verifier, no verification occurs.
+type Verifier = store.Verifier
+
+// ResolvedIdentity is what a Verifier receives: the reference as
+// requested, the resolved top-level digest, and the top-level
+// artifact's bytes (the image index for a multi-platform image —
+// platform selection happens only after the seam passes).
+type ResolvedIdentity = store.ResolvedIdentity
+
+// VerificationError is the error an acquisition returns when the
+// configured Verifier rejects it; match with errors.As to
+// distinguish verification failure from resolution failure. Nothing
+// is served and the reference cache records nothing for the failed
+// resolution.
+type VerificationError = store.VerificationError
+
+// WithVerifier configures the verification seam's hook
+// (docs/specs/verification-seam.md).
+var WithVerifier = func(v Verifier) Option {
+	return func(o *OCIFS) {
+		o.verifier = v
+	}
+}
+
 type OCIFS struct {
 	workDir         string
 	extraDirs       []string
 	authn           *ocifsKeychain
 	pullPolicy      PullPolicy
 	defaultPlatform v1.Platform
+	verifier        Verifier
 	store           *store.Store
 }
 
@@ -93,7 +126,7 @@ func New(opts ...Option) (*OCIFS, error) {
 	}
 
 	// initialize store
-	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform)
+	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform, ofs.verifier)
 	if err != nil {
 		return nil, err
 	}
