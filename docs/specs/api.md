@@ -45,10 +45,19 @@ per-backend fidelity, identity, enumeration, and read-only
 enforcement are pinned in `projection.md`; this section pins only
 the consumer-facing surface around it.
 
-**REQ-api-mount-ro** (behavior): Mounting a materialized image MUST
-produce a read-only projection (`projection.md`) of its unified
-view; on linux the FUSE mount is additionally private to the
-invoking user (no `allow_other`).
+**REQ-api-mount-ro** (behavior): Mounting a materialized image
+without an upper MUST produce a read-only projection
+(`projection.md`) of its unified view; on linux the FUSE mount is
+additionally private to the invoking user (no `allow_other`).
+
+**REQ-api-mount-writable** (behavior): A mount MUST accept an upper
+(`writable.md`) — a caller-supplied directory, or a store-managed
+named upper created on first use (`store.md`) — and then serve the
+writable merged projection. The upper outlives its mount: unmount
+leaves it intact for remounting or commit, and deleting an upper is
+an explicit act, never a side effect of unmount. A store-managed
+upper's base binding is validated at mount (`writable.md`
+REQ-writable-base-binding).
 
 **REQ-api-mount-darwin** (behavior): On darwin, mounting MUST be
 appex-mediated: the library provides the filesystem (volume)
@@ -83,6 +92,15 @@ consumers that bind or overlay onto the mounted tree. A configured
 path that exists in the view as a non-directory, escapes the root,
 or is absolute is a configuration error and fails mount
 construction.
+
+## Commit
+
+**REQ-api-commit** (behavior): The library MUST offer commit of an
+upper over its base image (`writable.md`): the base by reference
+(resolved per the pull policy, the verification seam governing like
+any acquisition), the upper in either mount form, no live mount
+required; the result is the committed image, acquirable by its
+digest under the store's local namespace (`store.md`).
 
 ## Export
 

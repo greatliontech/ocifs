@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-writable-hardlink"
+reason: "The writable stage is spec only; the dialect, commit, kernel merge, and FUSE write path land across the writable plan's chunks"
+lands { covered: "REQ-writable-hardlink" }

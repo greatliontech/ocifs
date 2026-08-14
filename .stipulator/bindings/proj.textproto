@@ -3,7 +3,7 @@
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.New"
   role: BINDING_ROLE_IMPLEMENTS
@@ -12,7 +12,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyIdentityDeterministic"
   role: BINDING_ROLE_TESTS
@@ -21,7 +21,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestIdentityAssignment"
   role: BINDING_ROLE_TESTS
@@ -30,7 +30,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestExtraDirs"
   role: BINDING_ROLE_TESTS
@@ -228,7 +228,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountInodesAreKernelIDs"
   role: BINDING_ROLE_TESTS
@@ -318,7 +318,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-identity"
-  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  content_hash: "b30b527b7b00893fd304c2e64a1b94e1baf7c4bfbe1fb789e8db2d7983069295"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestVolumeIdentityIsKernelIdentity"
   role: BINDING_ROLE_TESTS

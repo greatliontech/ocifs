@@ -75,7 +75,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mount-ro"
-  content_hash: "c766557047041b0745f4b5cd25d653208efdf9add83494b709af02a0b2242bbb"
+  content_hash: "cfae6809999fbc5b7d4beb62f20b23ce712ca617276938d156905c9e6e5d1e80"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
   role: BINDING_ROLE_IMPLEMENTS
@@ -84,7 +84,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mount-ro"
-  content_hash: "c766557047041b0745f4b5cd25d653208efdf9add83494b709af02a0b2242bbb"
+  content_hash: "cfae6809999fbc5b7d4beb62f20b23ce712ca617276938d156905c9e6e5d1e80"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountReadOnlyKernelEnforced"
   role: BINDING_ROLE_TESTS
@@ -183,7 +183,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mount-ro"
-  content_hash: "c766557047041b0745f4b5cd25d653208efdf9add83494b709af02a0b2242bbb"
+  content_hash: "cfae6809999fbc5b7d4beb62f20b23ce712ca617276938d156905c9e6e5d1e80"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPropertyMountMutationsDenied"
   role: BINDING_ROLE_TESTS

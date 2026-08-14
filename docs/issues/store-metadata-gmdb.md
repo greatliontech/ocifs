@@ -14,9 +14,9 @@ adopted), which fits this exactly:
   daemon holds mounts, without an RPC surface.
 
 Scope boundary: store bookkeeping only. The writable layer's
-per-syscall metadata stays fs-native (see
-writable-upper-fs-native.md); a database belongs under the store, not
-under the filesystem.
+per-syscall metadata stays fs-native (docs/specs/writable.md,
+projection.md REQ-proj-upper-truth); a database belongs under the
+store, not under the filesystem.
 
 Lands: when store GC or cross-process store inspection is first
 needed; may precede other gmdb consumers — consumer ordering is the

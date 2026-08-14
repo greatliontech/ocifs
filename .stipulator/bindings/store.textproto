@@ -48,7 +48,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
@@ -57,7 +57,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestIngestRoundtrip"
   role: BINDING_ROLE_TESTS
@@ -66,7 +66,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPreLayoutStoreRejected"
   role: BINDING_ROLE_TESTS
@@ -183,7 +183,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.referenceStore.pathForRef"
   role: BINDING_ROLE_IMPLEMENTS
@@ -192,7 +192,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestRefPathsPortable"
   role: BINDING_ROLE_TESTS
@@ -201,7 +201,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-layout"
-  content_hash: "5c0ba6c46b96a22c35b9da73a85ec49aeda996dca51bae1324c9d0eb0e28b7e0"
+  content_hash: "4278e75a84cf1b2c76bcc8b5dcd2ee2521f10edb6ae943fabfeb2cf7ac32aef7"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyRefEncodingInjective"
   role: BINDING_ROLE_TESTS

@@ -41,11 +41,11 @@ const (
 	// viewIDBase starts the view-derived range: view entries are
 	// assigned 16 upward in unified-view order.
 	viewIDBase ID = 16
-	// syntheticIDBase starts the non-view range, from which
+	// syntheticIDBase starts the [2^62, 2^63) partition, from which
 	// consumer-configured extra directories draw; upper-born entries
-	// of a future writable stage draw from a disjoint partition of
-	// the non-view space above it, so upper-born identity can never
-	// shift with the extras configuration (REQ-proj-identity).
+	// of the writable stage draw from the disjoint [2^61, 2^62)
+	// partition below it, ino-derived, so upper-born identity can
+	// never shift with the extras configuration (REQ-proj-identity).
 	syntheticIDBase ID = 1 << 62
 )
 

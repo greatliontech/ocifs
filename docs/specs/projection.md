@@ -79,12 +79,25 @@ order, allocation history, or backend state — with the root at ID 2
 and view entries assigned from 16 upward. In a writable projection,
 a view path keeps its view-derived ID while the upper shadows it in
 place — content or metadata replacing the same logical object
-(identity follows the logical path-entry, not the storage) — while
+(identity follows the logical path-entry, not the storage), except
+link-driven copy-up: hardlinking migrates the target to the
+upper-born identity it shares with its link (`writable.md`
+REQ-writable-hardlink) — while
 a view path that is deleted in the upper and later recreated is a
 new object and draws upper-born identity, exactly like paths absent
-from the view, whose IDs come from a disjoint non-view range —
-consumer-configured extra directories now, upper-born entries in a
-partition of their own when a writable stage lands. Because images
+from the view, whose IDs come from disjoint non-view ranges —
+consumer-configured extras and synthetics in [2^62, 2^63), and
+upper-born entries in [2^61, 2^62), each derived from the upper
+entry's own filesystem inode number (partition base OR-ed with the
+inode) — a pure function of the storage that needs no allocation
+state, linked entries sharing one upper inode and so one ID. The
+derivation's envelope: an inode number at or above 2^61 fails the
+operation loudly rather than aliasing across partitions (no real
+filesystem assigns them); an upper inode backing a live projected
+object is pinned open for the object's lifetime, so the host cannot
+recycle the number while it is referenced; and upper-born IDs are
+stable across remounts of the same upper on the same filesystem —
+relocating the upper re-derives them. Because images
 are immutable, the same image projects the same IDs across remounts;
 unstable IDs break resumable enumeration cookies and any consumer
 caching by inode. Path-addressed backends (ProjFS) have no IDs and
@@ -170,13 +183,13 @@ time in it (images record no birth time).
 | names the platform namespace cannot hold | all names | all names | NTFS-illegal characters, trailing dot/space, reserved device names, components beyond 255 UTF-16 units: omitted + reported |
 | ro enforcement | kernel | error from every mutating op | pre-op vetoes + two declared residuals (REQ-proj-ro) |
 
-## Writable projections (forward contract)
+## Writable projections
 
 Two write models exist, dictated by the backends' natures; the
-detailed writable design (fs-native upper as truth, unprivileged
-fidelity via extended attributes) is deferred work and becomes spec
-when that stage starts. Two invariants are pinned now because the
-projection architecture must not foreclose them:
+detailed writable contract — the POSIX upper dialect, write
+semantics, fidelity overrides, crash consistency, and commit — is
+`writable.md`. Two architecture-level invariants live here because
+every projection backend answers to them:
 
 **REQ-proj-upper-truth** (invariant): In both write models —
 provider-mediated (FUSE, FSKit: the projection applies writes to a

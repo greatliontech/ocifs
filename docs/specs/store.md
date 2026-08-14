@@ -27,7 +27,9 @@ for regular files, the content-CAS key of the entry's bytes.
 **REQ-store-layout** (wire): The store root MUST contain exactly
 these persisted tiers: `oci/` — an OCI image layout per the OCI
 image-layout spec (`index.json`, `oci-layout`, `blobs/` holding
-indexes, manifests, configs, and compressed layer blobs, addressed by
+indexes, manifests, configs, and layer blobs as distributed —
+compressed for pulled images, uncompressed tar for locally committed
+layers (`writable.md` REQ-writable-commit) — addressed by
 their OCI digests), append-only except for garbage collection;
 `blobs/<algorithm>/<hex>` — the content CAS, entries immutable once
 written and shared freely across layers and images; `layers/<algorithm>/<hex>`
@@ -68,7 +70,12 @@ mountpoint is a sibling of the bookkeeping, never its parent, so a
 live mount cannot shadow its own state; written only by that mount's
 serving and orchestrating processes; `exports/<algorithm>/<hex>` — materialized
 root filesystems keyed by the digest of the manifest actually
-materialized (behavioral contract in `export.md`).
+materialized (behavioral contract in `export.md`);
+`uppers/<name>/upper` — store-managed writable uppers in the POSIX
+upper dialect (`writable.md`), the name a single path element under
+the mount-id rule (REQ-api-mount-id), with the upper's bookkeeping
+(the base binding) as sibling files under `uppers/<name>/`, never
+inside the dialect tree.
 
 **REQ-store-adopt** (behavior): Store initialization MUST refuse a
 work directory holding store state it does not recognize as this
@@ -167,6 +174,19 @@ cached content
 completes under `Never` with no network access. Fetching by digest
 needs no signature machinery: every fetched byte is verified against
 the requested digest (REQ-store-ingest-verified).
+
+**REQ-store-local-images** (behavior): Images the store itself
+produces (committed writable uppers — `writable.md`
+REQ-writable-commit-image) MUST be acquirable by digest under the
+local repository namespace `ocifs.local/…`, whose content is by
+construction fully materialized. The reservation is behavioral:
+ocifs never consults the network for a reference under this
+namespace, whatever the surrounding DNS makes of the name (a missing
+piece is store damage, failing as under `Never`) — so a local
+identity can never be served, or shadowed, by a remote registry.
+The rule overrides the pull policy wholesale: under `Always` a local
+reference undergoes no revalidation — there is no remote to
+revalidate against.
 
 ## Platform selection
 
