@@ -47,9 +47,12 @@ inspecting CLI — reads the same record. The persisted encoding is
 `projection-report.json` in the mount's state directory: a JSON
 document whose `entries` array (always present — an empty report is
 `{"entries":[]}`, distinguishable from an absent file) carries per
-entry the view `path`, a `disposition` (`omitted` or `altered`), a
-symbolic `reason`, and an optional free-text `detail`; the file is
-published atomically.
+entry the view `path`, a `disposition` (`omitted` or `altered` for
+view entries; `residual` for the read-only residuals REQ-proj-ro
+declares, whose `path` is then the foreign path), a symbolic
+`reason`, and an optional free-text `detail`; the file is published
+atomically, and a projection that observes residuals republishes it
+with the accumulated rows.
 
 ## Out-of-process serving
 
@@ -122,13 +125,23 @@ mutation of every projected entry to the strongest degree its
 backend affords: kernel `ro` on FUSE (full denial), a read-only
 error from every mutating operation on FSKit (full denial), and
 pre-operation vetoes on ProjFS — content (convert-to-full), name
-(rename), existence (delete), hardlinking — which leave exactly two
-declared residuals, both recorded in the projection report: creation
-of *new* files inside the virtualization root, and metadata changes
-(attributes, timestamps, ACLs) on projected placeholders — neither
-has a deniable pre-operation on the platform. Residual foreign
-files and metadata dirt never alter projected entries' *content* as
-served.
+(rename), existence (delete), hardlinking — applied to projected
+entries only: foreign files (paths absent from the projection) are
+outside the read-only contract's scope and stay freely mutable by
+their creators. The vetoes leave exactly two declared residuals:
+creation and subsequent modification of foreign files inside the
+virtualization root — recorded in the projection report — and
+metadata changes (attributes, timestamps, ACLs) on projected
+placeholders, for which the platform surfaces no notification and
+which are therefore declared here rather than recorded; neither has
+a deniable pre-operation on the platform. Residual foreign files
+and metadata dirt never alter projected entries' *content* as
+served. At unmount, projected placeholder state under the
+virtualization root is removed — the mountpoint retains only
+residual foreign files and the directory spine containing them —
+while the root's (and a retained spine directory's) reparse marking
+may persist (harmless to re-mounting; the provider tolerates a
+marked root).
 
 ## Fidelity envelopes
 
@@ -138,8 +151,10 @@ entry attributes and kinds exactly to the extent of its envelope in
 the table below — outside the envelope, the table's stated omission
 or default applies, and nothing is silently approximated beyond it.
 Within the timestamps row, an unrecorded access or change time
-presents as the entry's modification time, and an unrecorded
-modification time as the Unix epoch — never as a zero-time artifact.
+presents as the entry's modification time, an unrecorded
+modification time as the Unix epoch — never as a zero-time artifact
+— and a backend with a creation-time slot carries the modification
+time in it (images record no birth time).
 
 | Aspect | FUSE (linux) | FSKit (darwin) | ProjFS (windows) |
 |---|---|---|---|
@@ -152,6 +167,7 @@ modification time as the Unix epoch — never as a zero-time artifact.
 | FIFOs | typed node | typed node | omitted + reported |
 | char/block devices | typed node, no device numbers | typed node, no device numbers | omitted + reported |
 | case | sensitive | declared sensitive | insensitive (REQ-proj-case) |
+| names the platform namespace cannot hold | all names | all names | NTFS-illegal characters, trailing dot/space, reserved device names, components beyond 255 UTF-16 units: omitted + reported |
 | ro enforcement | kernel | error from every mutating op | pre-op vetoes + two declared residuals (REQ-proj-ro) |
 
 ## Writable projections (forward contract)

@@ -1,3 +1,5 @@
+//go:build linux
+
 package layer
 
 // The extraction oracle is an independent reference implementation

@@ -66,7 +66,10 @@ container, and mounting against an inaccessible store fails.
 caller's target path, or a store-managed mount directory when none
 is given; relative targets resolve against the process working
 directory. After a successful unmount the mountpoint directory
-remains (empty).
+remains, holding nothing the projection served — on a backend with
+declared read-only residuals (`projection.md` REQ-proj-ro), the
+residual foreign files remain, with the directory spine containing
+them, and only those.
 
 **REQ-api-mount-id** (behavior): A caller-supplied mount id MUST be
 a single path element (no separators, not `.` or `..`) — anything

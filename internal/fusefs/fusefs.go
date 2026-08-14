@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package fusefs serves a projection kernel tree as a read-only FUSE
 // filesystem — the linux backend glue (docs/specs/projection.md).
 // Inode numbers are the kernel's view-derived IDs, enumeration reads

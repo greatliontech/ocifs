@@ -513,3 +513,104 @@ func TestExtraDirConflictIndependentOfCapabilities(t *testing.T) {
 		t.Fatalf("byte comparator: distinct spelling rejected: %v", err)
 	}
 }
+
+// TestNameUnrepresentableOmittedAndReported pins the
+// names-the-platform-cannot-hold row of REQ-proj-fidelity: entries
+// rejected by the capability's name validator are omitted and
+// reported, their subtrees by containment, and identity assignment
+// is unaffected.
+func TestNameUnrepresentableOmittedAndReported(t *testing.T) {
+	view := mustView(t,
+		lfile("ok"),
+		ldir("bad:dir"),
+		lfile("bad:dir/inside"),
+		lfile("trailing."),
+	)
+	caps := capsFull
+	caps.ValidName = func(name string) bool {
+		return !strings.ContainsAny(name, ":") && !strings.HasSuffix(name, ".")
+	}
+	p := mustNew(t, view, nil, caps)
+
+	if _, ok := p.Lookup(p.Root(), "ok"); !ok {
+		t.Fatal("valid name omitted")
+	}
+	for _, name := range []string{"bad:dir", "trailing."} {
+		if _, ok := p.Lookup(p.Root(), name); ok {
+			t.Fatalf("unrepresentable name %q presented", name)
+		}
+	}
+
+	reasons := map[string]Reason{}
+	for _, re := range p.Report().Entries {
+		reasons[re.Path] = re.Reason
+	}
+	if reasons["bad:dir"] != ReasonNameUnrepresentable {
+		t.Fatalf("bad:dir not reported unrepresentable: %v", p.Report().Entries)
+	}
+	if reasons["trailing."] != ReasonNameUnrepresentable {
+		t.Fatalf("trailing. not reported: %v", p.Report().Entries)
+	}
+	if reasons["bad:dir/inside"] != ReasonNameUnrepresentable {
+		t.Fatalf("contained child not reported with inherited reason: %v", p.Report().Entries)
+	}
+
+	// Identity is unmoved by the validator (REQ-proj-identity).
+	okEntry, _ := p.Lookup(p.Root(), "ok")
+	full := mustNew(t, view, nil, capsFull)
+	okFull, _ := full.Lookup(full.Root(), "ok")
+	if okEntry.ID() != okFull.ID() {
+		t.Fatalf("validator shifted IDs: %d vs %d", okEntry.ID(), okFull.ID())
+	}
+}
+
+// TestExtraDirUnrepresentableNameRejected: configured extra
+// directories are validated against the platform namespace like any
+// conflict — a name the backend cannot hold fails construction
+// (REQ-proj-fidelity, api.md REQ-api-extra-dirs).
+func TestExtraDirUnrepresentableNameRejected(t *testing.T) {
+	view := mustView(t, lfile("ok"))
+	caps := capsFull
+	caps.ValidName = func(name string) bool { return !strings.ContainsAny(name, ":") }
+	if _, err := New(view, []string{"bad:extra"}, caps); err == nil {
+		t.Fatal("unrepresentable extra dir accepted")
+	}
+	if _, err := New(view, []string{"nested/bad:part"}, caps); err == nil {
+		t.Fatal("unrepresentable nested extra component accepted")
+	}
+	if _, err := New(view, []string{"fine"}, caps); err != nil {
+		t.Fatalf("valid extra rejected: %v", err)
+	}
+}
+
+// TestUnrepresentableViewNameNeverReachesComparator: the extras walk
+// must not hand validator-rejected view names (which may carry bytes
+// like NUL that a platform comparator rejects outright) to the
+// comparator.
+func TestUnrepresentableViewNameNeverReachesComparator(t *testing.T) {
+	view := mustView(t, lfile("nul\x00byte"), ldir("anchor"))
+	caps := Capabilities{
+		Symlinks: true, FIFOs: true, Devices: true,
+		ValidName: func(name string) bool { return !strings.ContainsRune(name, 0) },
+		Compare: func(a, b string) int {
+			for _, s := range [2]string{a, b} {
+				if strings.ContainsRune(s, 0) {
+					panic("comparator saw a NUL byte")
+				}
+			}
+			return strings.Compare(a, b)
+		},
+	}
+	p, err := New(view, []string{"anchor/sub"}, caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Assert absence without Lookup: backend namespaces cannot carry
+	// NUL, so Lookup never sees such a name in production, and the
+	// panicking comparator would reject the probe itself.
+	for _, c := range p.Root().Children() {
+		if strings.ContainsRune(c.Name(), 0) {
+			t.Fatalf("invalid name presented: %q", c.Name())
+		}
+	}
+}

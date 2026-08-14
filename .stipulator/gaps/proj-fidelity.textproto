@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-fidelity"
-reason: "The kernel and the FUSE backend pin the linux arm (tree, envelope, content reads, kernel-ro); the ProjFS and FSKit arms — their envelope columns, read paths, veto/error enforcement, and same-tree parity — land with those backends"
-lands { manual { condition: "ProjFS and FSKit backends land and pin their fidelity, content, read-only, and same-tree clauses" } }
+reason: "Kernel + FUSE arms pinned; the ProjFS backend and its windows suite are authored and cross-compiled but unexecuted (docs/issues/projfs-windows-validation.md), and the FSKit arm is unbuilt"
+lands { manual { condition: "windows validation run reports back with findings dispositioned, and the FSKit backend lands and pins its arm" } }

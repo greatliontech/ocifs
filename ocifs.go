@@ -12,11 +12,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/greatliontech/ocifs/internal/fusefs"
-	"github.com/greatliontech/ocifs/internal/projection"
 	"github.com/greatliontech/ocifs/internal/store"
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 // PullPolicy controls when acquisition consults the registry;
@@ -152,9 +148,16 @@ func (o *OCIFS) Pull(ctx context.Context, imageRef string, opts ...PullOption) (
 	return &Image{img: img}, nil
 }
 
+// mountServer is what a platform backend returns from platformMount:
+// a live projection that serves until unmounted.
+type mountServer interface {
+	Wait()
+	Unmount() error
+}
+
 type ImageMount struct {
 	ofs        *OCIFS
-	srv        *fuse.Server
+	server     mountServer
 	img        *store.Image
 	mountPoint string
 	id         string
@@ -167,11 +170,11 @@ func (im *ImageMount) ConfigFile() *v1.ConfigFile {
 }
 
 func (im *ImageMount) Wait() {
-	im.srv.Wait()
+	im.server.Wait()
 }
 
 func (im *ImageMount) Unmount() error {
-	return im.srv.Unmount()
+	return im.server.Unmount()
 }
 
 func (im *ImageMount) MountPoint() string {
@@ -215,10 +218,8 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		opt(im)
 	}
 
-	// Acquire the image and build the projection before creating any
-	// per-mount state, so a failed pull or a configuration conflict
-	// (extra dirs, api.md REQ-api-extra-dirs) leaves no orphan under
-	// mounts/.
+	// Acquire the image before creating any per-mount state, so a
+	// failed pull leaves no orphan under mounts/.
 	img, err := o.store.Image(im.ctx, imgRef, im.platform)
 	if err != nil {
 		return nil, err
@@ -229,22 +230,18 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	if err != nil {
 		return nil, err
 	}
-	proj, err := projection.New(view, o.extraDirs, fusefs.Capabilities())
-	if err != nil {
-		return nil, err
-	}
 
 	// Every mount owns per-mount state — the projection report's home
 	// (REQ-proj-report) — whether or not the caller supplied a
-	// mountpoint. Removed again on any later failure (im.srv is set
-	// only on success); a caller-supplied target is caller-owned and
-	// never touched.
+	// mountpoint. Removed again on any later failure (im.server is
+	// set only on success); a caller-supplied target is caller-owned
+	// and never touched.
 	stateDir, mountDir, err := o.store.NewMountState(im.id)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if im.srv == nil {
+		if im.server == nil {
 			os.RemoveAll(stateDir)
 		}
 	}()
@@ -261,31 +258,11 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	if err := proj.Report().WriteFile(filepath.Join(stateDir, projection.ReportFileName)); err != nil {
-		return nil, err
-	}
-
-	srv, err := fs.Mount(im.mountPoint, fusefs.New(proj, o.store.BlobPath), &fs.Options{
-		RootStableAttr: fusefs.RootStableAttr(),
-		// Recorded modes serve verbatim: without this, go-fuse
-		// rewrites a recorded 0000 mode (/etc/shadow-class entries)
-		// to 0644 (REQ-proj-fidelity).
-		NullPermissions: true,
-		MountOptions: fuse.MountOptions{
-			// Kernel-level read-only is FUSE's strongest denial
-			// (REQ-api-mount-ro, REQ-proj-ro); the mount is private
-			// to the invoking user (no allow_other).
-			Options:     []string{"ro"},
-			AllowOther:  false,
-			Name:        "ocifs",
-			DirectMount: true,
-			Debug:       false, // Set to true for debugging
-		},
-	})
+	srv, err := platformMount(o, view, stateDir, im.mountPoint)
 	if err != nil {
 		return nil, err
 	}
-	im.srv = srv
+	im.server = srv
 
 	return im, nil
 }

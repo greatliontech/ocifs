@@ -39,11 +39,13 @@ entry, the verification seam, and Export.
       kernel (short-read fix, directory attributes, mount-id
       validation); unionfs-equivalent tests over fixtures plus a
       network-free CLI smoke test.
-- [ ] 7. ProjFS backend (windows): projfs-go glue — per-enumID
+- [x] 7. ProjFS backend (windows): projfs-go glue — per-enumID
       cursors over comparator-sorted snapshots, placeholder
       ContentID = content digest, aligned-buffer reads, symlink
       feature probe with omit+report fallback, read-only pre-op
-      vetoes with the two declared residuals; windows CI run.
+      vetoes with the two declared residuals; windows test suite
+      authored for a user-side run on a real machine
+      (docs/issues/projfs-windows-validation.md).
 - [ ] 8. FSKit backend (darwin): portable Volume implementation in
       the kernel's terms (tested on linux), darwin registration
       glue, `cmd/ocifs-fskit` appex main, `ocifs.app` host-bundle

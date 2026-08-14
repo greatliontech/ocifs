@@ -7,6 +7,12 @@ report, and the empty `mnt/` behind, and a later mount reusing the
 same id fails with EEXIST. Auto-generated ids accumulate one
 directory per mount for the store's lifetime.
 
+A related sharpening: the platform-split mount orchestration creates
+the state directory before the platform backend builds its
+projection, so a pure configuration error (an extra-dir conflict)
+consumes a caller-supplied id even though the state is removed again
+— id reuse would dissolve this too.
+
 The store spec's overview describes per-mount state as "ephemeral
 bookkeeping that dies with its mount", but no requirement pins a
 reclamation point, and REQ-api-mountpoint requires the mountpoint

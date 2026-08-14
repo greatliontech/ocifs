@@ -91,6 +91,12 @@ type Capabilities struct {
 	// Names comparing equal collide (REQ-proj-case): the first entry
 	// in unified-view order wins, losers are reported.
 	Compare func(a, b string) int
+	// ValidName reports whether the platform namespace can hold a
+	// name (REQ-proj-fidelity: NTFS-illegal characters, trailing
+	// dot/space, reserved device names on ProjFS). Nil means every
+	// name is representable. An entry with an unrepresentable name is
+	// omitted and reported, its subtree by containment.
+	ValidName func(name string) bool
 	// Symlinks, FIFOs, and Devices declare whether the backend can
 	// present the kind; an unsupported kind is omitted and reported.
 	Symlinks bool
@@ -191,6 +197,11 @@ type Projection struct {
 
 // Root returns the projection root (ID 2).
 func (p *Projection) Root() *Entry { return p.root }
+
+// Capabilities returns the declared envelope this projection was
+// built under, so a backend can recover its own declaration (the
+// comparator, the symlink decision) without re-plumbing it.
+func (p *Projection) Capabilities() Capabilities { return p.caps }
 
 // ByID resolves a presented entry by numeric identity.
 func (p *Projection) ByID(id ID) (*Entry, bool) {
@@ -381,6 +392,13 @@ func New(view *layer.View, extraDirs []string, caps Capabilities) (*Projection, 
 			return nil, fmt.Errorf("view entry %q: parent %q is not a directory", name, dir)
 		}
 
+		if caps.ValidName != nil && !caps.ValidName(base) {
+			p.report.add(name, ReasonNameUnrepresentable, "")
+			if kind == KindDir {
+				omitted[name] = ReasonNameUnrepresentable
+			}
+			continue
+		}
 		if ok, reason := caps.supported(kind); !ok {
 			p.report.add(name, reason, "")
 			if kind == KindDir {
@@ -450,6 +468,16 @@ func (p *Projection) addExtraDirs(extraDirs []string, viewKids map[string][]view
 		if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 			return fmt.Errorf("extra directory %q escapes the mount root", d)
 		}
+		if p.caps.ValidName != nil {
+			for _, part := range strings.Split(clean, "/") {
+				if !p.caps.ValidName(part) {
+					// Same configuration-error class as a view
+					// conflict: the platform namespace cannot hold
+					// the configured name (REQ-proj-fidelity).
+					return fmt.Errorf("extra directory %q: %q is not representable on this platform: %w", d, part, ErrNotDir)
+				}
+			}
+		}
 		dirs = append(dirs, clean)
 	}
 	sort.Strings(dirs)
@@ -471,6 +499,13 @@ func (p *Projection) addExtraDirs(extraDirs []string, viewKids map[string][]view
 			// synthetic directory must never occupy an omitted view
 			// entry's name slot.
 			for _, k := range viewKids[cur.path] {
+				// Unrepresentable view names are omitted, never
+				// presented, so they cannot conflict — and the
+				// platform comparator must not see them (it may
+				// reject bytes like NUL that the validator filters).
+				if p.caps.ValidName != nil && !p.caps.ValidName(k.name) {
+					continue
+				}
 				if k.nonDir && p.caps.compare(k.name, part) == 0 {
 					return fmt.Errorf("extra directory %q: %q in %q exists as a non-directory in the view: %w", d, k.name, cur.path, ErrNotDir)
 				}

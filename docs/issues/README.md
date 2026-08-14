@@ -1,5 +1,9 @@
 # Issues
 
+- `docs/issues/projfs-windows-validation.md` — the ProjFS backend and
+  its windows test suite are authored and cross-compiled but
+  unexecuted. Lands: when the windows test run reports back and its
+  findings are dispositioned.
 - `docs/issues/mount-state-lifecycle.md` — per-mount state is never
   reclaimed and mount ids are single-use; reclamation design shares
   the dead-state recognition problem with store GC. Lands: when

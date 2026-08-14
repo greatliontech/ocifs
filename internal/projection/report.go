@@ -21,17 +21,24 @@ type Disposition string
 const (
 	DispositionOmitted Disposition = "omitted"
 	DispositionAltered Disposition = "altered"
+	// DispositionResidual records a read-only residual REQ-proj-ro
+	// declares (ProjFS): the path is the foreign path, not a view
+	// entry.
+	DispositionResidual Disposition = "residual"
 )
 
-// Reason is the symbolic cause of an omission or alteration.
+// Reason is the symbolic cause of an omission, alteration, or
+// residual.
 type Reason string
 
 const (
-	ReasonSymlinkUnsupported Reason = "symlink-unsupported"
-	ReasonFIFOUnsupported    Reason = "fifo-unsupported"
-	ReasonDeviceUnsupported  Reason = "device-unsupported"
-	ReasonCaseCollision      Reason = "case-collision"
-	ReasonKindUnknown        Reason = "kind-unknown"
+	ReasonSymlinkUnsupported  Reason = "symlink-unsupported"
+	ReasonFIFOUnsupported     Reason = "fifo-unsupported"
+	ReasonDeviceUnsupported   Reason = "device-unsupported"
+	ReasonCaseCollision       Reason = "case-collision"
+	ReasonKindUnknown         Reason = "kind-unknown"
+	ReasonNameUnrepresentable Reason = "name-unrepresentable"
+	ReasonResidualForeignFile Reason = "residual-foreign-file"
 )
 
 // ReportEntry records one omission or alteration relative to the

@@ -14,9 +14,10 @@ import (
 // case variants and kinds, so folded comparators collide and
 // envelopes omit.
 func genView(rt *rapid.T) *layer.View {
-	segGen := rapid.SampledFrom([]string{"a", "A", "b", "data", "Data", "DATA", "x1", "X1"})
+	segGen := rapid.SampledFrom([]string{"a", "A", "b", "data", "Data", "DATA", "x1", "X1", "b.", "a:b", "con"})
 	// 'S' (GNU sparse) exercises the unknown-typeflag arm; TypeLink
-	// exercises hardlink resolution.
+	// exercises hardlink resolution; "b."/"a:b"/"con" exercise the
+	// name-validity arm under a validator-bearing capability set.
 	kindGen := rapid.SampledFrom([]byte{tar.TypeReg, tar.TypeDir, tar.TypeSymlink, tar.TypeFifo, tar.TypeChar, tar.TypeBlock, tar.TypeLink, 'S'})
 
 	n := rapid.IntRange(0, 10).Draw(rt, "n")
@@ -69,6 +70,11 @@ func genCaps(rt *rapid.T) Capabilities {
 	}
 	if rapid.Bool().Draw(rt, "folded") {
 		caps.Compare = foldCompare
+	}
+	if rapid.Bool().Draw(rt, "validator") {
+		caps.ValidName = func(name string) bool {
+			return !strings.ContainsAny(name, ":") && !strings.HasSuffix(name, ".") && strings.ToLower(name) != "con"
+		}
 	}
 	return caps
 }
