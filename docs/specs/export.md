@@ -24,12 +24,18 @@ REQ-proj-case). Permission bits — including setuid, setgid, and sticky — are
 applied from each entry's recorded header, to files and directories
 alike (directory permissions may be applied after the directory's
 contents are written, so restrictive modes cannot block the export
-itself). Modification times are applied from the recorded headers.
-Symlinks are created with their recorded target verbatim, including
-absolute and dangling targets (they are interpreted inside the
-consumer's root, not the host's). Character and block device nodes
-are **omitted**: creating them requires privilege, and rootfs
-consumers provide their own `/dev`; export succeeds without them.
+itself); symlink permission bits are applied where the platform
+stores them (darwin), while linux fixes symlink permissions at 0777
+in the kernel — a platform semantic, not an export choice.
+Modification times are applied from the recorded headers. Symlinks
+are created with their recorded target verbatim, including absolute
+and dangling targets (they are interpreted inside the consumer's
+root, not the host's). Character and block device nodes are
+**omitted**: creating them requires privilege, and rootfs consumers
+provide their own `/dev`; export succeeds without them. On a
+platform whose filesystems hold no FIFO nodes (windows), exporting a
+FIFO-bearing view fails naming the entry — exact or refused applies
+to node types exactly as to colliding paths.
 
 **REQ-export-ownership** (behavior): Ownership (uid/gid) MUST be
 applied when the process has the privilege to do so; otherwise
@@ -76,9 +82,13 @@ host.
 
 **REQ-export-atomic** (invariant): An export directory observable at
 its final path MUST be complete: materialization happens in a
-temporary sibling directory renamed into place. A crash leaves
-either no directory or a stale temporary, never a partial tree at
-the final path.
+temporary sibling directory renamed into place — for a
+caller-supplied target, the sibling lives in the target's parent
+directory. A caller-supplied target must not already exist; an
+existing target — empty or populated — refuses with the target
+undisturbed. A crash leaves either no directory or a stale
+temporary, never a partial tree at the final path; stale temporaries
+are inert and may be deleted freely.
 
 **REQ-export-cache** (behavior): Store-managed exports live under
 the store's `exports/` tier, keyed by the digest of the manifest

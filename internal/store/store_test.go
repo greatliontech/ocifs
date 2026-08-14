@@ -288,6 +288,7 @@ func TestIngestRoundtrip(t *testing.T) {
 		filepath.Join(dir, "blobs"),
 		filepath.Join(dir, "layers"),
 		filepath.Join(dir, "mounts"),
+		filepath.Join(dir, "exports"),
 	} {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("missing tier path %s: %v", p, err)

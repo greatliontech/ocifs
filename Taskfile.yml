@@ -22,8 +22,8 @@ tasks:
       # normal suite and hand probes instead.
       OCIFS_MUTATION_CAMPAIGN: "1"
     cmds:
-      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection .scratch/fusefs .scratch/fskitfs
+      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection .scratch/fusefs .scratch/fskitfs .scratch/export
       - >-
         gomutant run --changed HEAD --timeout 0
         --bracket-path .scratch/layer --bracket-path .scratch/store --bracket-path .scratch/cas
-        --bracket-path .scratch/projection --bracket-path .scratch/fusefs --bracket-path .scratch/fskitfs
+        --bracket-path .scratch/projection --bracket-path .scratch/fusefs --bracket-path .scratch/fskitfs --bracket-path .scratch/export

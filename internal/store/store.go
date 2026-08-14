@@ -129,7 +129,7 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		return nil, err
 	}
 
-	for _, dir := range []string{"refs", "blobs", "layers", "oci", "mounts"} {
+	for _, dir := range []string{"refs", "blobs", "layers", "oci", "mounts", "exports"} {
 		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,146 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-export-fidelity"
+  content_hash: "c9a726c52a21f5d9d282530c4f11fa75080a855968fd01f4aba67a5918c6ad14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.Materialize"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a21cd0e97b7d192dc1d1cca7ec8aaf08751f172f6a81748547d96556fb15b444"
+}
+
+bindings {
+  requirement_id: "REQ-export-fidelity"
+  content_hash: "c9a726c52a21f5d9d282530c4f11fa75080a855968fd01f4aba67a5918c6ad14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestPropertyExportMatchesView"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1fd71d87ac1ee03dd01947ef3d7ee0cc34659677e5c7abdf332d3ecb2b5e82d3"
+}
+
+bindings {
+  requirement_id: "REQ-export-fidelity"
+  content_hash: "c9a726c52a21f5d9d282530c4f11fa75080a855968fd01f4aba67a5918c6ad14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestRootEntryAttributesApply"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "cdda0f4a99beccb800b4b4015917b6adc072be277f6a1e03f06c3d350fdc4d5f"
+}
+
+bindings {
+  requirement_id: "REQ-export-fidelity"
+  content_hash: "c9a726c52a21f5d9d282530c4f11fa75080a855968fd01f4aba67a5918c6ad14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestCollisionErrorNamesBothPaths"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "004f3e9adc1fc1956040303721e4b2a8ac02e25267c0f263ba9d2c8becd22837"
+}
+
+bindings {
+  requirement_id: "REQ-export-ownership"
+  content_hash: "86291c175238ac7a16b0728cd1a98ee6588dd94a816fb07afc55ec09cd291da9"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestExportOwnershipUnprivileged"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8358e74d8779be8579931582973860becc8cae1dc6a297bb4766cfc8695b82c4"
+}
+
+bindings {
+  requirement_id: "REQ-export-copy"
+  content_hash: "1c2c70186bc9c648a71412cff3a799f96845b0cffe15f335bcd97d791c3f94c7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestHardlinkStaleCaptureCopies"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9d39966256bf428e1aecc006199a0ccd04596a8e4dacba2edb389f035f9a9d6b"
+}
+
+bindings {
+  requirement_id: "REQ-export-copy"
+  content_hash: "1c2c70186bc9c648a71412cff3a799f96845b0cffe15f335bcd97d791c3f94c7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestExportImmutableStore"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c4d8937c490473f7366306e4591d0224cbfd52a000b2e721f442d02f86257a96"
+}
+
+bindings {
+  requirement_id: "REQ-export-immutable"
+  content_hash: "1071f44d2a69244b1946757f1626bebcaf7ec45456654bdf4219d2fe16ad134c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestPropertyExportMatchesView"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1fd71d87ac1ee03dd01947ef3d7ee0cc34659677e5c7abdf332d3ecb2b5e82d3"
+}
+
+bindings {
+  requirement_id: "REQ-export-immutable"
+  content_hash: "1071f44d2a69244b1946757f1626bebcaf7ec45456654bdf4219d2fe16ad134c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestExportImmutableStore"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c4d8937c490473f7366306e4591d0224cbfd52a000b2e721f442d02f86257a96"
+}
+
+bindings {
+  requirement_id: "REQ-export-contained"
+  content_hash: "174640d716bddf22d477d31d4f4b5314a43a67efb0e200ad4e34b5fa9cc33176"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.Materialize"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a21cd0e97b7d192dc1d1cca7ec8aaf08751f172f6a81748547d96556fb15b444"
+}
+
+bindings {
+  requirement_id: "REQ-export-contained"
+  content_hash: "174640d716bddf22d477d31d4f4b5314a43a67efb0e200ad4e34b5fa9cc33176"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestPropertyExportMatchesView"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1fd71d87ac1ee03dd01947ef3d7ee0cc34659677e5c7abdf332d3ecb2b5e82d3"
+}
+
+bindings {
+  requirement_id: "REQ-export-atomic"
+  content_hash: "02a8ad8b6226de1c6eb5d351c031f1a6c27daeac380d25c51276b0372707558e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "b5cc9bb5defbe8ddaf9c5fcd7566c80616d39167cbddba4a6875d7328749fdf1"
+}
+
+bindings {
+  requirement_id: "REQ-export-atomic"
+  content_hash: "02a8ad8b6226de1c6eb5d351c031f1a6c27daeac380d25c51276b0372707558e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyExportAtomicOnDamage"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "c1259e64cb8480a801005c33ee04823405a5199fb6be642207da865ef01d87e7"
+}
+
+bindings {
+  requirement_id: "REQ-export-cache"
+  content_hash: "8631613b66f349814422f666f616e51b624dd87c1bfa0ecd55a18c9588bba7c9"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.Export"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "3245bb38a7bb925c7999f2a4757c072b0a5e71ca17247808cee20e29000192cf"
+}
+
+bindings {
+  requirement_id: "REQ-export-cache"
+  content_hash: "8631613b66f349814422f666f616e51b624dd87c1bfa0ecd55a18c9588bba7c9"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestExportCachedServedAsIs"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "95526c8ee05347b74b553be6024259921e4e0d9c2501b899bb310804f48159bb"
+}
+
+bindings {
+  requirement_id: "REQ-export-cache"
+  content_hash: "8631613b66f349814422f666f616e51b624dd87c1bfa0ecd55a18c9588bba7c9"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestExportSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b0361a9c7eef80482ab036014992e855f4ad908ac2bfbee20cb95e43ac68a522"
+}

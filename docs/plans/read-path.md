@@ -53,7 +53,7 @@ entry, the verification seam, and Export.
       and enabled — user-side act).
 - [x] 9. Verification seam: consumer-supplied verifier hook between
       top-level resolution and content materialization.
-- [ ] 10. Export: materialize the unified view into a directory per
+- [x] 10. Export: materialize the unified view into a directory per
       `export.md` on `os.Root` (write-time symlink containment,
       copy-not-hardlink, modes, atomic completion, store-managed
       cache).

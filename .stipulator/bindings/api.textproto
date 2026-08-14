@@ -198,3 +198,21 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "6ad254bfb98b8540f7788526297e18dde5930ca8aaba658031835d2bcdddbe6b"
 }
+
+bindings {
+  requirement_id: "REQ-api-export"
+  content_hash: "4cbeae8389c07278f8be90486ff544fa6f02862f231fce0b22b867793c7aca18"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Export"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "45084470208733f494839edab98c6fa305e45011e3eb330ed39fdb27dab28d05"
+}
+
+bindings {
+  requirement_id: "REQ-api-export"
+  content_hash: "4cbeae8389c07278f8be90486ff544fa6f02862f231fce0b22b867793c7aca18"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestExportSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b0361a9c7eef80482ab036014992e855f4ad908ac2bfbee20cb95e43ac68a522"
+}

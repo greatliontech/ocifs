@@ -23,6 +23,12 @@ var seq atomic.Uint64
 func Dir(t testing.TB, tier string) string {
 	t.Helper()
 	dir := filepath.Join("..", "..", ".scratch", tier, strconv.FormatUint(seq.Add(1), 10))
+	// Freshness is enforced, not assumed: a killed test process (a
+	// mutation campaign's timed-out mutant) skips Cleanup and leaves
+	// residue exactly where the next process's sequence restarts.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
