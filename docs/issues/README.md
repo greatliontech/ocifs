@@ -1,5 +1,10 @@
 # Issues
 
+- `docs/issues/fskit-darwin-validation.md` — the FSKit backend's
+  portable core is linux-pinned; the platform half (signed appex,
+  bridge dispatch, orchestrated mount) awaits a darwin Tier-2 run.
+  Lands: when the darwin mount validation reports back and its
+  findings are dispositioned.
 - `docs/issues/projfs-windows-validation.md` — the ProjFS backend and
   its windows test suite are authored and cross-compiled but
   unexecuted. Lands: when the windows test run reports back and its

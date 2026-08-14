@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-ro"
-reason: "Kernel + FUSE arms pinned; the ProjFS backend and its windows suite are authored and cross-compiled but unexecuted (docs/issues/projfs-windows-validation.md), and the FSKit arm is unbuilt"
-lands { manual { condition: "windows validation run reports back with findings dispositioned, and the FSKit backend lands and pins its arm" } }
+reason: "All three backends are authored with their portable arms pinned (FUSE e2e on linux, ProjFS and FSKit at the portable layer); the platform halves await the deferred validation runs (docs/issues/projfs-windows-validation.md, docs/issues/fskit-darwin-validation.md)"
+lands { manual { condition: "windows and darwin validation runs report back with findings dispositioned" } }

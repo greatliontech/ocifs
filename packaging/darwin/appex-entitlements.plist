@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- RESTRICTED: authorized only by a provisioning profile from a
+	     paid Apple Developer team. -->
+	<key>com.apple.developer.fskit.fsmodule</key>
+	<true/>
+	<!-- Required on the extension, or pluginkit refuses to load it. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- The sandboxed extension can open the store ONLY inside this
+	     group container (api.md REQ-api-mount-darwin); replace with
+	     your team's registered group id, identically in
+	     host-entitlements.plist. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.tech.greatlion.ocifs</string>
+	</array>
+</dict>
+</plist>

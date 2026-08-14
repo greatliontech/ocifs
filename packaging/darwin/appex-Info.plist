@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>tech.greatlion.ocifs.OcifsFS</string>
+	<key>CFBundleName</key>
+	<string>OcifsFS</string>
+	<key>CFBundleDisplayName</key>
+	<string>ocifs file system</string>
+	<key>CFBundleExecutable</key>
+	<string>OcifsFS</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.4</string>
+
+	<!-- Structure mirrors Apple's shipping msdos appex:
+	     EXExtensionPrincipalClass is NESTED under
+	     EXAppExtensionAttributes and the entry point is Foundation's
+	     NSExtensionMain. -->
+	<key>EXAppExtensionAttributes</key>
+	<dict>
+		<key>EXExtensionPointIdentifier</key>
+		<string>com.apple.fskit.fsmodule</string>
+		<!-- MUST equal principalClass in cmd/ocifs-fskit/main_darwin.go. -->
+		<key>EXExtensionPrincipalClass</key>
+		<string>OcifsFS</string>
+		<!-- The `mount -F -t <FSShortName>` type name; MUST equal
+		     fskitShortName in mount_darwin.go. -->
+		<key>FSShortName</key>
+		<string>OcifsFS</string>
+		<!-- The store root arrives as a URL-backed path resource. -->
+		<key>FSSupportsPathURLs</key>
+		<true/>
+		<key>FSSupportsGenericURLResources</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

@@ -5,6 +5,8 @@ package ocifs
 import (
 	"path/filepath"
 
+	"github.com/greatliontech/ocifs/internal/store"
+
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
@@ -16,7 +18,7 @@ import (
 // platformMount builds the linux projection under the FUSE envelope,
 // persists its report beside the mountpoint, and serves it kernel-ro
 // (REQ-api-mount-ro, REQ-proj-ro).
-func platformMount(o *OCIFS, view *layer.View, stateDir, mountPoint string) (mountServer, error) {
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint string) (mountServer, error) {
 	proj, err := projection.New(view, o.extraDirs, fusefs.Capabilities())
 	if err != nil {
 		return nil, err

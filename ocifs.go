@@ -258,7 +258,7 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	srv, err := platformMount(o, view, stateDir, im.mountPoint)
+	srv, err := platformMount(o, imgRef, img, view, stateDir, im.mountPoint)
 	if err != nil {
 		return nil, err
 	}

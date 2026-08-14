@@ -2,5 +2,5 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-proj-server"
-reason: "The portable kernel (internal/projection) builds the one tree, envelope omissions, and report; serving them — presented bytes, read-only enforcement, declarative out-of-process configuration, per-backend envelopes — lands with the FUSE, ProjFS, and FSKit backends"
-lands { covered: "REQ-proj-server" }
+reason: "The declarative-config serving path is pinned portably (ParseConfig + loadVolume end to end offline) and the orchestration and appex are authored; the OS-spawned extension, bridge dispatch, sandbox/app-group behavior, and the real platform mount await the darwin Tier-2 run (docs/issues/fskit-darwin-validation.md)"
+lands { manual { condition: "darwin Tier-2 mount validation reports back with findings dispositioned" } }

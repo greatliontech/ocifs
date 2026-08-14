@@ -46,7 +46,7 @@ entry, the verification seam, and Export.
       vetoes with the two declared residuals; windows test suite
       authored for a user-side run on a real machine
       (docs/issues/projfs-windows-validation.md).
-- [ ] 8. FSKit backend (darwin): portable Volume implementation in
+- [x] 8. FSKit backend (darwin): portable Volume implementation in
       the kernel's terms (tested on linux), darwin registration
       glue, `cmd/ocifs-fskit` appex main, `ocifs.app` host-bundle
       recipe (Tier-2 mount validation runs when the appex is signed

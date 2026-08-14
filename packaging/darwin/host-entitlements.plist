@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The host CLI writes the store into the shared group container
+	     the sandboxed extension reads (api.md REQ-api-mount-darwin);
+	     the group id must match appex-entitlements.plist. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.tech.greatlion.ocifs</string>
+	</array>
+</dict>
+</plist>

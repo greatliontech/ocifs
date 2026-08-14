@@ -270,3 +270,111 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "495d53c65f7a52c67ded2ff327297759e541f8522da5b80cfd89bd8926a661e4"
 }
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.Volume.Capabilities"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "2f864315e2b5c69df177b1ce40319d3a23e955783d1b97b7b2f0bcb649fcf556"
+}
+
+bindings {
+  requirement_id: "REQ-proj-case"
+  content_hash: "888fbf3253a991050bfc5641cc90c0f30f521028eceb379641f121b8514accf0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestCapabilitiesDeclareCaseSensitive"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "477f09bbfd02d3c2b43a9976b98695435bcd20da5262cad2e924a6b704161851"
+}
+
+bindings {
+  requirement_id: "REQ-proj-ro"
+  content_hash: "b0938d1a37be44b9d006abd12b0c599b19ca5fcdaebd8f5fd273fd8833b509a7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestEveryMutatingOperationReturnsEROFS"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "518eb5ec9bb3e9e25aaa599dae21907c43637afde9f405e075a3b8086942460d"
+}
+
+bindings {
+  requirement_id: "REQ-proj-enumeration"
+  content_hash: "a61e4bd9dfe1167d261fbbd8039500de137b41074f169eabcdb396d8fc282b82"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.Volume.Enumerate"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "b59ddfa85d4fa8b15e7366402c21adf5b8fa4e66ca95b5dd730269ec4632afa1"
+}
+
+bindings {
+  requirement_id: "REQ-proj-enumeration"
+  content_hash: "a61e4bd9dfe1167d261fbbd8039500de137b41074f169eabcdb396d8fc282b82"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestEnumerate"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "881aabab8a6d2e04d648be6041c7625882884303dd8f1ff13e73b3542244d0e1"
+}
+
+bindings {
+  requirement_id: "REQ-proj-identity"
+  content_hash: "8ccfd0fd0c488b28922ad684d2813cc03d9b3e1d833ec9eeca1b99d0c4d3375f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestVolumeIdentityIsKernelIdentity"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "7983842ebf656d30bdaeca6c76bfb5db1034ae624f778e24f8ba4e92c44cb6be"
+}
+
+bindings {
+  requirement_id: "REQ-proj-fidelity"
+  content_hash: "5c05ee16b373cea43e530397efd5722fe17a5624eed48fc3b2f832328b475328"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestAttributesCarryTheRecordedEnvelope"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a37b4fa2aa878481fc818d8e591d0220cb40844d822620c512b5417dcf8f6256"
+}
+
+bindings {
+  requirement_id: "REQ-proj-content"
+  content_hash: "e0ab85df59595600e6f2ed0e68cb474cdbd53f75130368e4c1186d8980b772b3"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestReadShortOnlyAtEOF"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9890ccbdb1ab6daaad083724363a6a868dc58897f6e7fa3eff557ab2152ce824"
+}
+
+bindings {
+  requirement_id: "REQ-proj-server"
+  content_hash: "4510ed6c1dd733b06988e22edc6a856bffff47dd6647ae1b09f59fbbee2e556a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.FileSystem.Load"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "b424bcba2b96e7e48aaec000a01a374de95b763ac9e1c17cb8b3a15065460031"
+}
+
+bindings {
+  requirement_id: "REQ-proj-server"
+  content_hash: "4510ed6c1dd733b06988e22edc6a856bffff47dd6647ae1b09f59fbbee2e556a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.ParseConfig"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "6cdac239ac9e1eaf08b92f9fefac3e85206eae43045c6c999dbfb03cd743c52e"
+}
+
+bindings {
+  requirement_id: "REQ-proj-server"
+  content_hash: "4510ed6c1dd733b06988e22edc6a856bffff47dd6647ae1b09f59fbbee2e556a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestLoadVolumeEndToEnd"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "29cae17d5cd2816eacbf33b45048d17d1388d71973b9a1ba334de68c7345ff11"
+}
+
+bindings {
+  requirement_id: "REQ-proj-server"
+  content_hash: "4510ed6c1dd733b06988e22edc6a856bffff47dd6647ae1b09f59fbbee2e556a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestParseConfig"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a2d7f6841ffa22aa9102b146cc4d901df63000b8288dce18a1da6c3fcdabbcdd"
+}

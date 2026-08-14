@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-proj-case"
-reason: "The kernel pins comparator-collision resolution and containment; the FSKit declares-case-sensitive clause is pinned by the FSKit backend"
-lands { manual { condition: "FSKit backend declares case sensitivity and pins the declaration" } }

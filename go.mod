@@ -1,10 +1,12 @@
 module github.com/greatliontech/ocifs
 
-go 1.26.3
+go 1.26.4
 
 require (
+	github.com/ebitengine/purego v0.10.1
 	github.com/google/go-containerregistry v0.21.9
 	github.com/google/uuid v1.6.0
+	github.com/greatliontech/fskit-go v0.0.0-20260620205607-69c8738759fc
 	github.com/greatliontech/projfs-go v0.0.0-20260525064235-9bffba15968f
 	github.com/hanwen/go-fuse/v2 v2.5.0
 	github.com/spf13/cobra v1.10.2
