@@ -1,0 +1,102 @@
+# 2026/08/15 03:33:34.341330 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw n: 6
+# 2026/08/15 03:33:34.341361 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 3
+# 2026/08/15 03:33:34.341378 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 03:33:34.341393 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341412 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 0
+# 2026/08/15 03:33:34.341427 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 03:33:34.341437 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341455 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw fm: 0x1a4
+# 2026/08/15 03:33:34.341476 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw c: ""
+# 2026/08/15 03:33:34.341495 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 0
+# 2026/08/15 03:33:34.341504 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 03:33:34.341515 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341527 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw fm: 0x1a4
+# 2026/08/15 03:33:34.341546 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw c: ""
+# 2026/08/15 03:33:34.341559 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 0
+# 2026/08/15 03:33:34.341568 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 03:33:34.341578 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341591 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw fm: 0x1a4
+# 2026/08/15 03:33:34.341614 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw c: ""
+# 2026/08/15 03:33:34.341626 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 8
+# 2026/08/15 03:33:34.341637 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw rm: "a2"
+# 2026/08/15 03:33:34.341649 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 2
+# 2026/08/15 03:33:34.341660 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 03:33:34.341669 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341682 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dm: 0x1ed
+# 2026/08/15 03:33:34.341694 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 2
+# 2026/08/15 03:33:34.341703 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: "a5"
+# 2026/08/15 03:33:34.341712 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 03:33:34.341726 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dm: 0x1ed
+# 2026/08/15 03:33:34.342842 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw k: 1
+# 2026/08/15 03:33:34.343032 [TestPropertyCrashPrefixIsValidDialect] crash at gate 1 of {verb:mkdir a:a5/a6 b: mode:493 kind:0 uid:0 content:} left an undeclared state:
+#  got map[a1:{2 511 1000 1000 /a1 false   3} a3:{0 420 1000 1000  false   0} a4:{0 420 1000 1000  false   0} a5:{1 493 1000 1000  false   40}]
+#  pre map[a1:{2 511 1000 1000 /a1 false   3} a3:{0 420 1000 1000  false   0} a4:{0 420 1000 1000  false   0} a5:{1 493 1000 1000  false   0}]
+# post map[a1:{2 511 1000 1000 /a1 false   3} a3:{0 420 1000 1000  false   0} a4:{0 420 1000 1000  false   0} a5:{1 493 1000 1000  false   4} a5/a6:{1 493 1000 1000  false   0}]
+# 
+v0.4.8#9477234464395969753
+0x0
+0x6b74f03291620
+0x6
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x9867f1f40f739
+0x8
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

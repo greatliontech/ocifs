@@ -1,0 +1,156 @@
+# 2026/08/15 00:19:15.721300 [TestPropertyWriterWalkRoundTrip] [rapid] draw n: 10
+# 2026/08/15 00:19:15.721331 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 10
+# 2026/08/15 00:19:15.721353 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 11
+# 2026/08/15 00:19:15.721372 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 6
+# 2026/08/15 00:19:15.721386 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721403 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.721422 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 4
+# 2026/08/15 00:19:15.721433 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721441 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "b"
+# 2026/08/15 00:19:15.721465 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 12
+# 2026/08/15 00:19:15.721476 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 00:19:15.721487 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721500 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.721514 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x180
+# 2026/08/15 00:19:15.721534 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 00:19:15.721551 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 6
+# 2026/08/15 00:19:15.721560 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721571 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.721600 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 00:19:15.721611 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721620 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.721633 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x180
+# 2026/08/15 00:19:15.721653 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: "y"
+# 2026/08/15 00:19:15.721668 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 4
+# 2026/08/15 00:19:15.721676 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721687 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.721700 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 2
+# 2026/08/15 00:19:15.721711 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.721722 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.721736 [TestPropertyWriterWalkRoundTrip] [rapid] draw dm: 0x3ff
+# 2026/08/15 00:19:15.721745 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 1
+# 2026/08/15 00:19:15.721757 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: "c7"
+# 2026/08/15 00:19:15.721765 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.721778 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x9ed
+# 2026/08/15 00:19:15.721792 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 00:19:15.721803 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 00:19:15.721813 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: "c7"
+# 2026/08/15 00:19:15.721821 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.721850 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x180
+# 2026/08/15 00:19:15.721870 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 00:19:15.721882 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 1
+# 2026/08/15 00:19:15.721890 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: "c7"
+# 2026/08/15 00:19:15.721898 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "b"
+# 2026/08/15 00:19:15.721912 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x9ed
+# 2026/08/15 00:19:15.721935 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 00:19:15.722071 [TestPropertyWriterWalkRoundTrip] op {verb:whiteout a:victim b: mode:0 kind:0 uid:0 content:}: open ../../.scratch/upper/6/u/.wh.victim: permission denied
+# 
+v0.4.8#8556118441013300909
+0x13a7cba63d4b7
+0x1ca3c1d4eda656
+0x9
+0x795d1330a5443
+0x11eb9a50530119
+0xa
+0x96e4b85d385cf
+0x1ca08d0e3a0d50
+0xb
+0x1b42b9deee8b8d
+0x1b0bf29c9a3089
+0x6
+0x265e3e31356f4
+0x0
+0x9ef2ec918d10f
+0x3
+0x0
+0x1b78c42529c3e2
+0x70fbb6dd1108d
+0x4
+0x18d98b6d6dfdcb
+0x0
+0x757ad2c1dde38
+0x1
+0x11126751ed17e5
+0xeaec5e0b518d1
+0xc
+0xc32e0dff98331
+0x7747478abf8b
+0x0
+0xd9d83afccf632
+0x0
+0x1b3631d5203a01
+0x0
+0xd271704323d89
+0x1
+0x404335e154af1
+0x13902992f4c54f
+0x19de1f45f203fe
+0xe
+0x6
+0x1db7cb65fa514c
+0x0
+0x1f494f5d8e7030
+0xffffffffffffffff
+0x2d0142d65f12b
+0x98159a9bdfc3b
+0x0
+0xde9354a4d58ac
+0x0
+0x1afc13db2e03b8
+0x2
+0xa0cabe89315cb
+0x1
+0x1bf00e819fdda6
+0x0
+0x1ca5084ccdd8a3
+0x1
+0x1dd1ba95a914b
+0x101ff9bc35af16
+0x10dd0c6d05b06d
+0xd
+0xf
+0x4
+0x1dadfd1b1ef0f
+0x0
+0x16d9b83859834c
+0x0
+0x147b14caa859ad
+0x1d454a3dcab418
+0x2
+0xbeb78c7581af5
+0x0
+0xf057755cc1c7b
+0x2
+0x1eda25343a2395
+0x2
+0x1675b444c94bb2
+0x3b92a253a803b
+0x1
+0x51d955c31d8ec
+0x1
+0x1c0c28914b6f82
+0x0
+0x4151f705f8671
+0x2
+0x4c255acd5e1f1
+0xd4c8aa3130834
+0x19f34adc467e7c
+0x0
+0x10829af6c6e6f4
+0x1
+0x499f9b089c68f
+0x3
+0x2
+0x9e0330636fe48
+0x1
+0x5e30fb523d7e
+0x11d5c01fe5e525
+0x1c999d46eb3c90
+0x1
+0x3b07ae437e194
+0x1
+0xaaae1ddf3d506
+0x1
+0x1cf672b95be8ab
+0x2
+0xc957c6bac0ba7

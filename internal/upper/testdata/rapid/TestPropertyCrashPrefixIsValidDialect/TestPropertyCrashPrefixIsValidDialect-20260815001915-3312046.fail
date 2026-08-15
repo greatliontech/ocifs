@@ -1,0 +1,100 @@
+# 2026/08/15 00:19:15.730437 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw n: 5
+# 2026/08/15 00:19:15.730463 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 6
+# 2026/08/15 00:19:15.730479 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730500 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "b"
+# 2026/08/15 00:19:15.730520 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 7
+# 2026/08/15 00:19:15.730534 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw od: ""
+# 2026/08/15 00:19:15.730546 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 3
+# 2026/08/15 00:19:15.730556 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730567 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.730595 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 3
+# 2026/08/15 00:19:15.730604 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730616 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.730631 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 6
+# 2026/08/15 00:19:15.730639 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730648 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "c"
+# 2026/08/15 00:19:15.730663 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 7
+# 2026/08/15 00:19:15.730672 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw od: ""
+# 2026/08/15 00:19:15.730685 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 1
+# 2026/08/15 00:19:15.730704 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730714 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.730726 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw fm: 0x5ed
+# 2026/08/15 00:19:15.730752 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw c: "yy"
+# 2026/08/15 00:19:15.730766 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw verb: 5
+# 2026/08/15 00:19:15.730776 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw dir: ""
+# 2026/08/15 00:19:15.730786 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw stem: "a"
+# 2026/08/15 00:19:15.730799 [TestPropertyCrashPrefixIsValidDialect] [rapid] draw sk: 0x5
+# 2026/08/15 00:19:15.730945 [TestPropertyCrashPrefixIsValidDialect] prefix on A: open ../../.scratch/upper/16/a/.wh.victim: permission denied
+# 
+v0.4.8#15215722172165221393
+0x1beca18295ec87
+0xf98f423470264
+0x5
+0x6863f72a24378
+0x1b13ff8b3cf0d9
+0x6
+0x1f7d856e42af7e
+0xffffffffffffffff
+0x136659abf996d7
+0x1
+0x1a103fcd17bb24
+0x1d45f37ff1c97c
+0x7
+0x1f7375528bd514
+0xffffffffffffffff
+0x16c357b327d7bb
+0x75703c2e250b4
+0x3
+0x5000210de5294
+0x0
+0x10adc2a595134a
+0x2
+0x1caac38cd546c7
+0x5b59b97fa0753
+0x3
+0x128d4cf54e5f24
+0x0
+0xa01dcc8521445
+0x0
+0x97bd5f9f51604
+0x136b41b93a3308
+0x6
+0x9d2e2fd460fd5
+0x0
+0x145ce8314c813d
+0x2
+0x177ef1623aeae4
+0x12d3d852f24201
+0x7
+0x1b7b567e7f348a
+0x0
+0x2cbec3065290
+0x1878b7daef4b41
+0xd
+0x1
+0xeee561cf0ed9a
+0x0
+0x9f0fc12271d79
+0x3
+0x0
+0x18848118a31475
+0x3
+0x150a79d8cedb51
+0x0
+0x10fb18b5705ba4
+0x1
+0xda61de032ddb2
+0x0
+0x1854fa199bf81c
+0x1
+0x47c482f8b3d36
+0x1eea4f0eba0639
+0xf11d7e335bf59
+0x5
+0x48ca19b8be342
+0x0
+0x1c7cb4172da01a
+0x0
+0x124e108cc117dc
+0x3
+0x0

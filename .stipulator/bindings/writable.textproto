@@ -1,0 +1,83 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.BindingSet
+
+bindings {
+  requirement_id: "REQ-writable-dialect"
+  content_hash: "8287b3170fb5d25b8e9f514cdd83da8264c839ab3a3fe3bdade2574cc9e66993"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.Walk"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "b2ad35e4b21d59d010e1304afdf88ba8f2f9cf1f69ebeb184c4e8847e48f813d"
+}
+
+bindings {
+  requirement_id: "REQ-writable-dialect"
+  content_hash: "8287b3170fb5d25b8e9f514cdd83da8264c839ab3a3fe3bdade2574cc9e66993"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestWalkReadsEveryDialectClass"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "81ebd4213a5d52bbfa09f4ec0a8ec0ba5370e94049f00d439128b135ff7ff064"
+}
+
+bindings {
+  requirement_id: "REQ-writable-dialect"
+  content_hash: "8287b3170fb5d25b8e9f514cdd83da8264c839ab3a3fe3bdade2574cc9e66993"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestPropertyWriterWalkRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "645641059a4bec325cf06e07972f77919e394a21e4a749209925b1e960032b10"
+}
+
+bindings {
+  requirement_id: "REQ-writable-crash"
+  content_hash: "2cd968bab48d5306d1db781c8a977fc3a4feec5ea28e17a76d03f235875f3524"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestPropertyCrashPrefixIsValidDialect"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "f662a19d9a1eebe878d53a36cf181a437e4204fcb18d6c22a4deae46457c657c"
+}
+
+bindings {
+  requirement_id: "REQ-writable-crash"
+  content_hash: "2cd968bab48d5306d1db781c8a977fc3a4feec5ea28e17a76d03f235875f3524"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestSweepRemovesOnlyTemps"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "528e36405181871fb9051914748c59f6cddc71dac84e212fccff231f498b5bdf"
+}
+
+bindings {
+  requirement_id: "REQ-writable-reserved"
+  content_hash: "c9f9e1f1a1fe160166b105a4101192ef75650781db50eec8f0d591d9ff284d5e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestReservedNamesRefused"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "fa9dba838c7e8a6c8b3c917189b62bf6861d749e1903a723f829118bd9517f21"
+}
+
+bindings {
+  requirement_id: "REQ-writable-reserved"
+  content_hash: "c9f9e1f1a1fe160166b105a4101192ef75650781db50eec8f0d591d9ff284d5e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestStripMachineryXattrsClosesSmuggling"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "29e7c5629e013d7d60c624055e8aca7f51448afafc0870d127b7b5e4ab94457b"
+}
+
+bindings {
+  requirement_id: "REQ-writable-fidelity"
+  content_hash: "61676d1364e2b711ec1764d4bee34b11378e18755232dd503241eb9b7d037ef7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestOwnerOverrideAtomicAndPrivilegeReducing"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "44a254516af20eb3ce264aa284b7ce2586f06167dacd31c373ea4aa20bb4a37b"
+}
+
+bindings {
+  requirement_id: "REQ-writable-fidelity"
+  content_hash: "61676d1364e2b711ec1764d4bee34b11378e18755232dd503241eb9b7d037ef7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/upper.TestConvertToStandInPreservesTruth"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "31208a9dc358b57b2385d4561e8b69e41953d435f330ad52bf8986d05ab75cc1"
+}

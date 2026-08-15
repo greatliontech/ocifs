@@ -1,0 +1,59 @@
+# 2026/08/15 03:33:29.292545 [TestPropertyWriterWalkRoundTrip] [rapid] draw n: 4
+# 2026/08/15 03:33:29.292574 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 03:33:29.292590 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 03:33:29.292606 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 03:33:29.292625 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x1a4
+# 2026/08/15 03:33:29.292654 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 03:33:29.292669 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 2
+# 2026/08/15 03:33:29.292680 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: ""
+# 2026/08/15 03:33:29.292690 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 03:33:29.292708 [TestPropertyWriterWalkRoundTrip] [rapid] draw dm: 0x1ed
+# 2026/08/15 03:33:29.292720 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 8
+# 2026/08/15 03:33:29.292734 [TestPropertyWriterWalkRoundTrip] [rapid] draw rm: "a1"
+# 2026/08/15 03:33:29.292747 [TestPropertyWriterWalkRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 03:33:29.292757 [TestPropertyWriterWalkRoundTrip] [rapid] draw dir: "a2"
+# 2026/08/15 03:33:29.292767 [TestPropertyWriterWalkRoundTrip] [rapid] draw stem: "a"
+# 2026/08/15 03:33:29.292781 [TestPropertyWriterWalkRoundTrip] [rapid] draw fm: 0x1a4
+# 2026/08/15 03:33:29.292799 [TestPropertyWriterWalkRoundTrip] [rapid] draw c: ""
+# 2026/08/15 03:33:29.293198 [TestPropertyWriterWalkRoundTrip] walk disagrees with model:
+#  got map[a2:{1 493 1000 1000  false   4} a2/a3:{0 420 1000 1000  false   0}]
+# want map[a2:{1 493 1000 1000  false   0} a2/a3:{0 420 1000 1000  false   0}]
+# 
+v0.4.8#3884198700258611220
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x9867f1f40f739
+0x8
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0

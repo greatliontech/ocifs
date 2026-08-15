@@ -57,9 +57,10 @@ upper.
 
 **REQ-writable-fidelity** (behavior): The provider MUST present and
 commit the recorded intent, not the host state, wherever the two
-diverge: `chown` to an id the host refuses records
-`user.ocifs.uid`/`user.ocifs.gid` on the real caller-owned entry
-and getattr reports the recorded owner; `mknod` creates a stand-in
+diverge: `chown` to an id the host refuses records the single
+`user.ocifs.owner` record (`uid:gid` — one attribute, so the record
+lands atomically) on the real caller-owned entry and getattr reports
+the recorded owner; `mknod` creates a stand-in
 and getattr reports the device; setuid/setgid the host accepts are
 stored natively. `setxattr` of a
 host-refused attribute records the `user.ocifs.xattr.<name>` escape,
@@ -68,7 +69,10 @@ single-uid user-namespace case (container root mapped to the caller)
 ownership round-trips natively and no override is written. A `chown`
 recorded as an override clears setuid/setgid in the presented and
 stored mode exactly as a native chown would — presented truth
-follows POSIX, not the mechanism. Function is required of no
+follows POSIX, not the mechanism — ordered clear-first: the one
+crash intermediate is the cleared mode with the old owner, so an
+interrupted override chown only ever reduces privilege
+(REQ-writable-crash's declared intermediate for this mutation). Function is required of no
 stand-in beyond what the platform gives every mount (FIFO and
 socket semantics live in the kernel's inode layer; device nodes are
 non-functional exactly as on any `nodev` mount). Presentation of an

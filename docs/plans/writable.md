@@ -12,7 +12,7 @@ platform validation runs.
       (upper-born ID derivation, forward contract resolved), api.md
       (writable mount, commit), store.md (uppers tier, local image
       namespace); compile the corpus, declare gaps; this plan.
-- [ ] 2. `internal/upper` — the POSIX upper dialect: walker/reader
+- [x] 2. `internal/upper` — the POSIX upper dialect: walker/reader
       (dialect state → abstract upper entries: content, whiteouts,
       opaque, stand-ins, fidelity overrides), writer primitives
       (atomic create-via-rename, markers, stand-in conversion,
