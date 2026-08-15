@@ -210,4 +210,3 @@ metadata-changed entries, read through each platform's dialect
 tombstones and full files on ProjFS) — never of which backend or
 write model produced that state. Equal upper states commit to
 equal layers, up to each platform's declared fidelity envelope.
-Lands: with the commit path of the writable stage.
