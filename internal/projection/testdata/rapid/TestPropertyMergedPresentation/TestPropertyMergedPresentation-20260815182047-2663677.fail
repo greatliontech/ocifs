@@ -1,0 +1,24 @@
+# 2026/08/15 18:20:47.863785 [TestPropertyMergedPresentation] [rapid] draw base-n: 1
+# 2026/08/15 18:20:47.863795 [TestPropertyMergedPresentation] [rapid] draw bn: "b"
+# 2026/08/15 18:20:47.863801 [TestPropertyMergedPresentation] [rapid] draw sub-n: 0
+# 2026/08/15 18:20:47.863804 [TestPropertyMergedPresentation] [rapid] draw bsym: true
+# 2026/08/15 18:20:47.863849 [TestPropertyMergedPresentation] [rapid] draw ops: 1
+# 2026/08/15 18:20:47.863850 [TestPropertyMergedPresentation] [rapid] draw verb: 8
+# 2026/08/15 18:20:47.863974 [TestPropertyMergedPresentation] path "d0/b0": merged presents it, oracle does not
+# 
+v0.4.8#13594575028671306548
+0x79e5b31a03d38
+0x1
+0x0
+0x2
+0x1
+0x2
+0x1caf864b81bdfa
+0x0
+0x1
+0x1
+0x15b2652b3bb235
+0x1
+0x84147dd8e4fb7
+0x12d5c6de549469
+0x8

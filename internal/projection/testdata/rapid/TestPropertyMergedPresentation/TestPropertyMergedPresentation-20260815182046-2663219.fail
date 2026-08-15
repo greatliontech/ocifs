@@ -1,0 +1,33 @@
+# 2026/08/15 18:20:46.571557 [TestPropertyMergedPresentation] [rapid] draw base-n: 2
+# 2026/08/15 18:20:46.571567 [TestPropertyMergedPresentation] [rapid] draw bn: "c"
+# 2026/08/15 18:20:46.571572 [TestPropertyMergedPresentation] [rapid] draw bn: "c"
+# 2026/08/15 18:20:46.571576 [TestPropertyMergedPresentation] [rapid] draw sub-n: 1
+# 2026/08/15 18:20:46.571578 [TestPropertyMergedPresentation] [rapid] draw bsym: true
+# 2026/08/15 18:20:46.571622 [TestPropertyMergedPresentation] [rapid] draw ops: 1
+# 2026/08/15 18:20:46.571623 [TestPropertyMergedPresentation] [rapid] draw verb: 2
+# 2026/08/15 18:20:46.571624 [TestPropertyMergedPresentation] [rapid] draw whp: "d0/sub/g0"
+# 2026/08/15 18:20:46.571739 [TestPropertyMergedPresentation] "d0": shadow-in-place ID 2305843009271602819, want view 16
+# 
+v0.4.8#16607334860378356059
+0xe5d184ce68c85
+0xe51413d48c895
+0x1
+0x18fd91308a5cd0
+0x3
+0x2
+0x746b7f9f46084
+0x3
+0x2
+0x9c6e393412ddf
+0x2b3c98b0bd52
+0x1
+0x1
+0x1e463c7ba0df11
+0x22133d3e11cb2
+0x1
+0x1acc42a829250a
+0x1c0befdd49eabb
+0xc
+0x2
+0x1e7e32fe150233
+0x2

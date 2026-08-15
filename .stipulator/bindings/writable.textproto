@@ -162,3 +162,39 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "6562494b23723097e472f04e43f8cbc7110d13e7fdb34cfd8e00848e4caf8f90"
 }
+
+bindings {
+  requirement_id: "REQ-writable-presented"
+  content_hash: "6841113969bd8e80a8cf2457a5edb962521b4bf8644bc55d5e7b6027f2c4d825"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.Lookup"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "1eb980d3a786eee922da6dffd22e188e3116add0b05653f440b25e52ecf88f6a"
+}
+
+bindings {
+  requirement_id: "REQ-writable-presented"
+  content_hash: "6841113969bd8e80a8cf2457a5edb962521b4bf8644bc55d5e7b6027f2c4d825"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.OpenDir"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "04166a0a64113c3ae0cd77c36cd4407fd184bf7d42e9487961af88a355a8389f"
+}
+
+bindings {
+  requirement_id: "REQ-writable-presented"
+  content_hash: "6841113969bd8e80a8cf2457a5edb962521b4bf8644bc55d5e7b6027f2c4d825"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestMergedPresentation"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b14023f80e731eddcab214f4a2d66244abfc3c7682007987fc63c682a20ccf5b"
+}
+
+bindings {
+  requirement_id: "REQ-writable-presented"
+  content_hash: "6841113969bd8e80a8cf2457a5edb962521b4bf8644bc55d5e7b6027f2c4d825"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyMergedPresentation"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "171df3090f65e5c90462439b16846093dd7bab70fae0d93097b367dff4df58c0"
+}

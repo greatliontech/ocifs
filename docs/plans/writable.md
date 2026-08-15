@@ -25,7 +25,7 @@ platform validation runs.
       public Commit API (offline, no mount). Commit-neutrality
       property: equal states → byte-identical layers, independent of
       write history.
-- [ ] 4. Projection kernel merge — view ⊎ upper resolution behind
+- [x] 4. Projection kernel merge — view ⊎ upper resolution behind
       the existing kernel surface: shadowing, whiteout/opaque
       occlusion, upper-born ino-derived IDs, merged enumeration
       snapshots with upper-derived change verifiers, invalidation on

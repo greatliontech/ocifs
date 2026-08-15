@@ -339,22 +339,11 @@ func baseKind(flag byte) (upper.Kind, bool) {
 	return 0, false
 }
 
-// baseXattrs collects a base entry's presented xattrs — PAX records
-// and legacy header xattrs, the machinery namespace inert
-// (REQ-writable-reserved's base-content arm).
+// baseXattrs collects a base entry's presented xattrs through the
+// shared machinery-inert rule (REQ-writable-reserved's base-content
+// arm).
 func baseXattrs(e *layer.Entry) map[string]string {
-	out := map[string]string{}
-	for k, v := range e.Header.PAXRecords {
-		if name, ok := strings.CutPrefix(k, "SCHILY.xattr."); ok && !strings.HasPrefix(name, upper.XattrNS) {
-			out[name] = v
-		}
-	}
-	for k, v := range e.Header.Xattrs { //nolint:staticcheck // legacy producers
-		if !strings.HasPrefix(k, upper.XattrNS) {
-			out[k] = v
-		}
-	}
-	return out
+	return upper.PresentedBaseXattrs(&e.Header)
 }
 
 func xattrsEqual(a, b map[string]string) bool {
@@ -382,24 +371,10 @@ func hashFile(p string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// ancestorOccluded reports whether an upper marker or opaque on an
-// ancestor of p already hides the base content at p: a whiteout at
-// any ancestor, or an opaque on an ancestor directory the upper
-// holds. An occluded base entry contributes nothing to the presented
-// merge — it is not comparison truth for elision, and markers for it
-// have no effect.
+// ancestorOccluded is upper.State.AncestorOccluded — the shared
+// base-visibility rule commit's elision and marker minimality follow.
 func ancestorOccluded(up *upper.State, p string) bool {
-	for d := path.Dir(p); d != "." && d != "/"; d = path.Dir(d) {
-		if up.Whiteouts[d] {
-			return true
-		}
-		if up.Opaque[d] {
-			if _, ok := up.Entries[d]; ok {
-				return true
-			}
-		}
-	}
-	return false
+	return up.AncestorOccluded(p)
 }
 
 // baseHasChildren reports whether the base view holds any entry

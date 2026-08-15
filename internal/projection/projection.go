@@ -47,6 +47,12 @@ const (
 	// partition below it, ino-derived, so upper-born identity can
 	// never shift with the extras configuration (REQ-proj-identity).
 	syntheticIDBase ID = 1 << 62
+	// upperIDBase starts the upper-born partition [2^61, 2^62): an
+	// upper-born entry's ID is upperIDBase OR-ed with its upper
+	// inode number — a pure function of the storage
+	// (REQ-proj-identity). An inode at or above upperIDBase cannot
+	// be represented without aliasing and fails loudly.
+	upperIDBase ID = 1 << 61
 )
 
 // Kind is a projected entry's node kind.
@@ -59,6 +65,10 @@ const (
 	KindFIFO
 	KindCharDevice
 	KindBlockDevice
+	// KindSocket exists only in writable projections: images cannot
+	// carry sockets (the tar dialect has no socket type), but a live
+	// upper can hold one (writable.md REQ-writable-presented).
+	KindSocket
 )
 
 func (k Kind) String() string {
@@ -75,6 +85,8 @@ func (k Kind) String() string {
 		return "char-device"
 	case KindBlockDevice:
 		return "block-device"
+	case KindSocket:
+		return "socket"
 	default:
 		return "unknown"
 	}

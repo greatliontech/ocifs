@@ -19,6 +19,10 @@ const (
 	ErrReadOnly
 	// ErrIO: content or state could not be read.
 	ErrIO
+	// ErrIdentityRange: an upper inode number lies at or above the
+	// upper-born partition base and cannot be represented without
+	// aliasing (REQ-proj-identity's derivation envelope).
+	ErrIdentityRange
 )
 
 func (e Errno) Error() string {
@@ -33,6 +37,8 @@ func (e Errno) Error() string {
 		return "read-only projection"
 	case ErrIO:
 		return "i/o error"
+	case ErrIdentityRange:
+		return "upper inode outside the representable identity range"
 	default:
 		return "unknown projection error"
 	}

@@ -112,7 +112,10 @@ and a paused enumeration resumes exactly where it stopped. In a
 read-only projection — the view being immutable — any
 change-verifier a backend exposes is constant for the projection's
 lifetime; a writable projection's verifiers change when the upper
-mutates the directory. The sort comparator is the backend's own
+mutates the directory's listing — membership or the identity of its
+entries; attribute-only changes to children move no verifier (the
+verifier guards enumeration cookies, not attribute caches). The
+sort comparator is the backend's own
 (byte order on FUSE/FSKit; the platform comparator on ProjFS).
 
 **REQ-proj-case** (behavior): On a backend whose namespace is
