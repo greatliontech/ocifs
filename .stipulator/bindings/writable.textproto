@@ -81,3 +81,84 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "31208a9dc358b57b2385d4561e8b69e41953d435f330ad52bf8986d05ab75cc1"
 }
+
+bindings {
+  requirement_id: "REQ-writable-commit"
+  content_hash: "08f8771fd83bc4c7aea3bfcb7d0fd93f1b68805b80fbb6ea96bf1706dec3d5b4"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.Layer"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "6fdbb85a2e893bf3288646c429cd37a21952d7c0032c0e3cb7ab3588406b4423"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit"
+  content_hash: "08f8771fd83bc4c7aea3bfcb7d0fd93f1b68805b80fbb6ea96bf1706dec3d5b4"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestPropertyCommitRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "6b40387d9fa584d105f67994bb9bc06d32a4cfe4785d32751fde811105a1bba9"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit"
+  content_hash: "08f8771fd83bc4c7aea3bfcb7d0fd93f1b68805b80fbb6ea96bf1706dec3d5b4"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestEmissionRules"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b9604c9d0c09170cd83ed832dae9d046802569a6e7d6767a0fa545cfe87330aa"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit"
+  content_hash: "08f8771fd83bc4c7aea3bfcb7d0fd93f1b68805b80fbb6ea96bf1706dec3d5b4"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestHardlinkForceEmit"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "21d546dc0366e16572beeb27aa531528bdf05dc836e71d961031533113768767"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit-image"
+  content_hash: "42269e21ab30c45eff6babae70df4e90b951d5a3277c5da9567865d9dd68edc2"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.CommitUpper"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "5f6ab34ed94f8c5e27e459c5dcc8bb017d9cbf177394653037962db78598f97e"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit-image"
+  content_hash: "42269e21ab30c45eff6babae70df4e90b951d5a3277c5da9567865d9dd68edc2"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCommitUpperMaterializesLocally"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e94741f076efe994488bfdac5c877f915a196b87b2f88ebec2fa77b02399eef4"
+}
+
+bindings {
+  requirement_id: "REQ-writable-commit-image"
+  content_hash: "42269e21ab30c45eff6babae70df4e90b951d5a3277c5da9567865d9dd68edc2"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCommitDeterministic"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "00d3430aca57c2f58209587cd72cf9a173e384248b93f262822837d46db7d6c1"
+}
+
+bindings {
+  requirement_id: "REQ-writable-base-binding"
+  content_hash: "597abfae85eb399b40551e38d9bc0519baf3e6d122cfbaaef44ae5d33b1ab34e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.NewUpper"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "0f0c55cb4fbf02f4745bbc712bc5ed7e1a6d712578546fa06130039b5868436c"
+}
+
+bindings {
+  requirement_id: "REQ-writable-base-binding"
+  content_hash: "597abfae85eb399b40551e38d9bc0519baf3e6d122cfbaaef44ae5d33b1ab34e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestBaseBinding"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "6562494b23723097e472f04e43f8cbc7110d13e7fdb34cfd8e00848e4caf8f90"
+}

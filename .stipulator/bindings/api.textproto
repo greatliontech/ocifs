@@ -216,3 +216,21 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "b0361a9c7eef80482ab036014992e855f4ad908ac2bfbee20cb95e43ac68a522"
 }
+
+bindings {
+  requirement_id: "REQ-api-commit"
+  content_hash: "d5f338c1ce77c198fc97c1bc7a9581da52943581f340de0cafe86168088aa3f8"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Commit"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "1e403f147bc010fe41e3cb1449989195693efdf2fe4575d48c684173124f44b4"
+}
+
+bindings {
+  requirement_id: "REQ-api-commit"
+  content_hash: "d5f338c1ce77c198fc97c1bc7a9581da52943581f340de0cafe86168088aa3f8"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestCommitSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8e0f88386dcc6508a07831d34476452b452133d55f6c79c74ef0e4e7dedd33f1"
+}

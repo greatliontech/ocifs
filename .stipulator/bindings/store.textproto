@@ -522,3 +522,21 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "0b464291f846f30b9ae4f703e8b0e2db962056410ea739d1a5566cbdee7d5647"
 }
+
+bindings {
+  requirement_id: "REQ-store-local-images"
+  content_hash: "85d96f646c5245e46770ca8e4648ebfe3b440986e1e7a8febbc9d273872dd90b"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestLocalNamespaceNeverDials"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "d337f926c1e2cae96984a6c17fd45e8ac64f22686b597b9edcb3cd29b8ca53dc"
+}
+
+bindings {
+  requirement_id: "REQ-store-local-images"
+  content_hash: "85d96f646c5245e46770ca8e4648ebfe3b440986e1e7a8febbc9d273872dd90b"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCommitUpperMaterializesLocally"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e94741f076efe994488bfdac5c877f915a196b87b2f88ebec2fa77b02399eef4"
+}

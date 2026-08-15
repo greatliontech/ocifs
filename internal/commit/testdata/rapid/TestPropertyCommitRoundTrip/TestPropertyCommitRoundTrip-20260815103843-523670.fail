@@ -1,0 +1,73 @@
+# 2026/08/15 10:38:43.098041 [TestPropertyCommitRoundTrip] [rapid] draw base-n: 4
+# 2026/08/15 10:38:43.098079 [TestPropertyCommitRoundTrip] [rapid] draw bn: "c"
+# 2026/08/15 10:38:43.098109 [TestPropertyCommitRoundTrip] [rapid] draw bc: ""
+# 2026/08/15 10:38:43.098134 [TestPropertyCommitRoundTrip] [rapid] draw bn: "c"
+# 2026/08/15 10:38:43.098165 [TestPropertyCommitRoundTrip] [rapid] draw bc: "vuu"
+# 2026/08/15 10:38:43.098195 [TestPropertyCommitRoundTrip] [rapid] draw bn: "a"
+# 2026/08/15 10:38:43.098220 [TestPropertyCommitRoundTrip] [rapid] draw bc: "vvv"
+# 2026/08/15 10:38:43.098241 [TestPropertyCommitRoundTrip] [rapid] draw bn: "a"
+# 2026/08/15 10:38:43.098265 [TestPropertyCommitRoundTrip] [rapid] draw bc: "vv"
+# 2026/08/15 10:38:43.098465 [TestPropertyCommitRoundTrip] [rapid] draw ops: 1
+# 2026/08/15 10:38:43.098483 [TestPropertyCommitRoundTrip] [rapid] draw verb: 2
+# 2026/08/15 10:38:43.098493 [TestPropertyCommitRoundTrip] [rapid] draw whp: "d0/c1"
+# 2026/08/15 10:38:43.098520 [TestPropertyCommitRoundTrip] open ../../.scratch/commit/8/u/d0/.wh.c1: no such file or directory
+# 
+v0.4.8#1544366139151880421
+0x671cfc4442c7b
+0x8f80e300ee9b7
+0x3
+0x9855537bc8a62
+0x2
+0x8fcb250437364
+0xba8f30be0f86b
+0x2
+0x15dbf0df4904f2
+0x0
+0x1b2ea0742ed9d1
+0x1
+0x1b592c42301dab
+0x0
+0x2db50f39e44fe
+0x0
+0xfd5fab2d5d38d
+0x0
+0xc9b9cd405371f
+0x0
+0x13abd7e0bf89e9
+0x4bc49cbf5c3dd
+0x0
+0x1fddca941450a7
+0x0
+0x1d9fe5076fab10
+0x1
+0x130893eb2c28fd
+0x0
+0x77aa61267f38
+0x1
+0x12eb26fc23672d
+0x0
+0xf338c6457efa
+0x1
+0x1e870e4d160b
+0x28a8032c055b1
+0x0
+0x10834b3cb4301b
+0x0
+0x67b3b2a2c5810
+0x1
+0x103f883ab5a4c8
+0x0
+0xe485d92e3b51
+0x1
+0x47e74809fcf77
+0x1ed865e173b62f
+0x197a7ce4cebdbb
+0xd
+0xa
+0xc
+0x1
+0x1e6064217b4a1a
+0x19d53e5b79abec
+0x2
+0x44f86fba3165b
+0x3

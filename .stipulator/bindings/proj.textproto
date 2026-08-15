@@ -378,3 +378,21 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "a2d7f6841ffa22aa9102b146cc4d901df63000b8288dce18a1da6c3fcdabbcdd"
 }
+
+bindings {
+  requirement_id: "REQ-proj-commit-neutral"
+  content_hash: "f37f32aa4d1e5242223508258b8523e8b29572e803825a71536807f0aa086a4a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestNeutralityAcrossHistories"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e89b29743e71ede22394335c3ea29b7f296fa5a4551466388fa11136143a55c1"
+}
+
+bindings {
+  requirement_id: "REQ-proj-commit-neutral"
+  content_hash: "f37f32aa4d1e5242223508258b8523e8b29572e803825a71536807f0aa086a4a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestPropertyCommitRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "6b40387d9fa584d105f67994bb9bc06d32a4cfe4785d32751fde811105a1bba9"
+}

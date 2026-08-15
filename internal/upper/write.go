@@ -472,3 +472,21 @@ func Sweep(root string) error {
 		return nil
 	})
 }
+
+// SetTimes applies a modification time to an upper node without
+// following symlinks — one atomic step (the write path's utimens
+// arm; also what normalizes directory times after child churn).
+func (w *Writer) SetTimes(rel string, mtime time.Time) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	if err := w.gate("settimes " + rel); err != nil {
+		return err
+	}
+	ts := unix.NsecToTimespec(mtime.UnixNano())
+	err := unix.UtimesNanoAt(unix.AT_FDCWD, w.host(rel), []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW)
+	if err != nil {
+		return &os.PathError{Op: "settimes", Path: rel, Err: err}
+	}
+	return nil
+}

@@ -207,9 +207,22 @@ layer, deterministically: an entry is emitted exactly when its
 presented kind, content, or attributes differ from the base at that
 path, or when REQ-writable-hardlink forces it as a link group's
 content entry (a copied-up entry otherwise restored to base state is
-not emitted); a
-whiteout marker is emitted exactly for base paths the upper deletes;
-opaque markers are emitted for opaque directories; entries are
+not emitted). The comparison base at a path is the base entry only
+where the upper leaves it visible — no whiteout at the path or an
+ancestor, no opaque on an upper-held ancestor directory; an entry
+over occluded base content is new content and always emits. A
+whiteout marker is emitted exactly where deleted base content's
+occlusion depends on it: for each base path the upper deletes,
+except where an ancestor marker or opaque already hides the base
+entry (a dismantled and an undismantled rmdir interior commit
+identically) or where a non-directory, non-socket upper entry at the
+same path already replaces the base entry entirely in the dialect
+(emitting the marker in either case would re-encode write history);
+a directory recreated over its marker keeps the marker — it is what
+hides the base children; opaque markers are emitted exactly where
+they have effect — the upper holds the directory, the base holds
+content beneath it, and that content is not already hidden by the
+directory's own whiteout or an ancestor's occlusion; entries are
 written in sorted path order with fixed header layout, stable xattr
 order, and no fields drawn from commit time — so equal (base, upper)
 pairs commit to byte-identical layers with equal digests, regardless
@@ -221,7 +234,12 @@ holds genuine ownership, device, and capability entries regardless
 of host ownership. Marker entries (whiteout, opaque) have no
 presented source and emit fixed headers: mode 0, uid and gid 0, the
 Unix epoch for every timestamp, no extended attributes — a marker
-file's host attributes are pure write history.
+file's host attributes are pure write history. Socket entries are
+omitted from committed layers: the tar dialect has no socket type
+(universal tar tooling omits them the same way), and a socket is a
+transient endpoint serving the live mount only — but a socket
+shadowing a base-visible entry still commits that entry's whiteout,
+or the committed image would resurrect what the mount hides.
 
 **REQ-writable-commit-image** (behavior): Committing MUST produce a
 complete image in the store — the base's layers plus the committed

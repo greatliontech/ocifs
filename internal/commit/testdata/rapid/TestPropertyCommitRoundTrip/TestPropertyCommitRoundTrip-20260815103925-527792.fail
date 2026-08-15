@@ -1,0 +1,57 @@
+# 2026/08/15 10:39:25.778425 [TestPropertyCommitRoundTrip] [rapid] draw base-n: 1
+# 2026/08/15 10:39:25.778454 [TestPropertyCommitRoundTrip] [rapid] draw bn: "a"
+# 2026/08/15 10:39:25.778485 [TestPropertyCommitRoundTrip] [rapid] draw bc: ""
+# 2026/08/15 10:39:25.778643 [TestPropertyCommitRoundTrip] [rapid] draw ops: 5
+# 2026/08/15 10:39:25.778661 [TestPropertyCommitRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 10:39:25.778687 [TestPropertyCommitRoundTrip] [rapid] draw c: ""
+# 2026/08/15 10:39:25.778700 [TestPropertyCommitRoundTrip] [rapid] draw shadow: false
+# 2026/08/15 10:39:25.778804 [TestPropertyCommitRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 10:39:25.778831 [TestPropertyCommitRoundTrip] [rapid] draw c: ""
+# 2026/08/15 10:39:25.778844 [TestPropertyCommitRoundTrip] [rapid] draw shadow: false
+# 2026/08/15 10:39:25.778958 [TestPropertyCommitRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 10:39:25.778976 [TestPropertyCommitRoundTrip] [rapid] draw c: ""
+# 2026/08/15 10:39:25.778985 [TestPropertyCommitRoundTrip] [rapid] draw shadow: false
+# 2026/08/15 10:39:25.779080 [TestPropertyCommitRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 10:39:25.779096 [TestPropertyCommitRoundTrip] [rapid] draw c: ""
+# 2026/08/15 10:39:25.779105 [TestPropertyCommitRoundTrip] [rapid] draw shadow: false
+# 2026/08/15 10:39:25.779182 [TestPropertyCommitRoundTrip] [rapid] draw verb: 6
+# 2026/08/15 10:39:25.779198 [TestPropertyCommitRoundTrip] [rapid] draw lnk: "n1"
+# 2026/08/15 10:39:25.780115 [TestPropertyCommitRoundTrip] path "n5":
+#  committed {kind:48 digest:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 target:n1 mode:384 uid:1000 gid:1000 mtime:1717232400000000500 rdev:[0 0] xattrs:}
+#  presented {kind:48 digest:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 target: mode:384 uid:1000 gid:1000 mtime:1717232400000000500 rdev:[0 0] xattrs:}
+# 
+v0.4.8#7124945729477780570
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x5
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x6
+0x0
+0x0

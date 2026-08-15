@@ -1,0 +1,113 @@
+# 2026/08/15 15:04:12.839125 [TestPropertyCommitRoundTrip] [rapid] draw base-n: 3
+# 2026/08/15 15:04:12.839151 [TestPropertyCommitRoundTrip] [rapid] draw bn: "b"
+# 2026/08/15 15:04:12.839186 [TestPropertyCommitRoundTrip] [rapid] draw bc: "vvu"
+# 2026/08/15 15:04:12.839216 [TestPropertyCommitRoundTrip] [rapid] draw bx: 3
+# 2026/08/15 15:04:12.839231 [TestPropertyCommitRoundTrip] [rapid] draw bn: "b"
+# 2026/08/15 15:04:12.839255 [TestPropertyCommitRoundTrip] [rapid] draw bc: ""
+# 2026/08/15 15:04:12.839285 [TestPropertyCommitRoundTrip] [rapid] draw bx: 0
+# 2026/08/15 15:04:12.839297 [TestPropertyCommitRoundTrip] [rapid] draw bn: "c"
+# 2026/08/15 15:04:12.839315 [TestPropertyCommitRoundTrip] [rapid] draw bc: ""
+# 2026/08/15 15:04:12.839336 [TestPropertyCommitRoundTrip] [rapid] draw bx: 0
+# 2026/08/15 15:04:12.839347 [TestPropertyCommitRoundTrip] [rapid] draw sub-n: 0
+# 2026/08/15 15:04:12.839357 [TestPropertyCommitRoundTrip] [rapid] draw bsym: false
+# 2026/08/15 15:04:12.839367 [TestPropertyCommitRoundTrip] [rapid] draw blink: false
+# 2026/08/15 15:04:12.839378 [TestPropertyCommitRoundTrip] [rapid] draw bdev: true
+# 2026/08/15 15:04:12.839504 [TestPropertyCommitRoundTrip] [rapid] draw ops: 5
+# 2026/08/15 15:04:12.839519 [TestPropertyCommitRoundTrip] [rapid] draw verb: 7
+# 2026/08/15 15:04:12.839569 [TestPropertyCommitRoundTrip] [rapid] draw recreate: true
+# 2026/08/15 15:04:12.839668 [TestPropertyCommitRoundTrip] [rapid] draw verb: 12
+# 2026/08/15 15:04:12.839694 [TestPropertyCommitRoundTrip] [rapid] draw devm: false
+# 2026/08/15 15:04:12.839826 [TestPropertyCommitRoundTrip] [rapid] draw verb: 1
+# 2026/08/15 15:04:12.839848 [TestPropertyCommitRoundTrip] [rapid] draw c: "x"
+# 2026/08/15 15:04:12.839858 [TestPropertyCommitRoundTrip] [rapid] draw shadow: true
+# 2026/08/15 15:04:12.839869 [TestPropertyCommitRoundTrip] [rapid] draw sp: "d0/b1"
+# 2026/08/15 15:04:12.839935 [TestPropertyCommitRoundTrip] [rapid] draw px: true
+# 2026/08/15 15:04:12.840039 [TestPropertyCommitRoundTrip] [rapid] draw verb: 0
+# 2026/08/15 15:04:12.840059 [TestPropertyCommitRoundTrip] [rapid] draw c: "y"
+# 2026/08/15 15:04:12.840069 [TestPropertyCommitRoundTrip] [rapid] draw shadow: false
+# 2026/08/15 15:04:12.840077 [TestPropertyCommitRoundTrip] [rapid] draw px: false
+# 2026/08/15 15:04:12.840154 [TestPropertyCommitRoundTrip] [rapid] draw verb: 3
+# 2026/08/15 15:04:12.841080 [TestPropertyCommitRoundTrip] path "d0/dev": presented but absent from committed unify
+#  layer paths: [d0 d0/b1 n4 n5]
+# 
+v0.4.8#1292849882008922367
+0x2f17cd68727e0
+0x1beceace7d7d2d
+0x2
+0x17d2a24e2837c7
+0x3
+0x1
+0x10627b7d2b750e
+0x0
+0x89a8a0ea4ba7b
+0x1
+0x12e41ddd905c04
+0x0
+0xb487017f110f7
+0x1
+0x1de3c3a137ce61
+0x0
+0xf00b7419572d8
+0x0
+0xde1796bc3eea3
+0xf0a9794b9c487
+0x1441212ae35894
+0x3
+0x1be046d60eec2b
+0x3
+0x3
+0x1
+0x94f1a0f29b22f
+0x1cf2b0f6355db8
+0x202b9978d97c6
+0x0
+0x1030fb8a9895b4
+0x2
+0x5b4b669dc6c17
+0xee58c5c504702
+0x17290d414dee78
+0x0
+0x1863cac9d78f52
+0x12d7bddff4e407
+0x0
+0x0
+0x0
+0x1
+0x1bc6876c10e06
+0x12dfd24efc5537
+0xf
+0x5
+0x1ef27df87ce754
+0x18c1227d4949fc
+0x7
+0x1
+0xebf5beaabdaa1
+0x19324c529ab1b2
+0xc
+0x0
+0x1aa148972a390
+0x1f74209f3b3e1
+0x1
+0x13725d290a6544
+0x0
+0x20e15b4468ae4
+0x0
+0x8a14a8f7554dd
+0x1
+0x1a0668607c2aae
+0x3
+0x1
+0x1
+0x1bf3bbf8917d5d
+0x3949888cf668
+0x0
+0x1f0b3b9c3ed7bd
+0x0
+0x1f2d2e9dabfa6b
+0xffffffffffffffff
+0x3794f4aee008
+0x0
+0x0
+0x556afdf2a593b
+0x1cfe94b6e0de39
+0x3

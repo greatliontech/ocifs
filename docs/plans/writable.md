@@ -18,7 +18,7 @@ platform validation runs.
       (atomic create-via-rename, markers, stand-in conversion,
       override records), index rebuild from a walk; property tests
       over generated dialect states including every crash prefix.
-- [ ] 3. Commit: canonical (base view, upper) diff → deterministic
+- [x] 3. Commit: canonical (base view, upper) diff → deterministic
       uncompressed layer tar; store image assembly (manifest/config
       extension, diff IDs, ingest ordering) and the `ocifs.local`
       digest namespace; base binding for store-managed uppers;

@@ -274,7 +274,10 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 
 	img, err := s.assemble(ctx, req, top, nil)
 	if errors.Is(err, errIncomplete) {
-		f := &fetcher{store: s, repo: ref.Context(), allowed: s.pullPolicy != PullNever}
+		// The local namespace is never dialed: a missing piece there
+		// is store damage, failing as under Never
+		// (REQ-store-local-images).
+		f := &fetcher{store: s, repo: ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(ref.Context().RegistryStr())}
 		s.ingestMu.Lock()
 		img, err = s.assemble(ctx, req, top, f)
 		s.ingestMu.Unlock()
@@ -308,6 +311,13 @@ func (s *Store) resolveTop(ctx context.Context, req request) (v1.Hash, bool, err
 	// revalidation (an immutable binding cannot move), no network.
 	if req.digest != nil {
 		return *req.digest, !found || cached != *req.digest, nil
+	}
+
+	// The local namespace is digest-addressed and never dialed: a
+	// tag under it resolves to nothing, under every policy
+	// (REQ-store-local-images overrides the pull policy wholesale).
+	if isLocalRef(req.ref.Context().RegistryStr()) {
+		return emptyHash, false, fmt.Errorf("reference %s: the %s namespace is digest-addressed", req.ref, LocalRegistry)
 	}
 
 	switch s.pullPolicy {
@@ -538,6 +548,9 @@ func (s *Store) ensureManifest(ctx context.Context, f *fetcher, h v1.Hash) ([]by
 		return nil, errIncomplete
 	}
 	if !f.allowed {
+		if isLocalRef(f.repo.RegistryStr()) {
+			return nil, fmt.Errorf("artifact %s is not retained in oci/ and %s images are store-resident, never fetched: the local commit is damaged", h, LocalRegistry)
+		}
 		return nil, fmt.Errorf("artifact %s is not retained in oci/ and pull policy %s forbids fetching it", h, s.pullPolicy)
 	}
 	raw, err = f.manifest(ctx, h)
@@ -590,6 +603,9 @@ func (s *Store) fetchMissingBlob(ctx context.Context, f *fetcher, h v1.Hash) err
 		return errIncomplete
 	}
 	if !f.allowed {
+		if isLocalRef(f.repo.RegistryStr()) {
+			return fmt.Errorf("blob %s is missing from oci/ and %s images are store-resident, never fetched: the local commit is damaged", h, LocalRegistry)
+		}
 		return fmt.Errorf("blob %s is missing from oci/ and pull policy %s forbids fetching it", h, s.pullPolicy)
 	}
 	return s.writeOCIBlob(h, func() (io.ReadCloser, error) { return f.blob(ctx, h) })
