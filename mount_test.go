@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
+	"golang.org/x/sys/unix"
 	"pgregory.net/rapid"
 
 	"github.com/greatliontech/ocifs/internal/projection"
@@ -58,6 +60,15 @@ func fixtureEnv(t *testing.T, scratchName string) (*OCIFS, string, string) {
 		{Name: "suid", Typeflag: tar.TypeReg, Mode: 0o4755, ModTime: fixtureMtime},
 	} {
 		h := hdr
+		if h.Name == "docs/a.txt" {
+			// A recorded xattr plus base-borne machinery: the read
+			// side serves the real name and keeps the reserved
+			// namespace inert (REQ-writable-reserved).
+			h.PAXRecords = map[string]string{
+				"SCHILY.xattr.user.doc":        "trusty",
+				"SCHILY.xattr.user.ocifs.kind": "char",
+			}
+		}
 		if err := tw.WriteHeader(&h); err != nil {
 			t.Fatal(err)
 		}
@@ -494,5 +505,41 @@ func TestPropertyMountMutationsDenied(t *testing.T) {
 	// sweep).
 	if _, err := os.Lstat(filepath.Join(mnt, "docs", "a.txt")); err != nil {
 		t.Fatalf("tree damaged by denied mutations: %v", err)
+	}
+}
+
+// TestMountXattrPresentation pins the read side of the xattr
+// surface: recorded extended attributes serve under their real
+// names, and the reserved machinery namespace on base content is
+// inert — absent from listing and lookup alike
+// (writable.md REQ-writable-reserved's base-content arm).
+func TestMountXattrPresentation(t *testing.T) {
+	im, _, _ := mountFixture(t, "xattrs")
+	p := filepath.Join(im.MountPoint(), "docs", "a.txt")
+	buf := make([]byte, 64)
+	n, err := unix.Getxattr(p, "user.doc", buf)
+	if err != nil || string(buf[:n]) != "trusty" {
+		t.Fatalf("recorded xattr: %q %v", buf[:n], err)
+	}
+	if _, err := unix.Getxattr(p, "user.ocifs.kind", buf); err != syscall.ENODATA {
+		t.Fatalf("machinery served: %v", err)
+	}
+	lb := make([]byte, 256)
+	ln, err := unix.Listxattr(p, lb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := strings.Split(strings.TrimRight(string(lb[:ln]), "\x00"), "\x00")
+	found := false
+	for _, name := range names {
+		if name == "user.doc" {
+			found = true
+		}
+		if strings.HasPrefix(name, "user.ocifs.") {
+			t.Fatalf("machinery listed: %q", name)
+		}
+	}
+	if !found {
+		t.Fatalf("recorded xattr missing from listing: %v", names)
 	}
 }

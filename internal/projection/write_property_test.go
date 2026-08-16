@@ -3,12 +3,17 @@
 package projection
 
 import (
+	"errors"
+	"sort"
 	"fmt"
+	"strings"
 	"os"
 	"testing"
 	"time"
 
 	"pgregory.net/rapid"
+
+	"github.com/greatliontech/ocifs/internal/upper"
 )
 
 // modelEnt is the plain-filesystem model of one presented entry —
@@ -21,6 +26,8 @@ type modelEnt struct {
 	uid     int
 	gid     int
 	target  string
+	nlink   int
+	xattrs  string
 }
 
 // TestPropertyWriteEngine drives generated operation sequences
@@ -41,7 +48,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 
 		// Seed the model from the pre-op presentation (already
 		// pinned by the merge property).
-		model := map[string]modelEnt{}
+		model := map[string]*modelEnt{}
 		var seed func(dir *Node)
 		seed = func(dir *Node) {
 			snap, err := m.OpenDir(dir)
@@ -54,7 +61,13 @@ func TestPropertyWriteEngine(t *testing.T) {
 					rt.Fatalf("seed resolve: %v %v", ok, err)
 				}
 				h := n.Header()
-				me := modelEnt{kind: n.Kind(), mode: uint32(h.Mode) & 0o7777, uid: h.Uid, gid: h.Gid, target: n.LinkTarget()}
+				me := &modelEnt{kind: n.Kind(), mode: uint32(h.Mode) & 0o7777, uid: h.Uid, gid: h.Gid, target: n.LinkTarget()}
+				if n.Kind() != KindDir {
+					// Directory link counts are host-filesystem noise
+					// (btrfs 1, ext4 2+len); files' counts are
+					// presented truth.
+					me.nlink = int(n.Nlink())
+				}
 				if n.Kind() == KindFile {
 					me.content = cas[n.ContentDigest().Hex]
 				}
@@ -98,7 +111,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 		for i := 0; i < ops; i++ {
 			seq++
 			fresh := fmt.Sprintf("w%d", seq)
-			switch rapid.IntRange(0, 8).Draw(rt, "verb") {
+			switch rapid.IntRange(0, 13).Draw(rt, "verb") {
 			case 0: // create + write + flush
 				dirs := presentedDirs()
 				dp := rapid.SampledFrom(dirs).Draw(rt, "cd")
@@ -118,7 +131,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if err := m.Flushed(p); err != nil {
 					rt.Fatal(err)
 				}
-				model[p] = modelEnt{kind: KindFile, content: content, mode: 0o640, uid: myUID, gid: myGID}
+				model[p] = &modelEnt{kind: KindFile, content: content, mode: 0o640, uid: myUID, gid: myGID, nlink: 1}
 			case 1: // mkdir
 				dirs := presentedDirs()
 				dp := rapid.SampledFrom(dirs).Draw(rt, "md")
@@ -128,7 +141,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if err != nil {
 					rt.Fatalf("mkdir: %v", err)
 				}
-				model[n.Path()] = modelEnt{kind: KindDir, mode: 0o750, uid: myUID, gid: myGID}
+				model[n.Path()] = &modelEnt{kind: KindDir, mode: 0o750, uid: myUID, gid: myGID}
 				n.Close()
 			case 2: // symlink
 				dirs := presentedDirs()
@@ -139,7 +152,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if err != nil {
 					rt.Fatalf("symlink: %v", err)
 				}
-				model[n.Path()] = modelEnt{kind: KindSymlink, target: "/t/" + fresh, mode: 0o777, uid: myUID, gid: myGID}
+				model[n.Path()] = &modelEnt{kind: KindSymlink, target: "/t/" + fresh, mode: 0o777, uid: myUID, gid: myGID, nlink: 1}
 				n.Close()
 			case 3: // unlink a presented non-dir
 				var cands []string
@@ -159,6 +172,7 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if err != nil {
 					rt.Fatalf("unlink %q: %v", p, err)
 				}
+				model[p].nlink--
 				delete(model, p)
 			case 4: // rmdir (may be non-empty)
 				var cands []string
@@ -223,7 +237,6 @@ func TestPropertyWriteEngine(t *testing.T) {
 					}
 				}
 				e.content = string(c)
-				model[p] = e
 			case 6: // truncate
 				var cands []string
 				for p, e := range model {
@@ -251,7 +264,6 @@ func TestPropertyWriteEngine(t *testing.T) {
 					c += "\x00"
 				}
 				e.content = c[:size]
-				model[p] = e
 			case 7: // chmod or chown
 				var cands []string
 				for p := range model {
@@ -281,7 +293,157 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if err != nil {
 					rt.Fatalf("setattr %q: %v", p, err)
 				}
-				model[p] = e
+			case 12: // rename ONTO an existing file (replacement)
+				var files2, all []string
+				for p, e := range model {
+					all = append(all, p)
+					if e.kind == KindFile {
+						files2 = append(files2, p)
+					}
+				}
+				if len(files2) == 0 || len(all) == 0 {
+					continue
+				}
+				sp := rapid.SampledFrom(all).Draw(rt, "osp")
+				dp := rapid.SampledFrom(files2).Draw(rt, "odp")
+				if sp == dp || strings.HasPrefix(dp, sp+"/") || model[sp].kind == KindDir {
+					continue
+				}
+				sd, sb := splitParent(sp)
+				dd, db := splitParent(dp)
+				sdn := dirNode(sd)
+				ddn := dirNode(dd)
+				err := m.Rename(sdn, sb, ddn, db)
+				sdn.Close()
+				ddn.Close()
+				if errors.Is(err, ErrCrossDevice) {
+					continue
+				}
+				if err != nil {
+					rt.Fatalf("replace-rename %q->%q: %v", sp, dp, err)
+				}
+				if model[sp] == model[dp] {
+					// Same-inode rename: successful no-op.
+					continue
+				}
+				model[dp].nlink--
+				model[dp] = model[sp]
+				delete(model, sp)
+			case 13: // setxattr / removexattr on a file
+				var files3 []string
+				for p, e := range model {
+					if e.kind == KindFile {
+						files3 = append(files3, p)
+					}
+				}
+				if len(files3) == 0 {
+					continue
+				}
+				p := rapid.SampledFrom(files3).Draw(rt, "xp")
+				n, err := m.NodeAt(p)
+				if err != nil {
+					rt.Fatal(err)
+				}
+				e := model[p]
+				if rapid.Bool().Draw(rt, "xset") {
+					val := rapid.StringOfN(rapid.RuneFrom([]rune("pq")), 1, 3, -1).Draw(rt, "xv")
+					err = m.SetXattr(n, "user.px", []byte(val), 0)
+					if err == nil {
+						e.xattrs = "user.px=" + val
+					}
+				} else if e.xattrs != "" {
+					err = m.RemoveXattr(n, "user.px")
+					if err == nil {
+						e.xattrs = ""
+					}
+				} else {
+					err = nil
+				}
+				n.Close()
+				if err != nil {
+					rt.Fatalf("xattr %q: %v", p, err)
+				}
+			case 9: // rename (attempt; EXDEV and subtree refusals skip)
+				var cands []string
+				for p := range model {
+					cands = append(cands, p)
+				}
+				if len(cands) == 0 {
+					continue
+				}
+				sp := rapid.SampledFrom(cands).Draw(rt, "rsp")
+				dirs := presentedDirs()
+				dp := rapid.SampledFrom(dirs).Draw(rt, "rdp")
+				if dp == sp || strings.HasPrefix(dp+"/", sp+"/") {
+					continue
+				}
+				target := childPath(dp, fresh)
+				sd, sb := splitParent(sp)
+				sdn := dirNode(sd)
+				ddn := dirNode(dp)
+				err := m.Rename(sdn, sb, ddn, fresh)
+				sdn.Close()
+				ddn.Close()
+				if errors.Is(err, ErrCrossDevice) {
+					continue
+				}
+				if err != nil {
+					rt.Fatalf("rename %q->%q: %v", sp, target, err)
+				}
+				if old, had := model[target]; had {
+					old.nlink--
+				}
+				moved := map[string]*modelEnt{}
+				for p, e := range model {
+					if p == sp {
+						moved[target] = e
+						continue
+					}
+					if strings.HasPrefix(p, sp+"/") {
+						moved[target+p[len(sp):]] = e
+						continue
+					}
+					moved[p] = e
+				}
+				model = moved
+			case 10: // hardlink a file
+				var cands []string
+				for p, e := range model {
+					if e.kind == KindFile {
+						cands = append(cands, p)
+					}
+				}
+				if len(cands) == 0 {
+					continue
+				}
+				tp := rapid.SampledFrom(cands).Draw(rt, "ltp")
+				tn, err := m.NodeAt(tp)
+				if err != nil {
+					rt.Fatal(err)
+				}
+				dirs := presentedDirs()
+				dp := rapid.SampledFrom(dirs).Draw(rt, "ldp")
+				ddn := dirNode(dp)
+				ln, err := m.Link(tn, ddn, fresh)
+				tn.Close()
+				ddn.Close()
+				if err != nil {
+					rt.Fatalf("link %q: %v", tp, err)
+				}
+				model[tp].nlink++
+				model[ln.Path()] = model[tp]
+				ln.Close()
+			case 11: // mknod fifo
+				dirs := presentedDirs()
+				dp := rapid.SampledFrom(dirs).Draw(rt, "fdp")
+				ddn := dirNode(dp)
+				n, err := m.Mknod(ddn, fresh, KindFIFO, 0o640, upper.Rdev{})
+				ddn.Close()
+				if err != nil {
+					rt.Fatalf("mknod: %v", err)
+				}
+				model[n.Path()] = &modelEnt{kind: KindFIFO, mode: 0o640, uid: myUID, gid: myGID, nlink: 1}
+				n.Close()
 			case 8: // settimes (values checked by example tests; here
 				// it only must not perturb the model-visible fields)
 				var cands []string
@@ -322,6 +484,17 @@ func TestPropertyWriteEngine(t *testing.T) {
 					}
 					h := n.Header()
 					ge := modelEnt{kind: n.Kind(), mode: uint32(h.Mode) & 0o7777, uid: h.Uid, gid: h.Gid, target: n.LinkTarget()}
+					if n.Kind() != KindDir {
+						ge.nlink = int(n.Nlink())
+					}
+					if xs := n.Xattrs(); len(xs) > 0 {
+						var parts []string
+						for k, v := range xs {
+							parts = append(parts, k+"="+v)
+						}
+						sort.Strings(parts)
+						ge.xattrs = strings.Join(parts, ",")
+					}
 					if n.Kind() == KindFile {
 						if n.UpperBacked() {
 							b, err := os.ReadFile(n.HostPath())
@@ -346,8 +519,8 @@ func TestPropertyWriteEngine(t *testing.T) {
 				if !ok {
 					rt.Fatalf("%s: %q in model, not presented", label, p)
 				}
-				if g != we {
-					rt.Fatalf("%s: %q diverged:\n presented %+v\n model     %+v", label, p, g, we)
+				if g != *we {
+					rt.Fatalf("%s: %q diverged:\n presented %+v\n model     %+v", label, p, g, *we)
 				}
 			}
 			for p := range got {

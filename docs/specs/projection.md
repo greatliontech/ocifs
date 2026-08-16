@@ -182,6 +182,7 @@ time in it (images record no birth time).
 | hardlinks | independent node, target's content (`layer-semantics.md`) | independent node | independent node |
 | FIFOs | typed node | typed node | omitted + reported |
 | char/block devices | typed node, no device numbers | typed node, no device numbers | omitted + reported |
+| extended attributes | recorded, reserved `user.ocifs.*` namespace inert (`writable.md` REQ-writable-reserved) | recorded, reserved namespace inert | omitted |
 | case | sensitive | declared sensitive | insensitive (REQ-proj-case) |
 | names the platform namespace cannot hold | all names | all names | NTFS-illegal characters, trailing dot/space, reserved device names, components beyond 255 UTF-16 units: omitted + reported |
 | ro enforcement | kernel | error from every mutating op | pre-op vetoes + two declared residuals (REQ-proj-ro) |

@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/greatliontech/ocifs/internal/projection"
+	"github.com/greatliontech/ocifs/internal/upper"
 )
 
 // NewWritable builds the FUSE root node for a writable merged
@@ -72,6 +73,14 @@ func errno(err error) syscall.Errno {
 		return syscall.EPERM
 	case errors.Is(err, projection.ErrNotSupported):
 		return syscall.ENOTSUP
+	case errors.Is(err, projection.ErrInvalid):
+		return syscall.EINVAL
+	case errors.Is(err, projection.ErrIsDir):
+		return syscall.EISDIR
+	case errors.Is(err, projection.ErrCrossDevice):
+		return syscall.EXDEV
+	case errors.Is(err, projection.ErrNoAttr):
+		return syscall.ENODATA
 	case errors.Is(err, os.ErrNotExist):
 		return syscall.ENOENT
 	case errors.Is(err, os.ErrPermission):
@@ -514,5 +523,122 @@ func (w *wnode) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if err != nil {
 		return syscall.EIO
 	}
+	return fs.OK
+}
+
+var _ = (fs.NodeRenamer)((*wnode)(nil))
+
+func (w *wnode) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
+	if flags&unix.RENAME_EXCHANGE != 0 {
+		return syscall.ENOTSUP
+	}
+	np, ok := newParent.(*wnode)
+	if !ok {
+		return syscall.EXDEV
+	}
+	if flags&unix.RENAME_NOREPLACE != 0 {
+		if ex, ok, _ := w.s.m.Lookup(np.cur(), newName); ok {
+			ex.Close()
+			return syscall.EEXIST
+		}
+	}
+	err := w.s.m.Rename(w.cur(), name, np.cur(), newName)
+	if errors.Is(err, projection.ErrCrossDevice) {
+		return syscall.EXDEV
+	}
+	return errno(err)
+}
+
+var _ = (fs.NodeLinker)((*wnode)(nil))
+
+func (w *wnode) Link(ctx context.Context, target fs.InodeEmbedder, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	tn, ok := target.(*wnode)
+	if !ok {
+		return nil, syscall.EXDEV
+	}
+	n, err := w.s.m.Link(tn.cur(), w.cur(), name)
+	if err != nil {
+		return nil, errno(err)
+	}
+	// The link target migrated to the shared upper-born identity
+	// (REQ-writable-hardlink): re-resolve it so its node carries the
+	// new ID; the kernel re-looks-up on its own cadence.
+	_ = tn.refresh()
+	return w.newChild(ctx, n, out), fs.OK
+}
+
+var _ = (fs.NodeMknoder)((*wnode)(nil))
+
+func (w *wnode) Mknod(ctx context.Context, name string, mode uint32, dev uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	var kind projection.Kind
+	switch mode & syscall.S_IFMT {
+	case syscall.S_IFIFO:
+		kind = projection.KindFIFO
+	case syscall.S_IFSOCK:
+		kind = projection.KindSocket
+	case syscall.S_IFCHR:
+		kind = projection.KindCharDevice
+	case syscall.S_IFBLK:
+		kind = projection.KindBlockDevice
+	case 0, syscall.S_IFREG:
+		// mknod of a regular file is create-without-open.
+		n, f, err := w.s.m.Create(w.cur(), name, mode&0o7777)
+		if err != nil {
+			return nil, errno(err)
+		}
+		f.Close()
+		return w.newChild(ctx, n, out), fs.OK
+	default:
+		return nil, syscall.EPERM
+	}
+	rdev := upper.Rdev{Major: unix.Major(uint64(dev)), Minor: unix.Minor(uint64(dev))}
+	n, err := w.s.m.Mknod(w.cur(), name, kind, mode&0o7777, rdev)
+	if err != nil {
+		return nil, errno(err)
+	}
+	return w.newChild(ctx, n, out), fs.OK
+}
+
+var _ = (fs.NodeGetxattrer)((*wnode)(nil))
+
+func (w *wnode) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
+	return xattrGet(w.cur().Xattrs(), attr, dest)
+}
+
+var _ = (fs.NodeListxattrer)((*wnode)(nil))
+
+func (w *wnode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
+	return xattrList(w.cur().Xattrs(), dest)
+}
+
+var _ = (fs.NodeSetxattrer)((*wnode)(nil))
+
+func (w *wnode) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
+	if err := w.s.m.SetXattr(w.cur(), attr, data, flags); err != nil {
+		if errors.Is(err, projection.ErrNoAttr) {
+			return syscall.ENODATA
+		}
+		return errno(err)
+	}
+	_ = w.refresh()
+	return fs.OK
+}
+
+var _ = (fs.NodeRemovexattrer)((*wnode)(nil))
+
+func (w *wnode) Removexattr(ctx context.Context, attr string) syscall.Errno {
+	err := w.s.m.RemoveXattr(w.cur(), attr)
+	if errors.Is(err, projection.ErrNoAttr) {
+		return syscall.ENODATA
+	}
+	if errors.Is(err, projection.ErrReserved) {
+		// The machinery namespace is invisible: removing what cannot
+		// be seen is "no such attribute", not a permission hint.
+		return syscall.ENODATA
+	}
+	if err != nil {
+		return errno(err)
+	}
+	_ = w.refresh()
 	return fs.OK
 }

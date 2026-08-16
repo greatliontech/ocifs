@@ -53,6 +53,7 @@ func baseFixture(t testing.TB) (*Projection, contentStore) {
 	mk("top", "base-top")
 	view := mustView(t,
 		ldir("d"),
+		ldir("emptyd"),
 		lfile("d/f"),
 		lfile("d/g"),
 		lfile("d/sub/h"),

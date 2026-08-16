@@ -48,7 +48,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-reserved"
-  content_hash: "c9f9e1f1a1fe160166b105a4101192ef75650781db50eec8f0d591d9ff284d5e"
+  content_hash: "a9da383173e37883292537b4b9265e91edcc5faa1bbbace2c71384b9324c4fb1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/upper.TestReservedNamesRefused"
   role: BINDING_ROLE_TESTS
@@ -57,7 +57,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-reserved"
-  content_hash: "c9f9e1f1a1fe160166b105a4101192ef75650781db50eec8f0d591d9ff284d5e"
+  content_hash: "a9da383173e37883292537b4b9265e91edcc5faa1bbbace2c71384b9324c4fb1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/upper.TestStripMachineryXattrsClosesSmuggling"
   role: BINDING_ROLE_TESTS
@@ -323,4 +323,103 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/fusefs.TestWritableMountCycle"
   role: BINDING_ROLE_TESTS
   shape_hash: "741d24fdb118edb23ed0fac59ad4a3db049c25a083777df641c4cbe8bb97403d"
+}
+
+bindings {
+  requirement_id: "REQ-writable-rename"
+  content_hash: "6b3c667ac2848ed856d2fc4d05f1599b2d5e12bdb1a2025fd998ffab04f14405"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.Rename"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "711382db4b8b8fe885cbc8952593ae9da31edd1fa1c5d4c2fdb1f2da1e03e25c"
+}
+
+bindings {
+  requirement_id: "REQ-writable-rename"
+  content_hash: "6b3c667ac2848ed856d2fc4d05f1599b2d5e12bdb1a2025fd998ffab04f14405"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestWriteRenameArms"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "d0d5822cb1b135c42a5376bb1824cb243114d5553ae0abe1d482b755fc755fed"
+}
+
+bindings {
+  requirement_id: "REQ-writable-rename"
+  content_hash: "6b3c667ac2848ed856d2fc4d05f1599b2d5e12bdb1a2025fd998ffab04f14405"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyWriteEngine"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "27a44a2e7606f90a31552b37e8032f432fecb7e3f5d1953f43f53943064ff8b2"
+}
+
+bindings {
+  requirement_id: "REQ-writable-rename"
+  content_hash: "6b3c667ac2848ed856d2fc4d05f1599b2d5e12bdb1a2025fd998ffab04f14405"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fusefs.TestWritableMountRenameLinkXattr"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3f5137a30f4516d6a0b8298992fb3c1251c0b9071d53a0b38f2e00e7a1d40fa3"
+}
+
+bindings {
+  requirement_id: "REQ-writable-hardlink"
+  content_hash: "51ee7717babe1fcc6e9a3bcf691ee1c31da936abefb91ea1692c2c030a917a6c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.Link"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "4b5da7892d1286b7641c3912e9d7fb2b36744f15beadd097a6978bcfa12a4674"
+}
+
+bindings {
+  requirement_id: "REQ-writable-hardlink"
+  content_hash: "51ee7717babe1fcc6e9a3bcf691ee1c31da936abefb91ea1692c2c030a917a6c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestWriteLinkArms"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8f57f96518ba5b48314b6414e223532548630b36ca0999f7c237e4523730b42e"
+}
+
+bindings {
+  requirement_id: "REQ-writable-hardlink"
+  content_hash: "51ee7717babe1fcc6e9a3bcf691ee1c31da936abefb91ea1692c2c030a917a6c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/fusefs.TestWritableMountRenameLinkXattr"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3f5137a30f4516d6a0b8298992fb3c1251c0b9071d53a0b38f2e00e7a1d40fa3"
+}
+
+bindings {
+  requirement_id: "REQ-writable-fidelity"
+  content_hash: "f31d9935db9214623b69aafb25569acea900444abe0c7c59cfd57aa075fe605d"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.SetXattr"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "730dfc15bfb97fce67b21477233ef0ee420d879f675af252bbc2078c77fec769"
+}
+
+bindings {
+  requirement_id: "REQ-writable-fidelity"
+  content_hash: "f31d9935db9214623b69aafb25569acea900444abe0c7c59cfd57aa075fe605d"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestWriteXattrArms"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8b995454b41a204cfa01ffdb295a1cc5952fa691808d7e210d40f8c8e14ca0a3"
+}
+
+bindings {
+  requirement_id: "REQ-writable-reserved"
+  content_hash: "a9da383173e37883292537b4b9265e91edcc5faa1bbbace2c71384b9324c4fb1"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestWriteXattrArms"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8b995454b41a204cfa01ffdb295a1cc5952fa691808d7e210d40f8c8e14ca0a3"
+}
+
+bindings {
+  requirement_id: "REQ-writable-reserved"
+  content_hash: "a9da383173e37883292537b4b9265e91edcc5faa1bbbace2c71384b9324c4fb1"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountXattrPresentation"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "70cd3fba24811af1b695b691b92ee5c9c4d7e1b85696b7b85b27dfbfa06026c6"
 }

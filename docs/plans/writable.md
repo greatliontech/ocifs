@@ -36,7 +36,7 @@ platform validation runs.
       whiteout/opaque production; writable mount API (caller dir +
       store-managed named upper), reserved-name refusal; store
       uppers tier.
-- [ ] 6. FUSE write path B — rename semantics (EXDEV for
+- [x] 6. FUSE write path B — rename semantics (EXDEV for
       base-visible directories), hardlinks, mknod/FIFO/socket
       stand-ins, xattr surface with fidelity overrides and
       stand-in conversion; presented-truth attribute merging.

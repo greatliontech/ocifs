@@ -15,6 +15,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"sort"
 	"syscall"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 
 	"github.com/greatliontech/ocifs/internal/projection"
+	"github.com/greatliontech/ocifs/internal/upper"
 )
 
 // Capabilities is the FUSE fidelity envelope (REQ-proj-fidelity):
@@ -192,4 +194,66 @@ func (n *node) Release(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 		}
 	}
 	return fs.OK
+}
+
+// xattrGet serves one presented extended attribute into dest per
+// getxattr's size-probe protocol.
+func xattrGet(xattrs map[string]string, attr string, dest []byte) (uint32, syscall.Errno) {
+	v, ok := xattrs[attr]
+	if !ok {
+		return 0, syscall.ENODATA
+	}
+	if len(dest) == 0 {
+		return uint32(len(v)), fs.OK
+	}
+	if len(dest) < len(v) {
+		return uint32(len(v)), syscall.ERANGE
+	}
+	copy(dest, v)
+	return uint32(len(v)), fs.OK
+}
+
+// xattrList serves the presented attribute names per listxattr's
+// size-probe protocol, sorted for determinism.
+func xattrList(xattrs map[string]string, dest []byte) (uint32, syscall.Errno) {
+	names := make([]string, 0, len(xattrs))
+	for k := range xattrs {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	total := 0
+	for _, n := range names {
+		total += len(n) + 1
+	}
+	if len(dest) == 0 {
+		return uint32(total), fs.OK
+	}
+	if len(dest) < total {
+		return uint32(total), syscall.ERANGE
+	}
+	off := 0
+	for _, n := range names {
+		copy(dest[off:], n)
+		off += len(n)
+		dest[off] = 0
+		off++
+	}
+	return uint32(total), fs.OK
+}
+
+var _ = (fs.NodeGetxattrer)((*node)(nil))
+
+// Getxattr serves a base entry's recorded extended attributes with
+// the reserved machinery namespace inert (writable.md
+// REQ-writable-reserved's base-content arm).
+func (n *node) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
+	h := n.e.Header()
+	return xattrGet(upper.PresentedBaseXattrs(&h), attr, dest)
+}
+
+var _ = (fs.NodeListxattrer)((*node)(nil))
+
+func (n *node) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
+	h := n.e.Header()
+	return xattrList(upper.PresentedBaseXattrs(&h), dest)
 }

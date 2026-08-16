@@ -30,6 +30,17 @@ const (
 	// ErrReserved: the name lies in the dialect's reserved namespace
 	// (REQ-writable-reserved).
 	ErrReserved
+	// ErrCrossDevice: the rename needs userspace fallback — the
+	// source directory holds base-visible content
+	// (REQ-writable-rename's EXDEV rule).
+	ErrCrossDevice
+	// ErrNoAttr: the requested extended attribute is not present.
+	ErrNoAttr
+	// ErrInvalid: the operation's arguments are invalid (rename into
+	// the source's own subtree, xattr flag misuse).
+	ErrInvalid
+	// ErrIsDir: a non-directory operation addressed a directory.
+	ErrIsDir
 )
 
 func (e Errno) Error() string {
@@ -52,6 +63,14 @@ func (e Errno) Error() string {
 		return "directory not empty"
 	case ErrReserved:
 		return "name in the reserved namespace"
+	case ErrCrossDevice:
+		return "rename crosses the base boundary"
+	case ErrNoAttr:
+		return "no such attribute"
+	case ErrInvalid:
+		return "invalid argument"
+	case ErrIsDir:
+		return "is a directory"
 	default:
 		return "unknown projection error"
 	}

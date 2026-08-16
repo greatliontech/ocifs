@@ -153,6 +153,40 @@ func (m *Merged) reindex(paths ...string) error {
 		}
 		us = append(us, upd{p: p, e: e, ok: ok})
 	}
+	// Attribute truth is per-inode while the index is per-path: any
+	// touched entry that HAS or HAD links pulls its aliases in, so a
+	// change through one hardlinked path — attribute, content, or
+	// removal — never leaves another presenting stale attributes or
+	// link counts. Directories are exempt (nlink >= 2 by nature,
+	// never linkable).
+	aliasOf := map[uint64]bool{}
+	m.mu.RLock()
+	for _, u := range us {
+		if u.ok && u.e.Kind != upper.KindDir && u.e.Nlink > 1 {
+			aliasOf[u.e.Ino] = true
+		}
+		// The path's PRIOR index entry: a removed or replaced alias
+		// must update its survivors.
+		if old, had := m.idx.st.Entries[u.p]; had && old.Kind != upper.KindDir && old.Nlink > 1 {
+			aliasOf[old.Ino] = true
+		}
+	}
+	var aliases []string
+	if len(aliasOf) > 0 {
+		for p, e := range m.idx.st.Entries {
+			if aliasOf[e.Ino] && !seen[p] {
+				aliases = append(aliases, p)
+			}
+		}
+	}
+	m.mu.RUnlock()
+	for _, p := range aliases {
+		e, ok, err := upper.Stat(m.upperRoot, p)
+		if err != nil {
+			return err
+		}
+		us = append(us, upd{p: p, e: e, ok: ok})
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, u := range us {

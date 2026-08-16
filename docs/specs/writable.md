@@ -109,7 +109,9 @@ name is indistinguishable from a marker; base images cannot contain
 them (unification drops them), so refusal forecloses nothing
 representable. The `user.ocifs.*` extended-attribute namespace is
 reserved identically at the mount surface: invisible to listxattr,
-absent to getxattr, refused to setxattr and removexattr — a client
+absent to getxattr, refused to setxattr; removexattr treats them as
+absent — removal of the unseen is no-attribute, while a store is a
+deliberate act and refuses loudly — a client
 that could touch it directly would mint phantom stand-ins and forge
 overrides through ordinary file copies; overridden attributes
 present only under their real names. The reservation extends to base
@@ -160,10 +162,17 @@ directory with no opaque conversion and no marker-removal step.
 (copy-up plus source whiteout) or upper-born (native rename plus
 source whiteout when the source shadowed base) — MUST behave as
 POSIX rename on the merged tree, including replacing targets (the
-replaced target's base visibility earns its own whiteout), ordered
+replaced target's base visibility earns its own whiteout — landing
+after the swap for non-directory targets, whose new entry already
+shadows it, and opening rmdir's compound for directory targets),
+ordered
 destination-first: the destination materializes before the source
-whiteout lands, so the one crash residual is the entry present at
-both paths, each individually coherent (REQ-writable-crash).
+whiteout lands, so the one crash residual for file renames is the
+entry present at both paths, each individually coherent
+(REQ-writable-crash). Replacing an empty presented directory
+destination composes rmdir's dismantling compound before the swap:
+its intermediates are rmdir's declared ones plus the
+destination-absent step immediately before the swap lands.
 Renaming a directory that holds any base-visible content returns
 EXDEV — userspace fallback (copy-and-delete) is universal, and
 recursive provider-side copy-up of unbounded trees is not owed;

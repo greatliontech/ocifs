@@ -1,0 +1,84 @@
+# 2026/08/16 05:05:56.581182 [TestPropertyWriteEngine] [rapid] draw ops: 7
+# 2026/08/16 05:05:56.581225 [TestPropertyWriteEngine] [rapid] draw verb: 1
+# 2026/08/16 05:05:56.581244 [TestPropertyWriteEngine] [rapid] draw md: "d"
+# 2026/08/16 05:05:56.581531 [TestPropertyWriteEngine] [rapid] draw verb: 10
+# 2026/08/16 05:05:56.581552 [TestPropertyWriteEngine] [rapid] draw ltp: "d/g"
+# 2026/08/16 05:05:56.581585 [TestPropertyWriteEngine] [rapid] draw ldp: "d/sub"
+# 2026/08/16 05:05:56.582040 [TestPropertyWriteEngine] [rapid] draw verb: 8
+# 2026/08/16 05:05:56.582062 [TestPropertyWriteEngine] [rapid] draw mp: "d"
+# 2026/08/16 05:05:56.582135 [TestPropertyWriteEngine] [rapid] draw verb: 0
+# 2026/08/16 05:05:56.582162 [TestPropertyWriteEngine] [rapid] draw cd: "d/w1"
+# 2026/08/16 05:05:56.582208 [TestPropertyWriteEngine] [rapid] draw cc: "ba"
+# 2026/08/16 05:05:56.582416 [TestPropertyWriteEngine] [rapid] draw verb: 1
+# 2026/08/16 05:05:56.582430 [TestPropertyWriteEngine] [rapid] draw md: "d"
+# 2026/08/16 05:05:56.582575 [TestPropertyWriteEngine] [rapid] draw verb: 5
+# 2026/08/16 05:05:56.582590 [TestPropertyWriteEngine] [rapid] draw wp: "d/sub/h"
+# 2026/08/16 05:05:56.582843 [TestPropertyWriteEngine] [rapid] draw wa: "y"
+# 2026/08/16 05:05:56.582911 [TestPropertyWriteEngine] [rapid] draw verb: 7
+# 2026/08/16 05:05:56.582939 [TestPropertyWriteEngine] [rapid] draw ap: "d/f"
+# 2026/08/16 05:05:56.582992 [TestPropertyWriteEngine] [rapid] draw chm: true
+# 2026/08/16 05:05:56.583004 [TestPropertyWriteEngine] [rapid] draw am: 142
+# 
+v0.4.8#14506825509897438144
+0x6dd4c38868a59
+0x741c56b3ebab0
+0x7
+0x13924dc59d949f
+0x10ee05081298dc
+0xd
+0x1
+0xe0312e98b346f
+0x1
+0x12bcc11b609b77
+0x15107e819192d5
+0xa
+0x17e17a40b3ad9a
+0x2
+0x4dfce733a6f5b
+0x3
+0x18ba255a1a9329
+0xdaa5b6bacb4ef
+0xc
+0x8
+0x376da68d73447
+0x0
+0x17f1fe99df304b
+0x1419b62f5b2822
+0xd
+0x0
+0x1db2f87e8c1b2b
+0x3
+0x1216fcef7ac8e7
+0x0
+0xd091369cf8f63
+0x1
+0x1a64fe6c9c9128
+0x0
+0x1c3f0ab9714295
+0x0
+0x91a6791a3827
+0x1025aeba07bf42
+0x13f3fceff7dd03
+0x1
+0x7f55e84fa8ec6
+0x3
+0x3c2af913b432b
+0x121892a5c92b35
+0xf
+0x5
+0x1ccb1cf54dac2d
+0x5
+0x16ee1e23df16d
+0x0
+0x1a00b6e56c9f72
+0x1
+0x19539373e0708
+0x767e00657cdb7
+0x1e96235035fead
+0x7
+0x2a41ae7be5e9b
+0x1
+0x1
+0x4afbffe9d4e7f
+0x149b5626786f5d
+0x8e

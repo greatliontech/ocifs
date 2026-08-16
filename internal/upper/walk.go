@@ -258,7 +258,12 @@ func readEntry(root, rel, hostPath string) (Entry, error) {
 			if e.Xattrs == nil {
 				e.Xattrs = map[string]string{}
 			}
-			e.Xattrs[real] = val
+			// A native copy wins over the escape deterministically:
+			// a crash between store and counterpart cleanup then
+			// still presents one well-defined value.
+			if _, native := e.Xattrs[real]; !native {
+				e.Xattrs[real] = val
+			}
 		default:
 			return Entry{}, fmt.Errorf("upper: %q: unknown machinery xattr %q — the provider never writes one", rel, name)
 		}

@@ -165,7 +165,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-fidelity"
-  content_hash: "5c05ee16b373cea43e530397efd5722fe17a5624eed48fc3b2f832328b475328"
+  content_hash: "16de0d8252cfd1f52b27840bae0a95c654dd060c6ae988c25144fd3409fb0afe"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/fusefs.Capabilities"
   role: BINDING_ROLE_IMPLEMENTS
@@ -174,7 +174,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-fidelity"
-  content_hash: "5c05ee16b373cea43e530397efd5722fe17a5624eed48fc3b2f832328b475328"
+  content_hash: "16de0d8252cfd1f52b27840bae0a95c654dd060c6ae988c25144fd3409fb0afe"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountFidelityEnvelope"
   role: BINDING_ROLE_TESTS
@@ -327,7 +327,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-fidelity"
-  content_hash: "5c05ee16b373cea43e530397efd5722fe17a5624eed48fc3b2f832328b475328"
+  content_hash: "16de0d8252cfd1f52b27840bae0a95c654dd060c6ae988c25144fd3409fb0afe"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/fskitfs.TestAttributesCarryTheRecordedEnvelope"
   role: BINDING_ROLE_TESTS
@@ -494,4 +494,13 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/commit.TestRootRecordCommits"
   role: BINDING_ROLE_TESTS
   shape_hash: "b3141ac3e0719666d47b89abf8b58ade6c05d226f072fea0556415539bf39c0a"
+}
+
+bindings {
+  requirement_id: "REQ-proj-fidelity"
+  content_hash: "16de0d8252cfd1f52b27840bae0a95c654dd060c6ae988c25144fd3409fb0afe"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountXattrPresentation"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "70cd3fba24811af1b695b691b92ee5c9c4d7e1b85696b7b85b27dfbfa06026c6"
 }

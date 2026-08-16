@@ -223,6 +223,109 @@ func (w *Writer) Mkfifo(rel string, mode uint32) error {
 	return nil
 }
 
+// Host returns the host path of a dialect-relative path — for
+// provider operations the Writer has no primitive for (native
+// socket creation).
+func (w *Writer) Host(rel string) string { return w.host(rel) }
+
+// LinkReplace links oldRel's node over newRel, replacing any
+// existing non-directory there atomically: the link lands on a
+// reserved temporary and one rename swaps it in — the destination
+// always holds the old node or the new, never neither
+// (REQ-writable-rename's destination-first materialization).
+func (w *Writer) LinkReplace(oldRel, newRel string) error {
+	if err := checkName(oldRel); err != nil {
+		return err
+	}
+	if err := checkName(newRel); err != nil {
+		return err
+	}
+	tmp := w.host(w.tempName(path.Dir(newRel)))
+	if err := w.gate("link-temp " + newRel); err != nil {
+		return err
+	}
+	if err := os.Link(w.host(oldRel), tmp); err != nil {
+		return err
+	}
+	if err := w.gate("link-replace " + newRel); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, w.host(newRel)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// Mksock creates a native socket node as an atomic publish, like
+// Mkfifo — umask-proof full mode on the invisible temporary, one
+// rename. Sockets need no provider-access mask (lstat-only reads).
+func (w *Writer) Mksock(rel string, mode uint32) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	tmp := w.host(w.tempName(path.Dir(rel)))
+	if err := w.gate("mksock-temp " + rel); err != nil {
+		return err
+	}
+	if err := unix.Mknod(tmp, unix.S_IFSOCK|mode&0o777, 0); err != nil {
+		return &os.PathError{Op: "mknod", Path: tmp, Err: err}
+	}
+	if err := unix.Chmod(tmp, mode&0o7777); err != nil {
+		os.Remove(tmp)
+		return &os.PathError{Op: "chmod", Path: tmp, Err: err}
+	}
+	if err := w.gate("mksock-publish " + rel); err != nil {
+		return err
+	}
+	if err := renameNoReplace(tmp, w.host(rel)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// SetNativeXattr stores a non-machinery attribute natively — one
+// atomic step. The raw refusal surfaces (wrapped) for the caller's
+// escape classification.
+func (w *Writer) SetNativeXattr(rel, name string, value []byte) error {
+	if strings.HasPrefix(name, XattrNS) {
+		return fmt.Errorf("upper: xattr %q is in the reserved namespace", name)
+	}
+	if err := w.gate("xattr-set " + rel); err != nil {
+		return err
+	}
+	if err := unix.Lsetxattr(w.host(rel), name, value, 0); err != nil {
+		return &os.PathError{Op: "lsetxattr", Path: rel + ":" + name, Err: err}
+	}
+	return nil
+}
+
+// RemoveXattrRecord removes both stored forms of a presented
+// attribute — the native copy and the escape record; absent copies
+// are no-ops. removed reports whether anything went.
+func (w *Writer) RemoveXattrRecord(rel, name string) (bool, error) {
+	if strings.HasPrefix(name, XattrNS) {
+		return false, fmt.Errorf("upper: xattr %q is in the reserved namespace", name)
+	}
+	host := w.host(rel)
+	if err := w.gate("xattr-remove " + rel); err != nil {
+		return false, err
+	}
+	removed := false
+	if err := unix.Lremovexattr(host, name); err == nil {
+		removed = true
+	} else if !xattrAbsent(err) && !errors.Is(err, unix.EPERM) && !errors.Is(err, unix.EACCES) {
+		return false, &os.PathError{Op: "lremovexattr", Path: host, Err: err}
+	}
+	if err := unix.Lremovexattr(host, XattrEscapePrefix+name); err == nil {
+		removed = true
+	} else if !xattrAbsent(err) {
+		return removed, &os.PathError{Op: "lremovexattr", Path: host, Err: err}
+	}
+	return removed, nil
+}
+
 // Link creates a hardlink to an existing upper entry — one atomic
 // step (REQ-writable-hardlink; the copy-up of a base-visible target
 // is the caller's prior mutation).

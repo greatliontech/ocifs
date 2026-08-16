@@ -20,10 +20,6 @@
   chown arm is untested; a user-namespace harness can exercise it.
   Lands: when a user-namespace test harness is added, or the
   ownership arm next changes.
-- `docs/issues/read-path-xattr-presentation.md` — the fidelity table
-  has no xattr row; reserved-namespace inertness should hold on the
-  read side too. Lands: when a mount surface first serves extended
-  attributes (the writable arc's xattr chunk).
 - `docs/issues/mount-state-lifecycle.md` — per-mount state is never
   reclaimed and mount ids are single-use; reclamation design shares
   the dead-state recognition problem with store GC. Lands: when

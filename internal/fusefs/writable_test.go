@@ -4,16 +4,19 @@ package fusefs
 
 import (
 	"archive/tar"
+	"errors"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"golang.org/x/sys/unix"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
@@ -288,5 +291,87 @@ func TestWritableUnlinkedHandleOps(t *testing.T) {
 	}
 	if string(b[:n]) != "scr" {
 		t.Fatalf("content: %q", b[:n])
+	}
+}
+
+// TestWritableMountRenameLinkXattr drives the write-path-B surface
+// through real syscalls: rename with EXDEV fallback semantics,
+// hardlinks with shared inodes, FIFO creation, and the xattr
+// surface with the machinery namespace unforgeable.
+func TestWritableMountRenameLinkXattr(t *testing.T) {
+	mnt, _ := mountWritable(t)
+
+	// File rename: base file moves; inode content follows.
+	if err := os.Rename(filepath.Join(mnt, "d", "f"), filepath.Join(mnt, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(mnt, "moved"))
+	if err != nil || string(b) != "base-content" {
+		t.Fatalf("moved content: %q %v", b, err)
+	}
+	if _, err := os.Lstat(filepath.Join(mnt, "d", "f")); !os.IsNotExist(err) {
+		t.Fatalf("rename source lingers: %v", err)
+	}
+
+	// Directory rename of a base-visible dir: EXDEV (mv falls back).
+	err = os.Rename(filepath.Join(mnt, "d"), filepath.Join(mnt, "dmoved"))
+	var le *os.LinkError
+	if !errors.As(err, &le) || le.Err != syscall.EXDEV {
+		t.Fatalf("base-visible dir rename: %v", err)
+	}
+
+	// Hardlink: one inode, two names.
+	if err := os.Link(filepath.Join(mnt, "moved"), filepath.Join(mnt, "aka")); err != nil {
+		t.Fatal(err)
+	}
+	var s1, s2 syscall.Stat_t
+	if err := syscall.Lstat(filepath.Join(mnt, "moved"), &s1); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Lstat(filepath.Join(mnt, "aka"), &s2); err != nil {
+		t.Fatal(err)
+	}
+	if s1.Ino != s2.Ino || s1.Nlink != 2 || s2.Nlink != 2 {
+		t.Fatalf("link identity: ino %d/%d nlink %d/%d", s1.Ino, s2.Ino, s1.Nlink, s2.Nlink)
+	}
+
+	// FIFO through the mount.
+	if err := syscall.Mkfifo(filepath.Join(mnt, "pipe"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Lstat(filepath.Join(mnt, "pipe"))
+	if err != nil || fi.Mode()&os.ModeNamedPipe == 0 {
+		t.Fatalf("fifo: %v %v", fi, err)
+	}
+
+	// Xattrs: store, list, get, remove; machinery unforgeable and
+	// invisible.
+	p := filepath.Join(mnt, "moved")
+	if err := unix.Setxattr(p, "user.tag", []byte("v1"), 0); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 64)
+	n, err := unix.Getxattr(p, "user.tag", buf)
+	if err != nil || string(buf[:n]) != "v1" {
+		t.Fatalf("getxattr: %q %v", buf[:n], err)
+	}
+	if err := unix.Setxattr(p, "user.ocifs.owner", []byte("0:0"), 0); err != syscall.EPERM {
+		t.Fatalf("machinery setxattr: %v", err)
+	}
+	lb := make([]byte, 256)
+	ln, err := unix.Listxattr(p, lb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range strings.Split(strings.TrimRight(string(lb[:ln]), "\x00"), "\x00") {
+		if strings.HasPrefix(name, "user.ocifs.") {
+			t.Fatalf("machinery listed: %q", name)
+		}
+	}
+	if err := unix.Removexattr(p, "user.tag"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Getxattr(p, "user.tag", buf); err != syscall.ENODATA {
+		t.Fatalf("removed xattr still served: %v", err)
 	}
 }
