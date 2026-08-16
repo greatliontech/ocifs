@@ -40,7 +40,7 @@ func mustWritable(t testing.TB, inner *Projection, root string, cas contentStore
 	return m
 }
 
-func baseFixture(t testing.TB) (*Projection, contentStore) {
+func baseLayerAndCAS(t testing.TB) (layer.Layer, contentStore) {
 	t.Helper()
 	cas := contentStore{}
 	mk := func(name, content string) struct{} {
@@ -51,7 +51,7 @@ func baseFixture(t testing.TB) (*Projection, contentStore) {
 	mk("d/g", "base-dg")
 	mk("d/sub/h", "base-h")
 	mk("top", "base-top")
-	view := mustView(t,
+	return layer.Layer{
 		ldir("d"),
 		ldir("emptyd"),
 		lfile("d/f"),
@@ -59,7 +59,16 @@ func baseFixture(t testing.TB) (*Projection, contentStore) {
 		lfile("d/sub/h"),
 		lsymlink("d/sl", "f"),
 		lfile("top"),
-	)
+	}, cas
+}
+
+func baseFixture(t testing.TB) (*Projection, contentStore) {
+	t.Helper()
+	bl, cas := baseLayerAndCAS(t)
+	view, err := layer.Unify([]layer.Layer{bl})
+	if err != nil {
+		t.Fatal(err)
+	}
 	return mustNew(t, view, nil, capsFull), cas
 }
 

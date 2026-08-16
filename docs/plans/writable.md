@@ -40,7 +40,7 @@ platform validation runs.
       base-visible directories), hardlinks, mknod/FIFO/socket
       stand-ins, xattr surface with fidelity overrides and
       stand-in conversion; presented-truth attribute merging.
-- [ ] 7. Crash-consistency harness — kill storms at arbitrary points
+- [x] 7. Crash-consistency harness — kill storms at arbitrary points
       under write/rename/whiteout load; on remount the dialect is
       valid, the rebuilt index matches the directory, and commit of
       the survived state is correct.

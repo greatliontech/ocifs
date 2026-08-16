@@ -227,7 +227,15 @@ outlives every recreation), `rmdir` hides before it dismantles
 (whiteout first, so no prefix re-exposes deleted children), and
 rename's sole intermediate is the entry at both paths
 (REQ-writable-rename), and an orphaned reserved-name temporary is
-inert garbage, not state (REQ-writable-dialect). The provider's in-memory state rebuilds from
+inert garbage, not state (REQ-writable-dialect). The crash model is
+process failure: completed syscalls persist, so every prefix
+guarantee above holds in full. Kernel failure and power loss share
+a weaker model — the dialect issues no fsync, so either may lose an
+unsynced publish outright or land its journaled rename with the
+temporary's data blocks unwritten (host-filesystem data-ordering
+modes mitigate but are not assumed). Consumers needing durability
+beyond process failure sync the upper themselves before relying on
+it. The provider's in-memory state rebuilds from
 a walk of the upper alone (`projection.md` REQ-proj-upper-truth); no
 recovery, repair, or journal-replay step exists — there is nothing
 to repair.

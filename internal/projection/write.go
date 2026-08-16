@@ -7,13 +7,11 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"golang.org/x/sys/unix"
 
 	"github.com/greatliontech/ocifs/internal/upper"
 )
@@ -292,20 +290,6 @@ func (m *Merged) restoreSpineTimes(made []string, skip string) error {
 		}
 	}
 	return nil
-}
-
-// setEntryXattr stores one presented xattr on an upper node,
-// escaping when the host refuses (REQ-writable-fidelity).
-func (m *Merged) setEntryXattr(rel, name, val string) error {
-	host := filepath.Join(m.upperRoot, filepath.FromSlash(rel))
-	err := unix.Lsetxattr(host, name, []byte(val), 0)
-	if err == nil {
-		return nil
-	}
-	if err == unix.EPERM || err == unix.EACCES || err == unix.ENOTSUP || err == unix.EOPNOTSUPP || err == unix.EINVAL {
-		return m.write.w.SetEscapedXattr(rel, name, []byte(val))
-	}
-	return &os.PathError{Op: "lsetxattr", Path: rel + ":" + name, Err: err}
 }
 
 // ---- copy-up (REQ-writable-copyup) ----

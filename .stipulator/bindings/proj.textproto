@@ -504,3 +504,12 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "70cd3fba24811af1b695b691b92ee5c9c4d7e1b85696b7b85b27dfbfa06026c6"
 }
+
+bindings {
+  requirement_id: "REQ-proj-upper-truth"
+  content_hash: "3d5aed53f5b4112e1b5cbf8a62cd22e91b7ec0a6eeb8a08e4e0162c177edda38"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/projection.TestCrashStorm"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "25ce890dd4f6dc843d2eef38478674df6f491c1ac077ea4e1d5450266cf3853b"
+}
