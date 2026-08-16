@@ -40,3 +40,8 @@
   lazy-unmount stale scratch mounts before removing. Lands: next
   change set touching the shared test fixture helpers, or the next
   stale-mount incident.
+- `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
+  FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
+  platform fidelity mechanics. Lands: per backend, when its platform
+  validation findings are dispositioned and a writable mount there
+  is first needed.
