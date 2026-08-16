@@ -37,6 +37,13 @@ import (
 // children cannot disturb recorded directory times
 // (REQ-export-fidelity).
 func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string) error {
+	// euid 0 includes user-namespace root: recorded ownership is
+	// applied natively there too, and a recorded id outside the
+	// namespace's mapping fails the chown (EINVAL) — surfaced, never
+	// silently degraded to unprivileged export. A recorded id of -1
+	// (reachable: tar base-256 encodings can carry negative ids)
+	// makes that id's half of the chown a no-op rather than an
+	// applied value.
 	privileged := os.Geteuid() == 0
 	// folded maps the case-folded spelling of every created path to
 	// its original: on a case-insensitive target two distinct view

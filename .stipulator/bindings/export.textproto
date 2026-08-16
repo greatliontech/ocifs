@@ -144,3 +144,12 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "b0361a9c7eef80482ab036014992e855f4ad908ac2bfbee20cb95e43ac68a522"
 }
+
+bindings {
+  requirement_id: "REQ-export-ownership"
+  content_hash: "86291c175238ac7a16b0728cd1a98ee6588dd94a816fb07afc55ec09cd291da9"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestExportPrivilegedOwnership"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "d126515346df27acab84640f5ff10d0fc2e91e424b43bd4cb9e6dd75f2e9b5b5"
+}

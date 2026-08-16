@@ -30,7 +30,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-crash"
-  content_hash: "1593947cb6774eba13280abdf7d4646e1ccc9b17ce41441a40252413766bafff"
+  content_hash: "1a8175878156a8459b130cee73cff2b69d5d298b4a00d61498510a2874153047"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/upper.TestPropertyCrashPrefixIsValidDialect"
   role: BINDING_ROLE_TESTS
@@ -39,7 +39,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-crash"
-  content_hash: "1593947cb6774eba13280abdf7d4646e1ccc9b17ce41441a40252413766bafff"
+  content_hash: "1a8175878156a8459b130cee73cff2b69d5d298b4a00d61498510a2874153047"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/upper.TestSweepRemovesOnlyTemps"
   role: BINDING_ROLE_TESTS
@@ -426,7 +426,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-crash"
-  content_hash: "1593947cb6774eba13280abdf7d4646e1ccc9b17ce41441a40252413766bafff"
+  content_hash: "1a8175878156a8459b130cee73cff2b69d5d298b4a00d61498510a2874153047"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestCrashPrefixCoherence"
   role: BINDING_ROLE_TESTS
@@ -435,9 +435,18 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-crash"
-  content_hash: "1593947cb6774eba13280abdf7d4646e1ccc9b17ce41441a40252413766bafff"
+  content_hash: "1a8175878156a8459b130cee73cff2b69d5d298b4a00d61498510a2874153047"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestCrashStorm"
   role: BINDING_ROLE_TESTS
   shape_hash: "25ce890dd4f6dc843d2eef38478674df6f491c1ac077ea4e1d5450266cf3853b"
+}
+
+bindings {
+  requirement_id: "REQ-writable-fidelity"
+  content_hash: "f31d9935db9214623b69aafb25569acea900444abe0c7c59cfd57aa075fe605d"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestAcceptanceCapabilityXattr"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "4bd60d7dec6ca7f428668005fb310b63fe153089b1bf1f61aa950032997068dd"
 }

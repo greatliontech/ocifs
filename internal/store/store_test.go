@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -28,6 +29,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	"github.com/greatliontech/ocifs/internal/layer"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
@@ -886,5 +888,74 @@ func TestNoTemporariesAfterIngest(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestLayerIndexBinaryRoundTrip pins the layers-tier encoding:
+// header strings are arbitrary bytes (binary xattr values like
+// security.capability blobs, unusual names and link targets) and
+// must survive the persisted JSON document byte-exactly; a foreign
+// format version heals like a missing document.
+func TestLayerIndexBinaryRoundTrip(t *testing.T) {
+	dir := scratchtest.Dir(t, "store")
+	li := layerIndexes{root: dir}
+	capBlob := string([]byte{0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xff, 0xfe, 0x00, 0x00, 0xe8, 0x03})
+	in := layer.Layer{
+		{Header: tar.Header{
+			Typeflag: tar.TypeChar,
+			Name:     "bin/cap\xffbin",
+			Linkname: "tgt\xfe",
+			Mode:     0o755,
+			Uid:      12, Gid: 34,
+			Uname:      "u\xf1name",
+			Gname:      "g\xf2name",
+			Size:       5,
+			ModTime:    time.Date(2024, 1, 2, 3, 4, 5, 678, time.UTC),
+			AccessTime: time.Date(2024, 2, 3, 4, 5, 6, 789, time.UTC),
+			ChangeTime: time.Date(2024, 3, 4, 5, 6, 7, 891, time.UTC),
+			Devmajor:   1, Devminor: 3,
+			PAXRecords: map[string]string{
+				"SCHILY.xattr.security.capability": capBlob,
+				"SCHILY.xattr.user.\xf0odd":        "v\x00v",
+			},
+			Xattrs: map[string]string{"security.capability": capBlob}, //nolint:staticcheck
+		}, Digest: v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}},
+	}
+	ld := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cd", 32)}
+	if err := li.Put(ld, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := li.Get(ld)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("entries %d", len(out))
+	}
+	g, w := out[0].Header, in[0].Header
+	if g.Typeflag != w.Typeflag || g.Name != w.Name || g.Linkname != w.Linkname ||
+		g.Uname != w.Uname || g.Gname != w.Gname ||
+		g.PAXRecords["SCHILY.xattr.security.capability"] != capBlob ||
+		g.PAXRecords["SCHILY.xattr.user.\xf0odd"] != "v\x00v" ||
+		g.Xattrs["security.capability"] != capBlob { //nolint:staticcheck
+		t.Fatalf("binary round trip mangled:\n got  %+v\n want %+v", g, w)
+	}
+	if !g.ModTime.Equal(w.ModTime) || !g.AccessTime.Equal(w.AccessTime) ||
+		!g.ChangeTime.Equal(w.ChangeTime) ||
+		g.Mode != w.Mode || g.Uid != w.Uid || g.Gid != w.Gid ||
+		g.Size != w.Size || g.Devmajor != w.Devmajor || g.Devminor != w.Devminor {
+		t.Fatalf("attrs mangled: %+v", g)
+	}
+	if out[0].Digest != in[0].Digest {
+		t.Fatalf("digest mangled")
+	}
+
+	// A version-1-style document heals as missing.
+	old := `{"entries":[{"header":{"Name":"x"},"digest":""}]}`
+	if err := os.WriteFile(li.path(ld), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := li.Get(ld); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("foreign version served: %v", err)
 	}
 }

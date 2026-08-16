@@ -19,8 +19,11 @@ image, an image manifest otherwise.
 contents, keyed by the digest of the file's own bytes.
 
 **layer index** (term): A JSON document recording, in tar order,
-every entry of a layer's uncompressed tar: the full tar header plus,
-for regular files, the content-CAS key of the entry's bytes.
+every entry of a layer's uncompressed tar: the tar header's
+metadata fields plus, for regular files, the content-CAS key of the
+entry's bytes. Header strings are arbitrary bytes (names, link
+targets, xattr keys and values may be non-UTF-8 or binary); the
+document's encoding round-trips them byte-exactly.
 
 ## Disk layout
 

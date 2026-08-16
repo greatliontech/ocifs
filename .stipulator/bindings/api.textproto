@@ -261,3 +261,21 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "cba9b9cc00f67dfa59f5b51991cf4be6f59d1b60b79ed73d2da0200ab3f11e6b"
 }
+
+bindings {
+  requirement_id: "REQ-api-mount-writable"
+  content_hash: "e07127f6be225cd2b1b0260af9473f46ed41019de2835cd6d1a9881ec6eeeeb7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestAcceptanceConcurrentBuild"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "7a16a9aa696f57cb0e04f96769ae282ca8a8e2ccb52ab973cb090a54dc982367"
+}
+
+bindings {
+  requirement_id: "REQ-api-mount-writable"
+  content_hash: "e07127f6be225cd2b1b0260af9473f46ed41019de2835cd6d1a9881ec6eeeeb7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestAcceptanceContainerExec"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "82b974d08073b392288d84d5d8a7cb81490c64027f179d836fb9703f4cdf352b"
+}

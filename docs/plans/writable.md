@@ -44,7 +44,7 @@ platform validation runs.
       under write/rename/whiteout load; on remount the dialect is
       valid, the rebuilt index matches the directory, and commit of
       the survived state is correct.
-- [ ] 8. Acceptance workloads — exec-from-written-file, mmap,
+- [x] 8. Acceptance workloads — exec-from-written-file, mmap,
       concurrent build (`make -j`), package-manager install in a
       container rooted on the mount, `security.capability` xattrs;
       environment-dependent pieces run where the machine allows and
