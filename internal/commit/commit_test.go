@@ -437,3 +437,64 @@ func TestNeutralityAcrossHistories(t *testing.T) {
 		t.Fatal("re-serialization changed the layer")
 	}
 }
+
+// TestRootRecordCommits pins the root arm of REQ-writable-commit
+// via REQ-writable-dialect: an unrecorded root commits nothing, a
+// recorded root restored to the base root's presented attributes
+// elides, and a differing recorded root commits the "./" entry with
+// its presented attributes.
+func TestRootRecordCommits(t *testing.T) {
+	base, err := layer.Unify([]layer.Layer{{
+		bfile("keep", "same", 0o644, baseTime),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unrecorded.
+	root, _ := newUpperDir(t)
+	if _, ok := tarEntries(t, mustLayer(t, base, root))["./"]; ok {
+		t.Fatal("unrecorded root emitted")
+	}
+
+	// Recorded, restored to the synthesized base root (0755, 0:0,
+	// epoch): elided.
+	root2, w2 := newUpperDir(t)
+	if err := w2.RecordRoot(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w2.SetRootMode(0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := w2.SetRootTimes(time.Unix(0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tarEntries(t, mustLayer(t, base, root2))["./"]; ok {
+		t.Fatal("restored root emitted")
+	}
+
+	// Recorded, differing: emitted with presented attributes.
+	root3, w3 := newUpperDir(t)
+	if err := w3.RecordRoot(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w3.SetRootMode(0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := w3.SetRootTimes(baseTime); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := tarEntries(t, mustLayer(t, base, root3))["./"]
+	if !ok {
+		t.Fatal("differing recorded root not emitted")
+	}
+	if e.hdr.Typeflag != tar.TypeDir || e.hdr.Mode != 0o700 ||
+		e.hdr.Uid != 0 || e.hdr.Gid != 0 || !e.hdr.ModTime.Equal(baseTime) {
+		t.Fatalf("root header wrong: %+v", e.hdr)
+	}
+	for k := range e.hdr.PAXRecords {
+		if strings.Contains(k, upper.XattrNS) {
+			t.Fatalf("machinery leaked into root: %s", k)
+		}
+	}
+}

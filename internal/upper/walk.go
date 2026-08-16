@@ -85,7 +85,65 @@ func Walk(root string) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
+	r, err := StatRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	st.Root = r
 	return st, nil
+}
+
+// StatRoot reads the upper root's record (REQ-writable-dialect): nil
+// when no record exists — the root then presents the base root.
+// Machinery on the root without the record is damage — the provider
+// stamps the record before any other root machinery.
+func StatRoot(root string) (*Entry, error) {
+	names, err := listXattrs(root)
+	if err != nil {
+		return nil, err
+	}
+	machinery, recorded := false, false
+	for _, name := range names {
+		if strings.HasPrefix(name, XattrNS) {
+			machinery = true
+			if name == XattrOwner {
+				recorded = true
+			}
+		}
+	}
+	if !machinery {
+		return nil, nil
+	}
+	if !recorded {
+		return nil, fmt.Errorf("upper: root carries machinery without a root record — the provider never writes one")
+	}
+	e, err := readEntry(root, ".", root)
+	if err != nil {
+		return nil, err
+	}
+	if e.Kind != KindDir {
+		return nil, fmt.Errorf("upper: root is not a directory")
+	}
+	return &e, nil
+}
+
+// Stat reads one dialect node's presented entry — the walker's
+// per-path arm, for a provider maintaining its index incrementally
+// (the index stays a cache rebuildable by Walk,
+// REQ-proj-upper-truth). ok=false when no node exists at rel.
+func Stat(root, rel string) (Entry, bool, error) {
+	hostPath := filepath.Join(root, filepath.FromSlash(rel))
+	if _, err := os.Lstat(hostPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return Entry{}, false, nil
+		}
+		return Entry{}, false, err
+	}
+	e, err := readEntry(root, rel, hostPath)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	return e, true, nil
 }
 
 // readEntry resolves one non-marker node into its presented truth.
@@ -184,6 +242,14 @@ func readEntry(root, rel, hostPath string) (Entry, error) {
 				return Entry{}, fmt.Errorf("upper: %q: malformed owner record %q", rel, val)
 			}
 			e.UID, e.GID = uid, gid
+		case name == XattrMode:
+			mv, err := strconv.ParseUint(val, 8, 32)
+			if err != nil || mv > 0o7777 {
+				return Entry{}, fmt.Errorf("upper: %q: malformed mode record %q", rel, val)
+			}
+			// The record is the presented mode; the host bits are
+			// machinery (REQ-writable-fidelity's mode override).
+			e.Mode = uint32(mv)
 		case strings.HasPrefix(name, XattrEscapePrefix):
 			real := name[len(XattrEscapePrefix):]
 			if real == "" {

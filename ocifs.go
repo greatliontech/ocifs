@@ -9,6 +9,7 @@ package ocifs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -196,6 +197,13 @@ type ImageMount struct {
 	id         string
 	ctx        context.Context
 	platform   *v1.Platform
+	upperDir   string
+	upperName  string
+	// upperRoot is the resolved upper the mount serves ("" for a
+	// read-only mount); upperLock holds a named upper's
+	// one-writable-mount flock until unmount.
+	upperRoot string
+	upperLock *os.File
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
@@ -207,7 +215,15 @@ func (im *ImageMount) Wait() {
 }
 
 func (im *ImageMount) Unmount() error {
-	return im.server.Unmount()
+	err := im.server.Unmount()
+	// The upper's one-writable-mount lock releases only when the
+	// mount actually stopped serving — a failed unmount keeps the
+	// second-mount refusal in force.
+	if err == nil && im.upperLock != nil {
+		im.upperLock.Close()
+		im.upperLock = nil
+	}
+	return err
 }
 
 func (im *ImageMount) MountPoint() string {
@@ -242,6 +258,30 @@ var MountWithPlatform = func(p v1.Platform) MountOption {
 	}
 }
 
+// MountWithUpperDir serves the writable merged projection over a
+// caller-supplied upper directory (writable.md); the upper outlives
+// the mount — unmount leaves it intact for remounting or commit
+// (REQ-api-mount-writable).
+var MountWithUpperDir = func(dir string) MountOption {
+	return func(im *ImageMount) {
+		im.upperDir = dir
+	}
+}
+
+// MountWithNamedUpper serves the writable merged projection over a
+// store-managed upper, created on first use and bound to the mounted
+// image's digest; a mount against a different base is refused
+// (REQ-api-mount-writable, REQ-writable-base-binding).
+var MountWithNamedUpper = func(name string) MountOption {
+	return func(im *ImageMount) {
+		im.upperName = name
+	}
+}
+
+// UpperPath returns the upper directory a writable mount serves
+// ("" for a read-only mount) — the path to hand to Commit.
+func (im *ImageMount) UpperPath() string { return im.upperRoot }
+
 func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	im := &ImageMount{
 		ofs: o,
@@ -251,6 +291,10 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		opt(im)
 	}
 
+	if im.upperDir != "" && im.upperName != "" {
+		return nil, fmt.Errorf("mount takes at most one upper: MountWithUpperDir or MountWithNamedUpper")
+	}
+
 	// Acquire the image before creating any per-mount state, so a
 	// failed pull leaves no orphan under mounts/.
 	img, err := o.store.Image(im.ctx, imgRef, im.platform)
@@ -258,6 +302,22 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		return nil, err
 	}
 	im.img = img
+
+	// Resolve the upper: the caller's directory as given, or the
+	// store-managed named upper — created on first use, its base
+	// binding validated against this image (REQ-api-mount-writable).
+	// Platform-split: the writable stage serves FUSE.
+	if err := platformResolveUpper(o, im, img); err != nil {
+		return nil, err
+	}
+	defer func() {
+		// A failure before the server exists releases a named
+		// upper's mount lock.
+		if im.server == nil && im.upperLock != nil {
+			im.upperLock.Close()
+			im.upperLock = nil
+		}
+	}()
 
 	view, err := img.Unify()
 	if err != nil {
@@ -291,7 +351,7 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	srv, err := platformMount(o, imgRef, img, view, stateDir, im.mountPoint)
+	srv, err := platformMount(o, imgRef, img, view, stateDir, im.mountPoint, im.upperRoot)
 	if err != nil {
 		return nil, err
 	}

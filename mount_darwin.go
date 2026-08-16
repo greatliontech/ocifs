@@ -33,7 +33,14 @@ const fskitShortName = "OcifsFS"
 // written by the appex into the shared state directory. Tier-2
 // validation of this path runs on a real darwin machine with a
 // signed extension — a user-side act.
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint string) (mountServer, error) {
+func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
+	if im.upperDir != "" || im.upperName != "" {
+		return fmt.Errorf("writable mounts are not served here: darwin mounts are appex-mediated; the FSKit write arm is an explicit non-goal of this stage")
+	}
+	return nil
+}
+
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	ref, err := name.ParseReference(imgRef)
 	if err != nil {
 		return nil, err

@@ -234,3 +234,30 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "8e0f88386dcc6508a07831d34476452b452133d55f6c79c74ef0e4e7dedd33f1"
 }
+
+bindings {
+  requirement_id: "REQ-api-mount-writable"
+  content_hash: "e07127f6be225cd2b1b0260af9473f46ed41019de2835cd6d1a9881ec6eeeeb7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a7dc195d31c5e9654f03c5045e1c0d3ce4874521f3e31b59d68365d7af31f0c8"
+}
+
+bindings {
+  requirement_id: "REQ-api-mount-writable"
+  content_hash: "e07127f6be225cd2b1b0260af9473f46ed41019de2835cd6d1a9881ec6eeeeb7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestWritableMountSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8d0c11a702f0a7af99c11481d181b0c163de4e92495dfa7b7633afdf6b3999a1"
+}
+
+bindings {
+  requirement_id: "REQ-api-mount-writable"
+  content_hash: "e07127f6be225cd2b1b0260af9473f46ed41019de2835cd6d1a9881ec6eeeeb7"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestWritableNamedUpper"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "cba9b9cc00f67dfa59f5b51991cf4be6f59d1b60b79ed73d2da0200ab3f11e6b"
+}

@@ -545,3 +545,233 @@ func TestCreatePublishRefusesExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestRootRecord pins the root-record dialect rule
+// (REQ-writable-dialect): no record means no root entry; the record
+// makes root attributes deliberate and presented through the walk;
+// machinery on the root without the record is damage.
+func TestRootRecord(t *testing.T) {
+	root, w := newUpper(t)
+	st, err := Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Root != nil {
+		t.Fatal("unrecorded root surfaced an entry")
+	}
+
+	if err := w.RecordRoot(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetRootMode(0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetRootTimes(fixedTime); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Root == nil {
+		t.Fatal("recorded root missing")
+	}
+	if st.Root.Kind != KindDir || st.Root.Mode != 0o700 ||
+		st.Root.UID != 0 || st.Root.GID != 0 ||
+		!st.Root.ModTime.Equal(fixedTime) {
+		t.Fatalf("root record wrong: %+v", st.Root)
+	}
+
+	// Re-recording replaces atomically.
+	if err := w.RecordRoot(7, 8); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Root.UID != 7 || st.Root.GID != 8 {
+		t.Fatalf("re-record not presented: %+v", st.Root)
+	}
+}
+
+// TestRootMachineryWithoutRecordRefused pins the damage arm: any
+// reserved xattr on the root without the owner record fails the
+// walk loudly.
+func TestRootMachineryWithoutRecordRefused(t *testing.T) {
+	root, _ := newUpper(t)
+	if err := unix.Lsetxattr(root, XattrEscapePrefix+"user.k", []byte("v"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Walk(root); err == nil || !strings.Contains(err.Error(), "root record") {
+		t.Fatalf("root machinery without record accepted: %v", err)
+	}
+}
+
+// TestModeRecord pins the mode fidelity override
+// (REQ-writable-fidelity): a provider-denying mode presents and
+// round-trips through the record while the host keeps access bits;
+// returning to an accessible mode drops the record.
+func TestModeRecord(t *testing.T) {
+	root, w := newUpper(t)
+	if err := w.PublishFile("f", strings.NewReader("x"), 0o644, fixedTime, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetMode("f", 0); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Walk(root)
+	if err != nil {
+		t.Fatalf("walk with mode-000 entry: %v", err)
+	}
+	if st.Entries["f"].Mode != 0 {
+		t.Fatalf("presented mode %o, want 0", st.Entries["f"].Mode)
+	}
+	var hst unix.Stat_t
+	if err := unix.Lstat(filepath.Join(root, "f"), &hst); err != nil {
+		t.Fatal(err)
+	}
+	if hst.Mode&0o600 != 0o600 {
+		t.Fatalf("host lost provider access: %o", hst.Mode&0o7777)
+	}
+
+	// Back to accessible: the record drops, host truth resumes.
+	if err := w.SetMode("f", 0o640); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Entries["f"].Mode != 0o640 {
+		t.Fatalf("presented mode %o, want 640", st.Entries["f"].Mode)
+	}
+	names, err := listXattrs(filepath.Join(root, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		if n == XattrMode {
+			t.Fatal("stale mode record after accessible chmod")
+		}
+	}
+
+	// Publishing directly with a denying mode records too — dirs
+	// keep owner search.
+	if err := w.Mkdir("d", 0o111); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.PublishFile("d/g", strings.NewReader("y"), 0o004, fixedTime, nil); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Entries["d"].Mode != 0o111 || st.Entries["d/g"].Mode != 0o004 {
+		t.Fatalf("published denying modes wrong: %o %o", st.Entries["d"].Mode, st.Entries["d/g"].Mode)
+	}
+}
+
+// TestChownClearsModeRecordSuid pins REQ-writable-fidelity's
+// clearing rule through the mode record: special bits held in the
+// record clear on chown exactly as native host bits would.
+func TestChownClearsModeRecordSuid(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("privileged run: override arm needs refused chowns")
+	}
+	root, w := newUpper(t)
+	if err := w.PublishFile("f", strings.NewReader("x"), 0o644, fixedTime, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetMode("f", 0o4400); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetOwner("f", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := st.Entries["f"]
+	if e.UID != 0 || e.GID != 0 {
+		t.Fatalf("owner %d:%d", e.UID, e.GID)
+	}
+	if e.Mode&0o6000 != 0 {
+		t.Fatalf("suid survived chown through the record: %o", e.Mode)
+	}
+	if e.Mode != 0o400 {
+		t.Fatalf("mode %o, want 400", e.Mode)
+	}
+}
+
+// TestPublishDirAtomic pins directory copy-up atomicity: a
+// fully-attributed publish (mode record, owner override, escaped
+// xattr, time) appears whole, and an aborted publish leaves nothing
+// at the path.
+func TestPublishDirAtomic(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("privileged run: override arm needs refused chowns")
+	}
+	root, w := newUpper(t)
+	xattrs := map[string]string{"user.k": "v", "security.capability": "caps"}
+	if err := w.PublishDir("d", 0o500, 0, 0, fixedTime, xattrs); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := st.Entries["d"]
+	if e.Kind != KindDir || e.Mode != 0o500 || e.UID != 0 || e.GID != 0 ||
+		!e.ModTime.Equal(fixedTime) {
+		t.Fatalf("published dir wrong: %+v", e)
+	}
+	if e.Xattrs["user.k"] != "v" || e.Xattrs["security.capability"] != "caps" {
+		t.Fatalf("xattrs wrong: %v", e.Xattrs)
+	}
+
+	// Abort at the publish gate: the crash prefix holds no entry —
+	// fully copied or untouched.
+	w2root, w2 := newUpper(t)
+	w2.SetStepHook(func(desc string) error {
+		if desc == "dir-publish e" {
+			return errors.New("crash")
+		}
+		return nil
+	})
+	if err := w2.PublishDir("e", 0o755, 0, 0, fixedTime, nil); err == nil {
+		t.Fatal("gate abort did not surface")
+	}
+	st2, err := Walk(w2root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st2.Entries["e"]; ok {
+		t.Fatal("aborted publish left an entry")
+	}
+}
+
+// TestChmodOnFifoStoresNatively pins the kind switch: FIFOs carry no
+// xattr machinery, so any mode — provider-denying included — stores
+// natively and round-trips through the walk.
+func TestChmodOnFifoStoresNatively(t *testing.T) {
+	root, w := newUpper(t)
+	if err := w.Mkfifo("p", 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetMode("p", 0o400); err != nil {
+		t.Fatalf("denying chmod on fifo: %v", err)
+	}
+	if err := w.SetMode("p", 0o644); err != nil {
+		t.Fatalf("accessible chmod on fifo: %v", err)
+	}
+	st, err := Walk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Entries["p"].Mode != 0o644 {
+		t.Fatalf("fifo mode %o", st.Entries["p"].Mode)
+	}
+}

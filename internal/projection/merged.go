@@ -40,6 +40,14 @@ type Merged struct {
 
 	mu  sync.RWMutex
 	idx *upperIndex
+
+	// write is present on writable merges (NewMergedWritable); nil
+	// means every mutating operation returns ErrReadOnly.
+	write *writeState
+	// wmu serializes mutating operations end to end — dialect steps
+	// and index maintenance; readers only ever block on mu's brief
+	// index critical sections, never on write-path I/O.
+	wmu sync.Mutex
 }
 
 // upperIndex is one immutable snapshot of the walked upper state
@@ -118,6 +126,14 @@ func (m *Merged) Refresh() error {
 	return nil
 }
 
+// Readers hold mu.RLock for the duration of a resolution — the
+// write path mutates the index in place under mu.Lock, so a
+// resolution observes one consistent index state. Nodes and
+// snapshots copy what they keep; nothing references index maps
+// after the lock drops.
+
+// index returns the current index for quiescent callers (tests):
+// the pointer is only safe to use while no writer runs.
 func (m *Merged) index() *upperIndex {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -287,10 +303,20 @@ func (n *Node) Nlink() uint64 {
 	return 1
 }
 
-// Root returns the merge's root node: ID 2, base root attributes
-// (the walker records no root entry; root attribute mutation is a
-// write-path concern).
-func (m *Merged) Root() *Node { return m.root }
+// Root returns the merge's root node: ID 2 always. Attributes are
+// the base root's until the upper's root record exists
+// (writable.md REQ-writable-dialect), then the record's — a
+// shadow-in-place of the fixed root identity. No pin: the root's
+// identity never derives from an inode.
+func (m *Merged) Root() *Node {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.idx.st.Root != nil {
+		r := *m.idx.st.Root
+		return &Node{id: RootID, kind: KindDir, path: ".", name: ".", view: m.inner.Root(), up: &r}
+	}
+	return m.root
+}
 
 // Lookup resolves name within dir against the current merge:
 // an upper entry shadows the base entry at its path entirely, a
@@ -306,7 +332,9 @@ func (m *Merged) Lookup(dir *Node, name string) (*Node, bool, error) {
 	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '/') {
 		return nil, false, nil
 	}
-	idx := m.index()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	idx := m.idx
 	p := childPath(dir.path, name)
 	if ue, ok := idx.st.Entries[p]; ok {
 		n, err := m.materialize(p, name, ue, idx, true)
@@ -488,7 +516,9 @@ func (m *Merged) OpenDir(dir *Node) (*DirSnapshot, error) {
 	if dir.kind != KindDir {
 		return nil, ErrNotDir
 	}
-	idx := m.index()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	idx := m.idx
 	cmp := m.inner.caps.compare
 
 	var rows []DirEntry

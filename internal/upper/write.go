@@ -100,13 +100,35 @@ func (w *Writer) PublishFile(rel string, content io.Reader, mode uint32, mtime t
 		return err
 	}
 	// The umask may have stripped bits; restore the full unix mode
-	// including special bits on the not-yet-published temporary.
-	if err := unix.Chmod(tmp, mode&0o7777); err != nil {
+	// including special bits on the not-yet-published temporary. A
+	// mode denying the provider its own access lands as the record,
+	// with the host keeping the access bits
+	// (REQ-writable-fidelity's mode override).
+	hm, rec := hostModeFor(mode, false)
+	if err := unix.Chmod(tmp, hm); err != nil {
 		os.Remove(tmp)
 		return &os.PathError{Op: "chmod", Path: tmp, Err: err}
 	}
+	if rec {
+		if err := unix.Lsetxattr(tmp, XattrMode, []byte(strconv.FormatUint(uint64(mode&0o7777), 8)), 0); err != nil {
+			os.Remove(tmp)
+			return &os.PathError{Op: "lsetxattr", Path: tmp, Err: err}
+		}
+	}
 	for name, val := range xattrs {
 		if err := unix.Lsetxattr(tmp, name, []byte(val), 0); err != nil {
+			// A host-refused non-machinery attribute records its
+			// escape on the temporary, pre-rename, so the published
+			// node appears fully formed (REQ-writable-fidelity;
+			// copy-up's untouched-or-fully-copied atomicity).
+			refused := errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) ||
+				errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EOPNOTSUPP) ||
+				errors.Is(err, unix.EINVAL)
+			if refused && !strings.HasPrefix(name, XattrNS) {
+				if eerr := unix.Lsetxattr(tmp, XattrEscapePrefix+name, []byte(val), 0); eerr == nil {
+					continue
+				}
+			}
 			os.Remove(tmp)
 			return &os.PathError{Op: "lsetxattr", Path: tmp + ":" + name, Err: err}
 		}
@@ -140,10 +162,18 @@ func (w *Writer) Mkdir(rel string, mode uint32) error {
 		return err
 	}
 	// Full mode (umask-proof) lands on the invisible temporary; one
-	// rename publishes the fully-formed directory.
-	if err := unix.Chmod(tmp, mode&0o7777); err != nil {
+	// rename publishes the fully-formed directory. Provider-denying
+	// modes land as the record (REQ-writable-fidelity).
+	hm, rec := hostModeFor(mode, true)
+	if err := unix.Chmod(tmp, hm); err != nil {
 		os.Remove(tmp)
 		return &os.PathError{Op: "chmod", Path: tmp, Err: err}
+	}
+	if rec {
+		if err := unix.Lsetxattr(tmp, XattrMode, []byte(strconv.FormatUint(uint64(mode&0o7777), 8)), 0); err != nil {
+			os.Remove(tmp)
+			return &os.PathError{Op: "lsetxattr", Path: tmp, Err: err}
+		}
 	}
 	if err := w.gate("mkdir-publish " + rel); err != nil {
 		return err
@@ -319,6 +349,20 @@ var ErrNeedsStandIn = errors.New("upper: node kind cannot carry overrides; conve
 // the override; ErrNeedsStandIn tells the caller to convert.
 func (w *Writer) SetOwner(rel string, uid, gid int) error {
 	host := w.host(rel)
+	// A mode record's special bits clear exactly as a native chown
+	// clears host bits (REQ-writable-fidelity) — record-first, so
+	// the crash intermediate is the cleared record with the old
+	// owner, only ever reducing privilege.
+	if rec, ok, err := readModeRecord(host); err != nil {
+		return err
+	} else if ok && rec&0o6000 != 0 {
+		if err := w.gate("chown-clear-record " + rel); err != nil {
+			return err
+		}
+		if err := unix.Lsetxattr(host, XattrMode, []byte(strconv.FormatUint(uint64(rec&0o1777), 8)), 0); err != nil {
+			return &os.PathError{Op: "lsetxattr", Path: host, Err: err}
+		}
+	}
 	if err := w.gate("chown " + rel); err != nil {
 		return err
 	}
@@ -471,6 +515,335 @@ func Sweep(root string) error {
 		}
 		return nil
 	})
+}
+
+// providerMask is the access the dialect requires of its own nodes:
+// owner read and write on files and stand-ins, plus search on
+// directories (xattr access is mode-gated for user.*).
+func providerMask(isDir bool) uint32 {
+	if isDir {
+		return 0o700
+	}
+	return 0o600
+}
+
+// hostModeFor renders a presented mode as host bits plus whether a
+// mode record is needed (REQ-writable-fidelity's mode override).
+// A recorded mode's special bits never land on the host node —
+// they present from the record, and a host suid bit would be
+// caller-owned noise.
+func hostModeFor(mode uint32, isDir bool) (uint32, bool) {
+	mode &= 0o7777
+	mask := providerMask(isDir)
+	if mode&mask == mask {
+		return mode, false
+	}
+	return (mode &^ 0o6000) | mask, true
+}
+
+// readModeRecord reads a node's mode record when one exists.
+func readModeRecord(host string) (uint32, bool, error) {
+	val, err := getXattr(host, XattrMode)
+	if err != nil {
+		var pe *os.PathError
+		if errors.As(err, &pe) && xattrAbsent(pe.Err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	mv, perr := strconv.ParseUint(val, 8, 32)
+	if perr != nil || mv > 0o7777 {
+		return 0, false, fmt.Errorf("upper: malformed mode record %q on %q", val, host)
+	}
+	return uint32(mv), true, nil
+}
+
+// applyTempOwner lands ownership on a not-yet-published temporary:
+// natively when the host permits, as the override record otherwise.
+// No clearing applies — the temporary carries its full recorded
+// mode deliberately (copy-up preserves recorded attributes).
+func applyTempOwner(tmp string, uid, gid int) error {
+	if err := os.Lchown(tmp, uid, gid); err == nil {
+		return nil
+	} else if !errors.Is(err, unix.EPERM) && !errors.Is(err, unix.EINVAL) {
+		return err
+	}
+	if err := unix.Lsetxattr(tmp, XattrOwner, []byte(strconv.Itoa(uid)+":"+strconv.Itoa(gid)), 0); err != nil {
+		return &os.PathError{Op: "lsetxattr", Path: tmp, Err: err}
+	}
+	return nil
+}
+
+// PublishDir publishes a directory fully formed — mode (with the
+// record arm), ownership, presented xattrs (escaping refused ones),
+// and time all land on the reserved temporary before one rename
+// (REQ-writable-copyup: a copied-up entry is fully copied or
+// untouched, directories included).
+func (w *Writer) PublishDir(rel string, mode uint32, uid, gid int, mtime time.Time, xattrs map[string]string) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	tmp := w.host(w.tempName(path.Dir(rel)))
+	if err := w.gate("dir-temp " + rel); err != nil {
+		return err
+	}
+	if err := os.Mkdir(tmp, fs.FileMode(mode&0o777|0o700)); err != nil {
+		return err
+	}
+	fail := func(err error) error {
+		os.RemoveAll(tmp)
+		return err
+	}
+	hm, rec := hostModeFor(mode, true)
+	if err := unix.Chmod(tmp, hm); err != nil {
+		return fail(&os.PathError{Op: "chmod", Path: tmp, Err: err})
+	}
+	if rec {
+		if err := unix.Lsetxattr(tmp, XattrMode, []byte(strconv.FormatUint(uint64(mode&0o7777), 8)), 0); err != nil {
+			return fail(&os.PathError{Op: "lsetxattr", Path: tmp, Err: err})
+		}
+	}
+	if err := applyTempOwner(tmp, uid, gid); err != nil {
+		return fail(err)
+	}
+	for name, val := range xattrs {
+		if err := unix.Lsetxattr(tmp, name, []byte(val), 0); err != nil {
+			refused := errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) ||
+				errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EOPNOTSUPP) ||
+				errors.Is(err, unix.EINVAL)
+			if refused && !strings.HasPrefix(name, XattrNS) {
+				if eerr := unix.Lsetxattr(tmp, XattrEscapePrefix+name, []byte(val), 0); eerr == nil {
+					continue
+				}
+			}
+			return fail(&os.PathError{Op: "lsetxattr", Path: tmp + ":" + name, Err: err})
+		}
+	}
+	if !mtime.IsZero() {
+		ts := unix.NsecToTimespec(mtime.UnixNano())
+		if err := unix.UtimesNanoAt(unix.AT_FDCWD, tmp, []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			return fail(&os.PathError{Op: "settimes", Path: tmp, Err: err})
+		}
+	}
+	if err := w.gate("dir-publish " + rel); err != nil {
+		return err
+	}
+	if err := renameNoReplace(tmp, w.host(rel)); err != nil {
+		os.RemoveAll(tmp)
+		return err
+	}
+	return nil
+}
+
+// PublishSymlink publishes a native symlink fully formed — target
+// and time land on the temporary before one rename. Callers route
+// foreign-owned or xattr-carrying symlinks to MakeStandIn instead.
+func (w *Writer) PublishSymlink(target, rel string, mtime time.Time) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	tmp := w.host(w.tempName(path.Dir(rel)))
+	if err := w.gate("symlink-temp " + rel); err != nil {
+		return err
+	}
+	if err := os.Symlink(target, tmp); err != nil {
+		return err
+	}
+	if !mtime.IsZero() {
+		ts := unix.NsecToTimespec(mtime.UnixNano())
+		if err := unix.UtimesNanoAt(unix.AT_FDCWD, tmp, []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			os.Remove(tmp)
+			return &os.PathError{Op: "settimes", Path: tmp, Err: err}
+		}
+	}
+	if err := w.gate("symlink-publish " + rel); err != nil {
+		return err
+	}
+	if err := renameNoReplace(tmp, w.host(rel)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// PublishFifo publishes a native FIFO fully formed — mode (with the
+// record arm) and time land on the temporary before one rename.
+func (w *Writer) PublishFifo(rel string, mode uint32, mtime time.Time) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	tmp := w.host(w.tempName(path.Dir(rel)))
+	if err := w.gate("fifo-temp " + rel); err != nil {
+		return err
+	}
+	if err := unix.Mkfifo(tmp, mode&0o777); err != nil {
+		return &os.PathError{Op: "mkfifo", Path: tmp, Err: err}
+	}
+	fail := func(err error) error {
+		os.Remove(tmp)
+		return err
+	}
+	// FIFOs need no provider-access mask: the walker lstats them
+	// without reading xattrs, so any mode stores natively.
+	if err := unix.Chmod(tmp, mode&0o7777); err != nil {
+		return fail(&os.PathError{Op: "chmod", Path: tmp, Err: err})
+	}
+	if !mtime.IsZero() {
+		ts := unix.NsecToTimespec(mtime.UnixNano())
+		if err := unix.UtimesNanoAt(unix.AT_FDCWD, tmp, []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			return fail(&os.PathError{Op: "settimes", Path: tmp, Err: err})
+		}
+	}
+	if err := w.gate("fifo-publish " + rel); err != nil {
+		return err
+	}
+	if err := renameNoReplace(tmp, w.host(rel)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// SetMode applies permission bits (including special bits) to an
+// upper node — a provider-denying mode lands as the record over
+// accessible host bits; a mode returning to accessible values drops
+// the record mode-first, so the crash intermediate presents the old
+// mode (REQ-writable-fidelity). Symlinks carry no mode; callers
+// never pass one.
+func (w *Writer) SetMode(rel string, mode uint32) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	host := w.host(rel)
+	var lst unix.Stat_t
+	if err := unix.Lstat(host, &lst); err != nil {
+		return &os.PathError{Op: "lstat", Path: host, Err: err}
+	}
+	switch uint32(lst.Mode) & unix.S_IFMT {
+	case unix.S_IFREG, unix.S_IFDIR:
+	default:
+		// FIFOs and sockets cannot carry user xattrs, and the walker
+		// never reads xattrs from them — any mode stores natively,
+		// no record machinery.
+		if err := w.gate("chmod " + rel); err != nil {
+			return err
+		}
+		if err := unix.Chmod(host, mode&0o7777); err != nil {
+			return &os.PathError{Op: "chmod", Path: rel, Err: err}
+		}
+		return nil
+	}
+	hm, rec := hostModeFor(mode, uint32(lst.Mode)&unix.S_IFMT == unix.S_IFDIR)
+	if rec {
+		if err := w.gate("chmod-record " + rel); err != nil {
+			return err
+		}
+		if err := unix.Lsetxattr(host, XattrMode, []byte(strconv.FormatUint(uint64(mode&0o7777), 8)), 0); err != nil {
+			return &os.PathError{Op: "lsetxattr", Path: host, Err: err}
+		}
+		if err := w.gate("chmod " + rel); err != nil {
+			return err
+		}
+		if err := unix.Chmod(host, hm); err != nil {
+			return &os.PathError{Op: "chmod", Path: rel, Err: err}
+		}
+		return nil
+	}
+	if err := w.gate("chmod " + rel); err != nil {
+		return err
+	}
+	if err := unix.Chmod(host, hm); err != nil {
+		return &os.PathError{Op: "chmod", Path: rel, Err: err}
+	}
+	if err := w.gate("chmod-unrecord " + rel); err != nil {
+		return err
+	}
+	if err := unix.Lremovexattr(host, XattrMode); err != nil && !xattrAbsent(err) {
+		return &os.PathError{Op: "lremovexattr", Path: host, Err: err}
+	}
+	return nil
+}
+
+// RemoveOpaque removes a directory's opaque marker — legal only
+// while dismantling beneath the directory's own whiteout
+// (REQ-writable-delete's scoped monotonicity; the caller orders).
+func (w *Writer) RemoveOpaque(rel string) error {
+	if err := checkName(rel); err != nil {
+		return err
+	}
+	if err := w.gate("remove-opaque " + rel); err != nil {
+		return err
+	}
+	err := os.Remove(filepath.Join(w.host(rel), OpaqueMarker))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// RecordRoot stamps the upper root's root record: the presented
+// ownership, and the discriminator that root attributes are
+// deliberate (REQ-writable-dialect) — until it exists the root
+// presents the base root. One atomic step (a single-attribute
+// replace). The root is a directory, so no setuid clearing applies.
+func (w *Writer) RecordRoot(uid, gid int) error {
+	if err := w.gate("root-record"); err != nil {
+		return err
+	}
+	if err := unix.Lsetxattr(w.root, XattrOwner, []byte(strconv.Itoa(uid)+":"+strconv.Itoa(gid)), 0); err != nil {
+		return &os.PathError{Op: "lsetxattr", Path: w.root, Err: err}
+	}
+	return nil
+}
+
+// SetRootMode applies permission bits to the host root directory —
+// presented (and committed) only once the root record exists. The
+// same mode-record dance as SetMode applies; callers stamp the
+// owner record first (machinery on the root without it is damage).
+func (w *Writer) SetRootMode(mode uint32) error {
+	hm, rec := hostModeFor(mode, true)
+	if rec {
+		if err := w.gate("root-chmod-record"); err != nil {
+			return err
+		}
+		if err := unix.Lsetxattr(w.root, XattrMode, []byte(strconv.FormatUint(uint64(mode&0o7777), 8)), 0); err != nil {
+			return &os.PathError{Op: "lsetxattr", Path: w.root, Err: err}
+		}
+		if err := w.gate("root-chmod"); err != nil {
+			return err
+		}
+		if err := unix.Chmod(w.root, hm); err != nil {
+			return &os.PathError{Op: "chmod", Path: w.root, Err: err}
+		}
+		return nil
+	}
+	if err := w.gate("root-chmod"); err != nil {
+		return err
+	}
+	if err := unix.Chmod(w.root, hm); err != nil {
+		return &os.PathError{Op: "chmod", Path: w.root, Err: err}
+	}
+	if err := w.gate("root-chmod-unrecord"); err != nil {
+		return err
+	}
+	if err := unix.Lremovexattr(w.root, XattrMode); err != nil && !xattrAbsent(err) {
+		return &os.PathError{Op: "lremovexattr", Path: w.root, Err: err}
+	}
+	return nil
+}
+
+// SetRootTimes applies a modification time to the host root
+// directory — presented (and committed) only once the root record
+// exists.
+func (w *Writer) SetRootTimes(mtime time.Time) error {
+	if err := w.gate("root-times"); err != nil {
+		return err
+	}
+	ts := unix.NsecToTimespec(mtime.UnixNano())
+	if err := unix.UtimesNanoAt(unix.AT_FDCWD, w.root, []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return &os.PathError{Op: "settimes", Path: w.root, Err: err}
+	}
+	return nil
 }
 
 // SetTimes applies a modification time to an upper node without

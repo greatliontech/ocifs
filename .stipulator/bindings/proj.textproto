@@ -399,7 +399,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-upper-truth"
-  content_hash: "238978d97562549ace4eba2a13ec35dbebb0e7dd076e1e108aacc2b7fdc2bbd1"
+  content_hash: "3d5aed53f5b4112e1b5cbf8a62cd22e91b7ec0a6eeb8a08e4e0162c177edda38"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.Merged.Refresh"
   role: BINDING_ROLE_IMPLEMENTS
@@ -408,7 +408,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-upper-truth"
-  content_hash: "238978d97562549ace4eba2a13ec35dbebb0e7dd076e1e108aacc2b7fdc2bbd1"
+  content_hash: "3d5aed53f5b4112e1b5cbf8a62cd22e91b7ec0a6eeb8a08e4e0162c177edda38"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestEnumerationSnapshotsAndVerifiers"
   role: BINDING_ROLE_TESTS
@@ -417,7 +417,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-upper-truth"
-  content_hash: "238978d97562549ace4eba2a13ec35dbebb0e7dd076e1e108aacc2b7fdc2bbd1"
+  content_hash: "3d5aed53f5b4112e1b5cbf8a62cd22e91b7ec0a6eeb8a08e4e0162c177edda38"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestPinSurvivesUnlink"
   role: BINDING_ROLE_TESTS
@@ -480,9 +480,18 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-upper-truth"
-  content_hash: "238978d97562549ace4eba2a13ec35dbebb0e7dd076e1e108aacc2b7fdc2bbd1"
+  content_hash: "3d5aed53f5b4112e1b5cbf8a62cd22e91b7ec0a6eeb8a08e4e0162c177edda38"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyMergedPresentation"
   role: BINDING_ROLE_TESTS
   shape_hash: "171df3090f65e5c90462439b16846093dd7bab70fae0d93097b367dff4df58c0"
+}
+
+bindings {
+  requirement_id: "REQ-proj-commit-neutral"
+  content_hash: "8292c15ab140ec0ab43ab773ea0e0815d8ace4f37e36ee9bb546c5641b543fac"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/commit.TestRootRecordCommits"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b3141ac3e0719666d47b89abf8b58ade6c05d226f072fea0556415539bf39c0a"
 }

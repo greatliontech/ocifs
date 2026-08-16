@@ -3,6 +3,7 @@
 package ocifs
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/greatliontech/ocifs/internal/store"
@@ -17,7 +18,14 @@ import (
 // probe before the projection exists, so the declared envelope never
 // changes under a live mount — persists its report, and serves the
 // mountpoint as the virtualization root.
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint string) (mountServer, error) {
+func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
+	if im.upperDir != "" || im.upperName != "" {
+		return fmt.Errorf("writable mounts are not served here: the ProjFS write arm is an explicit non-goal of this stage")
+	}
+	return nil
+}
+
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	symlinks, err := projfsfs.ProbeSymlinkSupport(filepath.Join(stateDir, "probe"))
 	if err != nil {
 		return nil, err

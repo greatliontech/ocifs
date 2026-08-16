@@ -201,6 +201,16 @@ func Layer(base *layer.View, up *upper.State, w io.Writer) error {
 		emit(p, hdr, src)
 	}
 
+	// The root: a recorded root (REQ-writable-dialect) commits as the
+	// layer's "./" entry exactly when its presented attributes differ
+	// from the base root's; an unrecorded root commits nothing.
+	if up.Root != nil && rootDiffers(base, up.Root) {
+		hdr := headerFor(*up.Root)
+		hdr.Typeflag = tar.TypeDir
+		hdr.Size = 0
+		emit("./", hdr, "")
+	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
 	for _, em := range out {
 		if err := tw.WriteHeader(&em.hdr); err != nil {
@@ -319,6 +329,27 @@ func entryDiffers(base *layer.View, up *upper.State, p string) bool {
 		}
 	}
 	return !xattrsEqual(baseXattrs(&be), e.Xattrs)
+}
+
+// rootDiffers compares a recorded root's presented attributes with
+// the base root's — the base's own root record when a layer wrote
+// one, the synthesized plain root otherwise (0755, 0:0, epoch).
+func rootDiffers(base *layer.View, r *upper.Entry) bool {
+	mode, uid, gid := uint32(0o755), 0, 0
+	mtime := epoch
+	var xattrs map[string]string
+	if be, ok := base.Lookup("."); ok {
+		mode = uint32(be.Header.Mode) & 0o7777
+		uid, gid = be.Header.Uid, be.Header.Gid
+		if !be.Header.ModTime.IsZero() {
+			mtime = be.Header.ModTime
+		}
+		xattrs = baseXattrs(&be)
+	}
+	if mode != r.Mode || uid != r.UID || gid != r.GID || !mtime.Equal(r.ModTime) {
+		return true
+	}
+	return !xattrsEqual(xattrs, r.Xattrs)
 }
 
 func baseKind(flag byte) (upper.Kind, bool) {

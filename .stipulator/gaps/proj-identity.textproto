@@ -1,6 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-proj-identity"
-reason: "The kernel pins the read-path identity clauses (view-derived IDs, root 2, disjoint non-view range); the writable shadowing and upper-born allocation clauses have no code able to violate them yet"
-lands { manual { condition: "writable stage lands a write path and pins shadowing-keeps-view-ID and upper-born allocation" } }

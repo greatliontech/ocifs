@@ -565,3 +565,42 @@ func TestPinSurvivesUnlink(t *testing.T) {
 		t.Fatalf("pinned content unreadable: %q %v", b, err)
 	}
 }
+
+// TestMergedRootRecord pins the root presentation rule: base root
+// attributes until the record exists, the record's afterwards, ID 2
+// throughout (writable.md REQ-writable-presented).
+func TestMergedRootRecord(t *testing.T) {
+	view := mustView(t, lfile("a"))
+	inner := mustNew(t, view, nil, capsFull)
+	root, w := newUpperFor(t)
+	m := mustMerged(t, inner, root)
+
+	r0 := m.Root()
+	if r0.ID() != RootID || r0.UpperBacked() {
+		t.Fatalf("unrecorded root wrong: %d %v", r0.ID(), r0.UpperBacked())
+	}
+
+	if err := w.RecordRoot(3, 4); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetRootMode(0o701); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	r1 := m.Root()
+	if r1.ID() != RootID || !r1.UpperBacked() {
+		t.Fatalf("recorded root wrong: %d %v", r1.ID(), r1.UpperBacked())
+	}
+	h := r1.Header()
+	if h.Mode != 0o701 || h.Uid != 3 || h.Gid != 4 {
+		t.Fatalf("recorded root attrs wrong: %+v", h)
+	}
+	// Resolution beneath the recorded root still works.
+	a, ok, err := m.Lookup(r1, "a")
+	if err != nil || !ok {
+		t.Fatalf("lookup under recorded root: %v %v", ok, err)
+	}
+	a.Close()
+}

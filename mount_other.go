@@ -3,6 +3,7 @@
 package ocifs
 
 import (
+	"fmt"
 	"errors"
 
 	"github.com/greatliontech/ocifs/internal/layer"
@@ -11,6 +12,13 @@ import (
 
 // In-process mounting exists on linux (FUSE) and windows/amd64
 // (ProjFS); darwin mounting is appex-mediated (mount_darwin.go).
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint string) (mountServer, error) {
+func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
+	if im.upperDir != "" || im.upperName != "" {
+		return fmt.Errorf("writable mounts are not served here: no mount backend exists on this platform")
+	}
+	return nil
+}
+
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	return nil, errors.New("in-process mounting is not supported on this platform")
 }

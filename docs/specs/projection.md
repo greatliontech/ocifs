@@ -202,8 +202,7 @@ the projection observes) — the on-disk upper MUST be the single
 source of truth for local modifications, with any in-memory overlay
 state a cache rebuildable from disk alone. An authoritative
 in-memory record is unimplementable on ProjFS (the OS writes behind
-the provider), so violating this forecloses windows. Lands: when the
-writable stage first lands a write path.
+the provider), so violating this forecloses windows.
 
 **REQ-proj-commit-neutral** (invariant): Committing a writable
 projection MUST produce a layer that is a pure function of the upper

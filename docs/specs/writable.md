@@ -53,7 +53,16 @@ devices). An extended attribute the host refuses to store natively
 (`security.*`, `trusted.*` for an unprivileged writer) is recorded
 verbatim as `user.ocifs.xattr.<name>` on the entry — the escape that
 lets a capability-bearing binary round-trip through an unprivileged
-upper.
+upper. The upper root directory itself is no entry: its host
+attributes are creation noise, and the root presents the base root's
+attributes until a **root record** exists — the `user.ocifs.owner`
+record stamped on the upper root by the first root-mutating
+attribute change (stamped with the presented owner even when the
+change touches only mode or times), after which the root's mode and
+timestamps live in the host root directory's own attributes and its
+ownership in the record. A recorded root commits as the layer's
+root entry exactly when its presented attributes differ from the
+base root's.
 
 **REQ-writable-fidelity** (behavior): The provider MUST present and
 commit the recorded intent, not the host state, wherever the two
@@ -66,7 +75,20 @@ stored natively. `setxattr` of a
 host-refused attribute records the `user.ocifs.xattr.<name>` escape,
 and the attribute presents under its real name. In the dominant
 single-uid user-namespace case (container root mapped to the caller)
-ownership round-trips natively and no override is written. A `chown`
+ownership round-trips natively and no override is written. A
+presented mode that would deny the provider its own dialect access —
+owner read and write on files and stand-ins, owner read, write, and
+search on directories — is itself a fidelity override: the host node
+keeps the presented mode plus the provider-access bits, the
+presented mode lands as the single `user.ocifs.mode` record, and
+presentation and commit read the record (the host bits are
+machinery; the mount surface enforces the presented mode). A mode
+returning to provider-accessible values drops the record — host
+truth resumes — ordered mode-first, so the one crash intermediate
+presents the old mode over the new host bits. Stamping the root
+record orders the owner record first — machinery on the root
+without it is damage — so the stamping sequence's intermediate
+presents the host root's attributes under the recorded owner. A `chown`
 recorded as an override clears setuid/setgid in the presented and
 stored mode exactly as a native chown would — presented truth
 follows POSIX, not the mechanism — ordered clear-first: the one
@@ -168,7 +190,9 @@ the merge: an upper entry shadows the base entry at its path
 entirely; a whiteout occludes the base subtree at its path — the
 path presents its coexisting same-layer entry if one exists, nothing
 otherwise; an opaque directory presents only upper content beneath
-it; everything else presents the base. Directory enumeration merges the base
+it; everything else presents the base. The root presents the base
+root's attributes until the upper's root record exists
+(REQ-writable-dialect), then the record's. Directory enumeration merges the base
 snapshot with the upper listing under the backend comparator,
 markers and fidelity machinery invisible; enumeration snapshots
 remain immutable and resumable (`projection.md`

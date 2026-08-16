@@ -20,10 +20,6 @@
   chown arm is untested; a user-namespace harness can exercise it.
   Lands: when a user-namespace test harness is added, or the
   ownership arm next changes.
-- `docs/issues/writable-root-attributes.md` — the walker surfaces no
-  root entry, so root chmod/chown cannot commit; unreachable until
-  the write path lands root mutation. Lands: with the FUSE write
-  path's setattr arm.
 - `docs/issues/read-path-xattr-presentation.md` — the fidelity table
   has no xattr row; reserved-namespace inertness should hold on the
   read side too. Lands: when a mount surface first serves extended

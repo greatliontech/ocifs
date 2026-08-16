@@ -44,6 +44,10 @@ const (
 	// XattrOwner records ownership the host refused, as "uid:gid" —
 	// one attribute, so the record lands atomically.
 	XattrOwner = XattrNS + "owner"
+	// XattrMode records a presented mode that would deny the
+	// provider its own dialect access (octal); the host node then
+	// keeps the presented mode plus the provider-access bits.
+	XattrMode = XattrNS + "mode"
 	// XattrEscapePrefix + <real name> records an extended attribute
 	// the host refused to store natively, value verbatim.
 	XattrEscapePrefix = XattrNS + "xattr."
@@ -119,4 +123,8 @@ type State struct {
 	Whiteouts map[string]bool
 	// Opaque holds every directory path carrying the opaque marker.
 	Opaque map[string]bool
+	// Root is the upper root's presented attributes when a root
+	// record exists (REQ-writable-dialect); nil otherwise — the
+	// root then presents the base root.
+	Root *Entry
 }

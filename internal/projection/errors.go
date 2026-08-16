@@ -23,6 +23,13 @@ const (
 	// upper-born partition base and cannot be represented without
 	// aliasing (REQ-proj-identity's derivation envelope).
 	ErrIdentityRange
+	// ErrExists: the target name is already presented.
+	ErrExists
+	// ErrNotEmpty: the merged directory presents content.
+	ErrNotEmpty
+	// ErrReserved: the name lies in the dialect's reserved namespace
+	// (REQ-writable-reserved).
+	ErrReserved
 )
 
 func (e Errno) Error() string {
@@ -39,6 +46,12 @@ func (e Errno) Error() string {
 		return "i/o error"
 	case ErrIdentityRange:
 		return "upper inode outside the representable identity range"
+	case ErrExists:
+		return "entry already exists"
+	case ErrNotEmpty:
+		return "directory not empty"
+	case ErrReserved:
+		return "name in the reserved namespace"
 	default:
 		return "unknown projection error"
 	}

@@ -30,7 +30,7 @@ platform validation runs.
       occlusion, upper-born ino-derived IDs, merged enumeration
       snapshots with upper-derived change verifiers, invalidation on
       upper mutation; kernel-level tests, no backend.
-- [ ] 5. FUSE write path A — copy-up engine (atomic, ancestors with
+- [x] 5. FUSE write path A — copy-up engine (atomic, ancestors with
       presented attrs) and the core mutating ops (create, write,
       truncate, setattr, mkdir, unlink, rmdir, symlink) with
       whiteout/opaque production; writable mount API (caller dir +
