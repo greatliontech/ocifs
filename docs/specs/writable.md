@@ -297,16 +297,19 @@ the caller's to arrange; the store is never corrupted by a racing
 commit.
 
 **REQ-writable-base-binding** (behavior): A store-managed upper MUST
-record the image digest it is first mounted over, beside the upper
-(never inside the dialect tree), created atomically without
+record the image digest it is first mounted over in the store's
+bookkeeping (`store.md` REQ-store-bookkeeping, `uppers` keyspace —
+never inside the dialect tree), created transactionally without
 replacement — the loser of a first-mount race reads the winner's
 binding and validates against it; later writable mounts and commits
 against a different base are refused — a whiteout set produced over
 one base silently applied to another materializes a tree nobody
-wrote. A named upper admits one writable mount at a time within the
-store's single-writer scope (`store.md` REQ-store-single-writer's
-in-process rule): a second writable mount is refused while the first
-serves. A caller-supplied upper directory carries no binding and no
+wrote. A named upper admits one writable mount at a time, arbitrated
+through the mount registry: a writable mount over a store-managed
+upper records the upper name in its `mounts` row (`store.md`
+REQ-store-bookkeeping), and a second writable mount is refused
+while a live row holds the name — cross-process, by the same
+liveness rules as any registry row. A caller-supplied upper directory carries no binding and no
 mount arbitration; the caller names the base explicitly and owns
 both the pairing and the exclusivity.
 

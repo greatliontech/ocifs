@@ -1,12 +1,22 @@
 # ocifs — store
 
 The store is ocifs's on-disk home for pulled OCI images: the original
-OCI content, per-file extracted contents, reference cache, and mount
-scaffolding. Its content tiers are a cache — every byte re-derivable
-from a registry, or from the retained OCI content for the extraction
-tiers — while per-mount state is ephemeral bookkeeping that dies with
-its mount; wiping the store is safe whenever no mounts are live (live
-mounts serve reads from the store and would see I/O errors).
+OCI content, per-file extracted contents, and everything ocifs
+records about them. State divides by consumer: **filesystem tiers**
+hold bytes the kernel or foreign tools consume directly (extracted
+contents served to mounts, export trees, upper dialect trees,
+mountpoint directories) or whose format a wire contract pins (the
+OCI image layout); the **bookkeeping database** holds every record
+only ocifs interprets — reference cache, layer indexes, mount
+registry and per-mount records, upper base bindings, local-image
+records, and collection state. Content tiers are a cache — every
+byte re-derivable from a registry, or from retained OCI content —
+and every bookkeeping record except upper base bindings is a cache
+or derivable (references re-resolve, indexes re-unpack, registry
+rows are liveness-scoped, collection state re-marks); the binding
+is the store's one irreplaceable record. Wiping the store is safe
+whenever no mounts are live and no upper's future commit matters
+(live mounts serve reads from the store and would see I/O errors).
 
 **store root** (term): The configured work directory under which all
 store state lives.
@@ -18,12 +28,17 @@ image, an image manifest otherwise.
 **content CAS** (term): The store tier holding extracted regular-file
 contents, keyed by the digest of the file's own bytes.
 
-**layer index** (term): A JSON document recording, in tar order,
+**layer index** (term): A bookkeeping record listing, in tar order,
 every entry of a layer's uncompressed tar: the tar header's
 metadata fields plus, for regular files, the content-CAS key of the
 entry's bytes. Header strings are arbitrary bytes (names, link
-targets, xattr keys and values may be non-UTF-8 or binary); the
-document's encoding round-trips them byte-exactly.
+targets, xattr keys and values may be non-UTF-8 or binary) and
+round-trip byte-exactly.
+
+**bookkeeping database** (term): The single gmdb database under the
+store root holding every ocifs-interpreted record, transactional
+and cross-process (one writer, any readers, per gmdb's own
+coordination).
 
 ## Disk layout
 
@@ -35,55 +50,81 @@ compressed for pulled images, uncompressed tar for locally committed
 layers (`writable.md` REQ-writable-commit) — addressed by
 their OCI digests), append-only except for garbage collection;
 `blobs/<algorithm>/<hex>` — the content CAS, entries immutable once
-written and shared freely across layers and images; `layers/<algorithm>/<hex>`
-— layer indexes keyed by the layer digest the manifest lists;
-`refs/<registry>/<repository>/<identifier>` — one plain file per
-resolved reference at a fixed depth of exactly three encoded path
-components: the registry (lowercased — DNS names are
-case-insensitive), the whole repository path as a single component
-(its `/` separators encoded like any other byte), and the identifier
-(tag or digest), the file containing the digest string of the
-top-level artifact the reference resolved to. Fixed depth means no
-reference's directory chain is a prefix of another reference's file —
-variable-depth nesting would let a tag file and a sub-repository
-directory claim the same path. Within each component every byte
-outside `[a-z0-9._-]` — plus any leading or trailing `.`, plus the
-first byte of a Windows reserved device name (`con`, `prn`, `aux`,
-`nul`, `com0`–`com9`, `lpt0`–`lpt9` as the first dot-segment) — is
-percent-encoded as lowercase `%xx`; a component whose encoding would
-exceed 200 bytes is instead stored as `%h` followed by the lowercase
-hex SHA-256 of the raw component. Escaping `%` itself makes the plain
-encoding injective, and `%h` begins no plain encoding (every plain
-escape is followed by two hex digits), so the plain and hashed forms
-never collide — hashed-form distinctness rests on the same collision
-resistance the content CAS already assumes. Escaping a leading dot
-keeps every component an ordinary path element (`.` and `..` never
-reach path resolution, so no reference can address another tier);
-escaping a trailing dot keeps distinct names distinct under Windows
-path normalization, which silently strips them; reserved-name
-escaping keeps every element creatable on Windows; the length bound
-keeps every element within common 255-byte filesystem name limits;
-the all-lowercase result avoids bytes not every supported filesystem
-can hold (`:` in digest identifiers and registry ports) and cannot
-collide under case folding; `mounts/<id>` —
-per-mount state: the mount's bookkeeping (registration, projection
-report — `projection.md`) beside a `mnt/` subdirectory serving as
-the store-managed mountpoint when the caller supplies none — the
-mountpoint is a sibling of the bookkeeping, never its parent, so a
-live mount cannot shadow its own state; written only by that mount's
-serving and orchestrating processes; `exports/<algorithm>/<hex>` — materialized
-root filesystems keyed by the digest of the manifest actually
-materialized (behavioral contract in `export.md`);
-`uppers/<name>/upper` — store-managed writable uppers in the POSIX
-upper dialect (`writable.md`), the name a single path element under
-the mount-id rule (REQ-api-mount-id), with the upper's bookkeeping
-(the base binding) as sibling files under `uppers/<name>/`, never
-inside the dialect tree.
+written and shared freely across layers and images;
+`mounts/<id>/mnt` — the store-managed mountpoint directory when the
+caller supplies none, and nothing else under `mounts/<id>` (every
+mount record lives in the bookkeeping database);
+`exports/<algorithm>/<hex>` — materialized root filesystems keyed
+by the digest of the manifest actually materialized (behavioral
+contract in `export.md`); `uppers/<name>/upper` — store-managed
+writable uppers in the POSIX upper dialect (`writable.md`), the
+name a single path element under the mount-id rule
+(REQ-api-mount-id), nothing beside the dialect tree (the base
+binding lives in the bookkeeping database); and `bookkeeping/` —
+the bookkeeping database file and its coordination artifacts,
+owned entirely by gmdb. A tier earns filesystem residence only by
+direct kernel/foreign-tool consumption or a wire contract; every
+record only ocifs interprets lives in the bookkeeping database,
+whose keys and values carry arbitrary bytes exactly.
+
+**REQ-store-bookkeeping** (wire): The bookkeeping database MUST
+hold exactly these keyspaces, keys and values byte-exact:
+`refs` — key: registry (lowercased — DNS names are
+case-insensitive), repository, and identifier (tag or digest),
+joined by `0x00` (a byte no reference component can carry); value:
+the digest string of the resolved top-level artifact.
+`layeridx` — key: the layer digest the manifest lists, as
+`<algorithm> 0x00 <hex>`; value: the layer index, a versioned
+binary record round-tripping every header string byte-exactly; a
+value whose version is foreign to the reader is unparseable state
+healing as an absent index (REQ-store-self-heal).
+`mounts` — key: the mount id; value: a versioned record of the
+serving process's liveness identity, the image digest served, the
+upper name when the mount is writable over a store-managed upper
+(the arbitration and removal-refusal witness — `writable.md`
+REQ-writable-base-binding, `api.md` REQ-api-remove), the
+mountpoint path, and the projection report (`projection.md`
+REQ-proj-report).
+`ops` — key: an operation id; value: a versioned record of an
+in-flight extra-transactional operation — the ingest lease
+(REQ-store-single-writer), an export materialization, a commit —
+carrying the owner's liveness identity, the digests the operation
+pins (roots while the row is live — REQ-store-gc-roots), and the
+temporary paths it owns (exempt from sweeps while live, swept as
+debris when dead, wherever they live — including a caller-target
+export's temporary in the caller's own parent directory).
+`uppers` — key: the upper name; value: the base binding — the
+digest of the image the upper was first mounted over
+(`writable.md` REQ-writable-base-binding).
+`localimages` — key: `<algorithm> 0x00 <hex>` of a committed
+manifest; value: a versioned creation record. Commit writes the
+row; it is the root that keeps a committed image reachable
+(REQ-store-gc-roots) until explicitly removed (`api.md`
+REQ-api-remove).
+`gc` — collection bookkeeping: first-seen times grounding the
+retention grace, and the condemned set (REQ-store-gc-safe).
+Losing this keyspace is safe in one direction only: a re-mark
+re-derives first-seen conservatively later (extending retention,
+never shrinking safety), and a lost condemned set merely aborts an
+in-progress sweep.
+**Liveness identity** (used by `mounts` and `ops` rows): pid,
+process start time, PID-namespace identity, and the boot id. A row
+is dead iff its boot id differs from the current boot, or — same
+boot, same PID namespace — its pid is gone or its start time
+differs (PID reuse). A same-boot row from a foreign PID namespace
+is treated as live: its liveness is unjudgeable from here
+(`kill(pid,0)` is meaningless across namespaces), and a false-dead
+verdict deletes content a live process serves — the unrecoverable
+direction. No clock, no heartbeat, ever decides death.
+Version discipline: every value whose shape can evolve carries a
+version discriminator, and a foreign version is handled exactly as
+that keyspace's absent-row case — never a hard failure for
+regenerable records.
 
 **REQ-store-adopt** (behavior): Store initialization MUST refuse a
 work directory holding store state it does not recognize as this
 layout — including stores written by ocifs versions predating the
-tier split — with an error directing deletion; unrecognized state is
+bookkeeping database — with an error directing deletion; unrecognized state is
 never adopted, migrated, or deleted, because the store destroys
 nothing it cannot prove is its own cache (wiping is the user's
 documented remedy). Recognition is by layout signature and therefore
@@ -95,12 +136,14 @@ an interrupted first creation — which is completed in place with an
 empty index; content tiers are never touched by the completion.
 
 **REQ-store-ns** (invariant): Layer indexes and content-CAS entries
-MUST occupy disjoint on-disk keyspaces; no path is ever interpreted
-as both. A layer whose compressed bytes also occur as a regular file
+MUST occupy disjoint keyspaces; no key is ever interpreted as both.
+A layer whose compressed bytes also occur as a regular file
 *inside* some image (airgap bundles, embedded image tarballs)
 produces the same hex digest for a layer index and a content blob,
-and the two have different content — a shared keyspace corrupts every
-consumer of the colliding key.
+and the two have different content — a shared keyspace corrupts
+every consumer of the colliding key. The split is structural: the
+index lives in the `layeridx` bookkeeping keyspace, the blob in the
+`blobs/` tier.
 
 **REQ-store-cas-content** (invariant): The bytes stored at content-CAS
 key `h` MUST hash to `h`. A corrupted or misplaced write would serve
@@ -114,8 +157,8 @@ artifact in `oci/` (for an index: the index itself alongside the
 platform-selected child); append manifest(s), config, and compressed
 layers to `oci/`; unpack every layer of the selected manifest
 (regular-file bytes into the content CAS, then the layer index); and
-record the reference-cache entry **last**. A crash at any earlier
-point leaves no ref entry, and the next pull re-runs ingest.
+record the `refs` row **last**. A crash at any earlier point
+leaves no ref row, and the next pull re-runs ingest.
 
 **REQ-store-ingest-idempotent** (behavior): Re-running ingest for
 already-present content MUST be a no-op: appending retained OCI
@@ -237,15 +280,112 @@ platform whose child is materialized.
 
 ## Concurrency
 
-**REQ-store-single-writer** (behavior): The content tiers (`oci/`,
-`blobs/`, `layers/`, `refs/`) assume a single ingesting process at a
-time; any number of processes read them concurrently (projection
-servers are ordinary readers — `projection.md` REQ-proj-server), and
-per-mount state under `mounts/<id>` is written only by that mount's
-own processes — ownership partitioning, not locking. Cross-process
-ingest locking and shared transactional bookkeeping are deferred
-until store bookkeeping moves to shared, cross-process-capable
-storage. Concurrent pulls of the same image within one process MUST
-NOT corrupt any tier: identical content races benignly in the CAS,
-and a CAS entry is published only by atomic rename of a fully
-written temporary.
+**REQ-store-single-writer** (behavior): One ingesting process
+mutates the content tiers (`oci/`, `blobs/`) at a time, enforced
+through an ingest lease — a live `ops` row — held from the first
+content-tier write through the commit of the root row (the `refs`
+row for a pull, the `localimages` row for a commit: a commit is an
+ingest under the lease, row-last, exactly like a pull). The span
+matters: a root published outside the lease would leave a window
+where the just-written content is unrooted and a fenceless sweep
+could collect it. A crashed holder's lease dies with its liveness
+identity; a second process's ingest waits or proceeds on lease
+death. Any number of processes read every tier and keyspace
+concurrently (projection servers are ordinary readers —
+`projection.md` REQ-proj-server), each through per-operation read
+transactions — a held long-lived snapshot obstructs database
+maintenance, and reader slots are a finite coordination resource.
+Concurrent pulls of the same image MUST NOT corrupt any tier —
+in-process or across processes: identical content races benignly
+in the CAS, and a CAS entry is published only by atomic rename of
+a fully written temporary. Bookkeeping writes are transactional
+per the database's own single-writer coordination.
+
+## Mount registry and reclamation
+
+**REQ-store-mount-registry** (behavior): Every mount MUST register
+in the `mounts` keyspace before serving and deregister on unmount:
+registration carries the serving process's liveness identity
+(REQ-store-bookkeeping), and a dead row is a dead mount,
+reclaimable by any sweep — reclamation removes the row and, for a
+store-managed mountpoint, best-effort detaches any stale kernel
+mount and removes the `mounts/<id>` directory; where detach or
+removal fails (a foreign-user FUSE mount, a busy mountpoint) the
+row stays and reclamation retries on a later sweep — deferral,
+never a half-reclaimed id. On clean unmount the row and
+report go; the store-managed mountpoint directory remains for the
+consumer that just held it (`api.md` REQ-api-mountpoint) and is
+thereafter store scaffolding owned by no row — collectible like
+any orphaned tier file once the retention grace passes. A
+caller-supplied mountpoint is the caller's property; no sweep
+touches it. A mount id is reusable once its row and directory are
+gone — including a caller-supplied id whose mount attempt failed
+before serving (the failed attempt leaves no row).
+
+## Garbage collection
+
+**REQ-store-gc-roots** (behavior): The reachable set MUST be
+computed from exactly these roots: every `refs` row's top-level
+digest — digest-addressed acquisition records a `refs` row
+(identifier = the digest) like any acquisition, so every acquired
+image is rooted; every `localimages` row's manifest digest; every
+live `mounts` row's image digest; every `uppers` row's
+base-binding digest; and every live `ops` row's pinned digests
+(an in-flight export or commit roots the content it reads). From a
+root, reachability follows the OCI graph: index → child manifests
+→ config and layers → layer indexes → content-CAS entries.
+Everything else is garbage: unreferenced `oci/` blobs, content-CAS
+entries, `layeridx` rows, dead `mounts` and `ops` rows (a dead
+op's row and its owned temporaries go together), stale condemned
+rows of dead sweepers, exports tier entries whose manifest digest
+is unreachable, temporaries and `mnt` directories owned by no live
+row, and orphaned tier files no bookkeeping row names. A temporary owned by a live `ops` row is
+never garbage — REQ-export-atomic's "stale temporaries are inert"
+holds only for temporaries whose owner is dead.
+
+**REQ-store-gc-safe** (invariant): Collection MUST be safe at any
+moment, whoever triggers it. The mark reads roots transactionally.
+Deletion is two-phase through the condemned set: the sweep is
+itself an `ops` operation, and inside one write transaction it
+re-checks reachability against fresh roots and records the digests
+it will delete in `gc`, each condemned row carrying the sweeping
+op's id — a condemned row whose sweeper is dead binds nobody and
+is debris (a crashed sweeper must not wedge publication forever).
+Every root-publishing write (a `refs`, `localimages`, `mounts`,
+`uppers`, or digest-pinning `ops` row) consults the live-sweeper
+condemned set in its own write transaction and backs out when its
+digest is condemned — backing out to the operation's acquisition,
+not the row write: re-verify presence and re-ingest under the
+lease if the content is gone, because a bare row-retry after the
+sweep clears would publish a root over vanished content. The
+database's serialized writer makes sweep and publication mutually
+exclusive; after the files are gone the sweep clears its condemned
+rows. Ingest and collection additionally exclude each
+other through the ingest lease, which spans root publication
+(REQ-store-single-writer), so no content is ever both written and
+unrooted outside a fence. Violation: a sweep racing an ingest,
+commit, or mount-start deletes a blob the winner then serves — a
+live mount reading vanished content.
+
+**REQ-store-gc-collect** (behavior): Collection MUST run
+automatically at the transitions that create garbage — a `refs` row
+overwritten by re-resolution, a reference or local image removed
+(`api.md` REQ-api-remove), an unmount, and store initialization
+(crash debris: dead mount and ops rows, dead leases, `.export-*`
+temporaries owned by no live row, orphaned tier files) — and on explicit demand
+(`api.md` REQ-api-gc). Automatic collection is on by default and
+disableable at construction. Unreachable content younger than the
+configured retention grace (default 24h) is retained — blobs are
+content-addressed and shared, so unreachable content still
+deduplicates a future pull; the grace is pure retention policy and
+never load-bearing for safety (REQ-store-gc-safe's fences and the
+`ops` roots are — every window in which content is legitimately
+unrooted sits inside a fence or a live `ops` row, with or without
+grace). Explicit collection may ignore the grace on demand. The
+debris sweep reclaims what dead rows own wherever it lives: a dead
+`ops` row's recorded temporaries (including a caller-target
+export's temporary outside the store), dead `mounts` rows and
+their directories, expired leases. Collection removes bookkeeping
+rows and their files together; a crash between leaves either an
+orphaned file (swept as such next collection) or a rowless state
+self-heal already treats as absent — never served corruption.

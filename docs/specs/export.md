@@ -53,11 +53,13 @@ a link whose captured content the target no longer holds
 materializes as an independent copy of the captured content —
 fidelity within the tree, still no links into the CAS.
 
-**REQ-export-immutable** (invariant): Export MUST NOT mutate store
-state: CAS bytes, modes, and link counts are identical before and
-after any export. Exporting via hardlink and then applying a hostile
-header's `chmod +s` would change the mode every other image sees for
-that shared blob.
+**REQ-export-immutable** (invariant): Export MUST NOT mutate the
+store's content tiers: CAS bytes, modes, and link counts are
+identical before and after any export; its only store writes are
+its own bookkeeping (`store.md` REQ-store-bookkeeping `ops` row),
+which names no content. Exporting via hardlink and then applying a
+hostile header's `chmod +s` would change the mode every other
+image sees for that shared blob.
 
 ## Containment
 
@@ -87,8 +89,9 @@ caller-supplied target, the sibling lives in the target's parent
 directory. A caller-supplied target must not already exist; an
 existing target — empty or populated — refuses with the target
 undisturbed. A crash leaves either no directory or a stale
-temporary, never a partial tree at the final path; stale temporaries
-are inert and may be deleted freely.
+temporary, never a partial tree at the final path; stale
+temporaries — those no live operation owns (`store.md`
+REQ-store-gc-roots) — are inert and may be deleted freely.
 
 **REQ-export-cancel** (behavior): Export MUST honor context
 cancellation throughout materialization, not only during

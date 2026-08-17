@@ -147,7 +147,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "597abfae85eb399b40551e38d9bc0519baf3e6d122cfbaaef44ae5d33b1ab34e"
+  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.NewUpper"
   role: BINDING_ROLE_IMPLEMENTS
@@ -156,7 +156,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "597abfae85eb399b40551e38d9bc0519baf3e6d122cfbaaef44ae5d33b1ab34e"
+  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestBaseBinding"
   role: BINDING_ROLE_TESTS

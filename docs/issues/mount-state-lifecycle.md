@@ -22,7 +22,8 @@ store-managed mountpoints. Reclamation wants a deliberate design:
 what unmount removes (the report? nothing?), when ids become
 reusable, and how dead state from crashed serving processes is
 recognized — the same recognition problem store GC and the mount
-registry face (`docs/issues/store-metadata-gmdb.md`).
+registry face (`docs/specs/store.md` REQ-store-mount-registry's
+liveness identity).
 
 Lands: when mount-state reclamation or mount-id reuse is first
 needed — at the latest with store GC.

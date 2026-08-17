@@ -40,19 +40,18 @@ projection makes relative to the unified view (unsupported symlinks,
 devices, FIFOs, case collisions, read-only residual foreign files)
 MUST be recorded in the projection report,
 enumerable by the consumer — never only logged, never silent. The
-report is persisted in the store's per-mount state for every
-projection, so any process — the in-process consumer, the
-orchestrator of an out-of-process backend (REQ-proj-server), or an
-inspecting CLI — reads the same record. The persisted encoding is
-`projection-report.json` in the mount's state directory: a JSON
-document whose `entries` array (always present — an empty report is
-`{"entries":[]}`, distinguishable from an absent file) carries per
-entry the view `path`, a `disposition` (`omitted` or `altered` for
-view entries; `residual` for the read-only residuals REQ-proj-ro
-declares, whose `path` is then the foreign path), a symbolic
-`reason`, and an optional free-text `detail`; the file is published
-atomically, and a projection that observes residuals republishes it
-with the accumulated rows.
+report persists in the mount's bookkeeping record (`store.md`
+REQ-store-bookkeeping, `mounts` keyspace), so any process — the
+in-process consumer, the orchestrator of an out-of-process backend
+(REQ-proj-server), or an inspecting CLI — reads the same record
+through the store. The record carries an `entries` list (always
+present — an empty report is an empty list, distinguishable from an
+absent record) with, per entry, the view path as its exact bytes, a
+disposition (`omitted` or `altered` for view entries; `residual`
+for the read-only residuals REQ-proj-ro declares, whose path is
+then the foreign path), a symbolic reason, and optional free-text
+detail; publication is transactional, and a projection that
+observes residuals republishes with the accumulated rows.
 
 ## Out-of-process serving
 

@@ -66,7 +66,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-export-immutable"
-  content_hash: "1071f44d2a69244b1946757f1626bebcaf7ec45456654bdf4219d2fe16ad134c"
+  content_hash: "eb8865434db8778fb92ecf8507dfb811a2362756208c9c3079c83474aab89f33"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/export.TestPropertyExportMatchesView"
   role: BINDING_ROLE_TESTS
@@ -75,7 +75,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-export-immutable"
-  content_hash: "1071f44d2a69244b1946757f1626bebcaf7ec45456654bdf4219d2fe16ad134c"
+  content_hash: "eb8865434db8778fb92ecf8507dfb811a2362756208c9c3079c83474aab89f33"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestExportImmutableStore"
   role: BINDING_ROLE_TESTS
@@ -102,7 +102,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-export-atomic"
-  content_hash: "02a8ad8b6226de1c6eb5d351c031f1a6c27daeac380d25c51276b0372707558e"
+  content_hash: "ee145eca8b07e11684b9c7feecfd7da4727ec980aeb51641c49bd0315ac984a3"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
   role: BINDING_ROLE_IMPLEMENTS
@@ -111,7 +111,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-export-atomic"
-  content_hash: "02a8ad8b6226de1c6eb5d351c031f1a6c27daeac380d25c51276b0372707558e"
+  content_hash: "ee145eca8b07e11684b9c7feecfd7da4727ec980aeb51641c49bd0315ac984a3"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyExportAtomicOnDamage"
   role: BINDING_ROLE_TESTS

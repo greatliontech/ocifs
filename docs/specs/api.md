@@ -13,10 +13,12 @@ configure at construction: a work directory (store root; default:
 synthesize in mounts; registry credentials as a map of registry or
 registry/repository prefixes to credentials plus an opt-in to the
 ambient default keychain; a pull policy (default `IfNotPresent`,
-semantics in `store.md`); and a default platform (default derived
-from the host — semantics and the darwin fallback in `store.md`).
-Construction initializes the store and fails if the store cannot be
-initialized.
+semantics in `store.md`); a default platform (default derived
+from the host — semantics and the darwin fallback in `store.md`);
+automatic garbage collection on or off (default on); and the
+collection retention grace (default 24h) — both per `store.md`
+REQ-store-gc-collect. Construction initializes the store and fails
+if the store cannot be initialized.
 
 **REQ-api-keychain** (behavior): Credential resolution MUST pick the
 longest matching configured prefix, where a prefix matches only at a
@@ -94,7 +96,10 @@ container, and mounting against an inaccessible store fails.
 caller's target path, or a store-managed mount directory when none
 is given; relative targets resolve against the process working
 directory. After a successful unmount the mountpoint directory
-remains, holding nothing the projection served — on a backend with
+remains, holding nothing the projection served; a caller-supplied
+target is the caller's property forever, while a store-managed
+mount directory is store scaffolding the store may later reclaim
+(`store.md` REQ-store-mount-registry) — on a backend with
 declared read-only residuals (`projection.md` REQ-proj-ro), the
 residual foreign files remain, with the directory spine containing
 them, and only those.
@@ -126,6 +131,27 @@ digest under the store's local namespace (`store.md`).
 **REQ-api-export** (behavior): The library MUST offer export of a
 materialized image into a caller-supplied target directory or the
 store-managed export cache, per `export.md`.
+
+## Removal and collection
+
+**REQ-api-remove** (behavior): The library MUST offer removal of a
+cached reference (the `refs` row — the cached resolution, not the
+remote), of a local image (the `localimages` row for a committed
+digest), and of a named upper (the upper's dialect tree and its
+base binding — the explicit act REQ-api-mount-writable names).
+Removal severs the root; content becomes garbage for collection
+(`store.md` REQ-store-gc-roots) rather than being deleted inline.
+Removing a named upper currently mounted, or a local image a live
+mount serves, is refused.
+
+**REQ-api-gc** (behavior): The library MUST offer explicit
+collection: honoring the retention grace by default, ignoring it on
+demand (the wipe-now operator intent automatic collection
+deliberately does not serve), returning what was collected — and
+what could not be judged: rows whose liveness is unjudgeable from
+this namespace (`store.md` REQ-store-bookkeeping) are reported, so
+a foreign-namespace root leak is visible and the reboot-or-wipe
+remedy is an informed one. The CLI exposes the same verb.
 
 ## CLI
 

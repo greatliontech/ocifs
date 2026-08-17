@@ -3,7 +3,7 @@
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
+  content_hash: "d3062bf924aacc983b5902637bc8ac019be2b5c0de23a6cd5d060ed8b7266fed"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.New"
   role: BINDING_ROLE_IMPLEMENTS
@@ -12,7 +12,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
+  content_hash: "d3062bf924aacc983b5902637bc8ac019be2b5c0de23a6cd5d060ed8b7266fed"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPullSurface"
   role: BINDING_ROLE_TESTS
@@ -66,7 +66,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "decddc4f52bbcbeba85e417d94094cef8829e66c7a705cb4982eaaaef45f11c5"
+  content_hash: "d3062bf924aacc983b5902637bc8ac019be2b5c0de23a6cd5d060ed8b7266fed"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestConstructionFailsOnUninitializableStore"
   role: BINDING_ROLE_TESTS
@@ -93,7 +93,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mountpoint"
-  content_hash: "24f08b24c7fa071e9c8152b57ab88fa00e3765261210e8ee8c57bcc481857d16"
+  content_hash: "4ffb05ce85bf24636dad27fb0b6d1bcf3c01ebb2bcfe692a59b99e9d20757fc4"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
   role: BINDING_ROLE_IMPLEMENTS
@@ -102,7 +102,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mountpoint"
-  content_hash: "24f08b24c7fa071e9c8152b57ab88fa00e3765261210e8ee8c57bcc481857d16"
+  content_hash: "4ffb05ce85bf24636dad27fb0b6d1bcf3c01ebb2bcfe692a59b99e9d20757fc4"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountReportPersisted"
   role: BINDING_ROLE_TESTS
@@ -111,7 +111,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-mountpoint"
-  content_hash: "24f08b24c7fa071e9c8152b57ab88fa00e3765261210e8ee8c57bcc481857d16"
+  content_hash: "4ffb05ce85bf24636dad27fb0b6d1bcf3c01ebb2bcfe692a59b99e9d20757fc4"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountLocalImage"
   role: BINDING_ROLE_TESTS

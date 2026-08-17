@@ -1,0 +1,6 @@
+# proto-file: proto/stipulator/v1/records.proto
+# proto-message: stipulator.v1.Gap
+
+requirement_id: "REQ-store-gc-collect"
+reason: "store-gc arc: bookkeeping database, registry, and collection not yet built; each requirement lands with its plan chunk (docs/plans/store-gc.md), resolving on its own coverage"
+lands { covered: "REQ-store-gc-collect" }
