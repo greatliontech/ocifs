@@ -282,7 +282,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-self-access"
-  content_hash: "be7713a9b7a4bdf517bbf298989402ac485f596cf1956a417bd887de82852d51"
+  content_hash: "a105c68a18659a7d242a4de3a705bf5bcdd9a0077d4a65320c7699838588e6ee"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestAcceptanceExecAndMmap"
   role: BINDING_ROLE_TESTS
@@ -291,7 +291,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-self-access"
-  content_hash: "be7713a9b7a4bdf517bbf298989402ac485f596cf1956a417bd887de82852d51"
+  content_hash: "a105c68a18659a7d242a4de3a705bf5bcdd9a0077d4a65320c7699838588e6ee"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestAcceptanceConcurrentBuild"
   role: BINDING_ROLE_TESTS

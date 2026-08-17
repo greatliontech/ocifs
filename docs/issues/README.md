@@ -18,10 +18,6 @@
   the dead-state recognition problem with store GC. Lands: when
   mount-state reclamation or mount-id reuse is first needed — at the
   latest with store GC.
-- `docs/issues/platform-default-variant-hosts.md` — default-platform
-  pulls on 32-bit arm hosts are variant-ambiguous; host variant
-  detection for the default request. Lands: when default-platform
-  pulls on 32-bit arm hosts are first needed.
 - `docs/issues/store-metadata-gmdb.md` — store bookkeeping (refs, image
   records, mount registry, blob refcounts/GC) on gmdb. Lands: when
   store GC or cross-process store inspection is first needed; may

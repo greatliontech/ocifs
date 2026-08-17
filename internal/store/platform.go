@@ -11,19 +11,70 @@ import (
 // hostPlatform is the fallback request platform when construction
 // configures none (REQ-store-platform-default).
 func hostPlatform() v1.Platform {
-	return fallbackPlatform(runtime.GOOS, runtime.GOARCH)
+	return fallbackPlatform(runtime.GOOS, runtime.GOARCH, hostARMVariant)
 }
 
 // fallbackPlatform derives the built-in default platform from the
 // host. On darwin the fallback is linux with the host's
 // architecture: an os=darwin request could never match published
-// images, and darwin mounts serve linux root filesystems
-// (REQ-store-platform-default).
-func fallbackPlatform(goos, goarch string) v1.Platform {
+// images, and darwin mounts serve linux root filesystems. On a
+// 32-bit arm host it carries the detected CPU variant — without
+// one, linux/arm is ambiguous against standard indexes' arm/v6 and
+// arm/v7 children (REQ-store-platform-default).
+func fallbackPlatform(goos, goarch string, armVariant func() string) v1.Platform {
 	if goos == "darwin" {
 		goos = "linux"
 	}
-	return v1.Platform{OS: goos, Architecture: goarch}
+	p := v1.Platform{OS: goos, Architecture: goarch}
+	if goarch == "arm" {
+		p.Variant = armVariant()
+	}
+	return p
+}
+
+// parseARMVariant maps /proc/cpuinfo content to the OCI variant of
+// a 32-bit arm host, first core wins. The kernel's "CPU
+// architecture" field carries proc_arch strings (5T/5TE/5TEJ,
+// 6TEJ, 7, 7M, 8, AArch64 on old arm64 kernels); 8-class values
+// mean 32-bit userland on v8 hardware, which runs arm/v7 images.
+// Unrecognized content yields no variant
+// (REQ-store-platform-default: loud ambiguity over a guess).
+func parseARMVariant(cpuinfo []byte) string {
+	arch, model := "", ""
+	for line := range strings.Lines(string(cpuinfo)) {
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "CPU architecture":
+			if arch == "" {
+				arch = strings.TrimSpace(val)
+			}
+		case "model name", "Processor":
+			// Pre-3.8 arm kernels title the model line "Processor".
+			if model == "" {
+				model = strings.TrimSpace(val)
+			}
+		}
+	}
+	// ARM1176 kernels report architecture 7 with a v6 model name
+	// (Raspberry Pi 1/Zero); the model line is the truth there —
+	// v7 binaries trap on this hardware.
+	if arch == "7" && strings.HasPrefix(strings.ToLower(model), "armv6-compatible") {
+		return "v6"
+	}
+	switch strings.ToLower(arch) {
+	case "5", "5t", "5te", "5tej":
+		return "v5"
+	case "6", "6tej":
+		return "v6"
+	case "7", "7m":
+		return "v7"
+	case "8", "aarch64":
+		return "v7"
+	}
+	return ""
 }
 
 // platformMatches reports whether cand satisfies the requested

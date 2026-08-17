@@ -212,7 +212,17 @@ is requested, the request MUST use the configured default platform
 — except on darwin, where the fallback is `linux` with the host's
 architecture: an `os=darwin` request could never match published
 images (no darwin container-image ecosystem exists), and darwin
-mounts serve linux root filesystems. Selection against an index
+mounts serve linux root filesystems. On a 32-bit arm host the
+built-in default additionally carries the host's detected CPU
+variant (`v5`/`v6`/`v7`, from the kernel's reported CPU
+architecture; 32-bit userland on v8 hardware detects as `v7`):
+without it, `linux/arm` matches both `arm/v6` and `arm/v7` children
+of standard indexes and every default pull fails as ambiguous,
+while any variant preference chosen without host knowledge would
+silently select binaries that trap on older hardware. Detection
+failing yields no variant — the strict rule's loud ambiguity
+failure, never a guess. Explicit and configured platforms are used
+exactly as given. Selection against an index
 follows the same match rule as an explicit request; a top-level
 manifest is served as-is — only an explicit platform constrains a
 direct manifest.

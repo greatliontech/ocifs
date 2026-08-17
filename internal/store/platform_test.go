@@ -784,8 +784,88 @@ func TestFallbackPlatform(t *testing.T) {
 		{"darwin", "arm64", v1.Platform{OS: "linux", Architecture: "arm64"}},
 		{"darwin", "amd64", v1.Platform{OS: "linux", Architecture: "amd64"}},
 	} {
-		if got := fallbackPlatform(tc.goos, tc.goarch); !got.Equals(tc.want) {
+		if got := fallbackPlatform(tc.goos, tc.goarch, func() string { return "" }); !got.Equals(tc.want) {
 			t.Fatalf("fallbackPlatform(%s, %s) = %s, want %s", tc.goos, tc.goarch, got.String(), tc.want.String())
 		}
+	}
+}
+
+// TestARMVariantDetection pins REQ-store-platform-default's 32-bit
+// arm clause: the kernel's reported CPU architecture maps to the
+// OCI variant, 32-bit userland on v8 hardware detects as v7, and
+// unrecognized content yields no variant — the strict rule's loud
+// ambiguity failure, never a guess.
+func TestARMVariantDetection(t *testing.T) {
+	cases := map[string]struct {
+		cpuinfo string
+		want    string
+	}{
+		"raspberry pi 1 (arch 7, v6 model — kernel quirk)": {
+			cpuinfo: "processor\t: 0\nmodel name\t: ARMv6-compatible processor rev 7 (v6l)\nCPU architecture: 7\nCPU part\t: 0xb76\n",
+			want:    "v6",
+		},
+		"raspberry pi 1 on a pre-3.8 kernel (Processor line)": {
+			cpuinfo: "Processor\t: ARMv6-compatible processor rev 7 (v6l)\nCPU architecture: 7\n",
+			want:    "v6",
+		},
+		"armv6 as the kernel actually reports it": {
+			cpuinfo: "CPU architecture: 6TEJ\n",
+			want:    "v6",
+		},
+		"armv7 (cortex-a7)": {
+			cpuinfo: "processor\t: 0\nmodel name\t: ARMv7 Processor rev 4 (v7l)\nCPU architecture: 7\nCPU part\t: 0xc07\n",
+			want:    "v7",
+		},
+		"32-bit userland on v8 hardware": {
+			cpuinfo: "processor\t: 0\nCPU implementer\t: 0x41\nCPU architecture: 8\nCPU part\t: 0xd08\n",
+			want:    "v7",
+		},
+		"armv5te (kirkwood)": {
+			cpuinfo: "processor\t: 0\nmodel name\t: Feroceon 88FR131 rev 1 (v5l)\nCPU architecture: 5TE\n",
+			want:    "v5",
+		},
+		"armv7m": {
+			cpuinfo: "CPU architecture: 7M\n",
+			want:    "v7",
+		},
+		"old arm64 kernel, 32-bit userland": {
+			cpuinfo: "CPU architecture: AArch64\n",
+			want:    "v7",
+		},
+		"field absent": {
+			cpuinfo: "processor\t: 0\nmodel name\t: something\n",
+			want:    "",
+		},
+		"unrecognized value": {
+			cpuinfo: "CPU architecture: 4T\n",
+			want:    "",
+		},
+		"empty": {cpuinfo: "", want: ""},
+	}
+	for name, tc := range cases {
+		if got := parseARMVariant([]byte(tc.cpuinfo)); got != tc.want {
+			t.Errorf("%s: variant %q, want %q", name, got, tc.want)
+		}
+	}
+
+	// The built-in default carries the detection only on arm.
+	p := fallbackPlatform("linux", "arm", func() string { return "v7" })
+	if p.OS != "linux" || p.Architecture != "arm" || p.Variant != "v7" {
+		t.Fatalf("arm default = %+v", p)
+	}
+	p = fallbackPlatform("linux", "amd64", func() string { t.Fatal("variant probe consulted off arm"); return "" })
+	if p.Variant != "" {
+		t.Fatalf("amd64 default carries variant %q", p.Variant)
+	}
+	// Detection failure: no variant, request stays bare (loud
+	// ambiguity downstream, never a guess).
+	p = fallbackPlatform("linux", "arm", func() string { return "" })
+	if p.Variant != "" {
+		t.Fatalf("failed detection produced variant %q", p.Variant)
+	}
+	// The darwin fallback composes with arm detection.
+	p = fallbackPlatform("darwin", "arm", func() string { return "v7" })
+	if p.OS != "linux" || p.Variant != "v7" {
+		t.Fatalf("darwin arm default = %+v", p)
 	}
 }
