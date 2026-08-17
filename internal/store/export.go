@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,7 +20,7 @@ import (
 // images are immutable, so an existing entry is served as-is without
 // re-materialization; cached exports are shared and read-only
 // (REQ-export-cache).
-func (s *Store) Export(img *Image) (string, error) {
+func (s *Store) Export(ctx context.Context, img *Image) (string, error) {
 	h := img.Hash()
 	final := filepath.Join(s.path, "exports", h.Algorithm, h.Hex)
 	if _, err := os.Stat(final); err == nil {
@@ -31,7 +32,7 @@ func (s *Store) Export(img *Image) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := s.materializeAt(view, final); err != nil {
+	if err := s.materializeAt(ctx, view, final); err != nil {
 		// Two exporters of one digest race benignly: the loser's
 		// rename fails against the winner's complete directory, and
 		// immutability makes the winner's tree the same tree.
@@ -48,13 +49,13 @@ func (s *Store) Export(img *Image) (string, error) {
 // state, and a target observable at its path is complete. The
 // existence check up front spares a doomed materialization; the
 // rename's own guard still governs the race window.
-func (s *Store) ExportTo(view *layer.View, targetDir string) error {
+func (s *Store) ExportTo(ctx context.Context, view *layer.View, targetDir string) error {
 	if _, err := os.Lstat(targetDir); err == nil {
 		return fmt.Errorf("export target %s already exists", targetDir)
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return s.materializeAt(view, targetDir)
+	return s.materializeAt(ctx, view, targetDir)
 }
 
 // materializeAt runs the materializer in a temporary sibling of
@@ -66,7 +67,7 @@ func (s *Store) ExportTo(view *layer.View, targetDir string) error {
 // could still replace an empty directory racing into the window —
 // benign for the digest-keyed cache, whose racers carry identical
 // trees).
-func (s *Store) materializeAt(view *layer.View, final string) error {
+func (s *Store) materializeAt(ctx context.Context, view *layer.View, final string) error {
 	parent := filepath.Dir(final)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return err
@@ -84,7 +85,7 @@ func (s *Store) materializeAt(view *layer.View, final string) error {
 	if err != nil {
 		return err
 	}
-	if err := export.Materialize(root, view, s.BlobPath); err != nil {
+	if err := export.Materialize(ctx, root, view, s.BlobPath); err != nil {
 		root.Close()
 		return fmt.Errorf("export: %w", err)
 	}

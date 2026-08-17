@@ -7,7 +7,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/export.Materialize"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "a21cd0e97b7d192dc1d1cca7ec8aaf08751f172f6a81748547d96556fb15b444"
+  shape_hash: "5a97f2beef9ff366960bf641de6380e3811874b610aeb7fd9d220f796990eaeb"
 }
 
 bindings {
@@ -88,7 +88,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/export.Materialize"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "a21cd0e97b7d192dc1d1cca7ec8aaf08751f172f6a81748547d96556fb15b444"
+  shape_hash: "5a97f2beef9ff366960bf641de6380e3811874b610aeb7fd9d220f796990eaeb"
 }
 
 bindings {
@@ -106,7 +106,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "b5cc9bb5defbe8ddaf9c5fcd7566c80616d39167cbddba4a6875d7328749fdf1"
+  shape_hash: "a71828769b56e8f7592ad6f8faf749cdfdc0842dd1e85293d5b8b70a8bc2f6ff"
 }
 
 bindings {
@@ -124,7 +124,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.Export"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "3245bb38a7bb925c7999f2a4757c072b0a5e71ca17247808cee20e29000192cf"
+  shape_hash: "eab914fec59ea8c3b075b1b0ef163158fa5d15cf79428818bf7ae3151ade98d8"
 }
 
 bindings {
@@ -152,4 +152,40 @@ bindings {
   symbol: "github.com/greatliontech/ocifs.TestExportPrivilegedOwnership"
   role: BINDING_ROLE_TESTS
   shape_hash: "d126515346df27acab84640f5ff10d0fc2e91e424b43bd4cb9e6dd75f2e9b5b5"
+}
+
+bindings {
+  requirement_id: "REQ-export-cancel"
+  content_hash: "32ebe2c868f7baf4f0286ab869486f4174b320cdb3fbf7c6ff6cdc9341808311"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.TestCancellationAborts"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "214cc6c66a62f393a02fa4b715968981191b542adbe3831f6171e4dcfbbc8c94"
+}
+
+bindings {
+  requirement_id: "REQ-export-cancel"
+  content_hash: "32ebe2c868f7baf4f0286ab869486f4174b320cdb3fbf7c6ff6cdc9341808311"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestExportCancelLeavesNoResidue"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "fc8db24a3c8025fcfe63781420854cce3b38c9e4492d766e259f2131105b4c95"
+}
+
+bindings {
+  requirement_id: "REQ-export-cancel"
+  content_hash: "32ebe2c868f7baf4f0286ab869486f4174b320cdb3fbf7c6ff6cdc9341808311"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/export.Materialize"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "5a97f2beef9ff366960bf641de6380e3811874b610aeb7fd9d220f796990eaeb"
+}
+
+bindings {
+  requirement_id: "REQ-export-cancel"
+  content_hash: "32ebe2c868f7baf4f0286ab869486f4174b320cdb3fbf7c6ff6cdc9341808311"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "a71828769b56e8f7592ad6f8faf749cdfdc0842dd1e85293d5b8b70a8bc2f6ff"
 }

@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -66,7 +67,7 @@ func TestExportCachedServedAsIs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path1, err := s.Export(img)
+	path1, err := s.Export(t.Context(), img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestExportCachedServedAsIs(t *testing.T) {
 	}
 	defer os.Rename(blob+".away", blob)
 
-	path2, err := s.Export(img)
+	path2, err := s.Export(t.Context(), img)
 	if err != nil {
 		t.Fatalf("cached export touched the store: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestExportImmutableStore(t *testing.T) {
 	blobs := filepath.Join(dir, "blobs")
 	before := snapshotModes(t, blobs)
 
-	out, err := s.Export(img)
+	out, err := s.Export(t.Context(), img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +204,7 @@ func TestExportAtomicOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.Export(img); err == nil {
+	if _, err := s.Export(t.Context(), img); err == nil {
 		t.Fatal("export succeeded with a damaged CAS")
 	}
 	final := filepath.Join(dir, "exports", img.Hash().Algorithm, img.Hash().Hex)
@@ -214,7 +215,7 @@ func TestExportAtomicOnFailure(t *testing.T) {
 	if err := os.Rename(damaged, blob); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Export(img); err != nil {
+	if _, err := s.Export(t.Context(), img); err != nil {
 		t.Fatalf("repaired export failed: %v", err)
 	}
 	if b, err := os.ReadFile(filepath.Join(final, "plain")); err != nil || string(b) != "other" {
@@ -242,7 +243,7 @@ func TestExportToCallerTarget(t *testing.T) {
 
 	scratch := scratchDir(t)
 	absent := filepath.Join(scratch, "fresh")
-	if err := s.ExportTo(view, absent); err != nil {
+	if err := s.ExportTo(t.Context(), view, absent); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(absent, "copy")); err != nil || string(b) != "shared bits" {
@@ -253,7 +254,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.Mkdir(empty, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(view, empty); err == nil {
+	if err := s.ExportTo(t.Context(), view, empty); err == nil {
 		t.Fatal("export replaced an existing (empty) target")
 	}
 
@@ -261,7 +262,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.WriteFile(fileTarget, []byte("caller data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(view, fileTarget); err == nil {
+	if err := s.ExportTo(t.Context(), view, fileTarget); err == nil {
 		t.Fatal("export replaced an existing file target")
 	}
 	if b, err := os.ReadFile(fileTarget); err != nil || string(b) != "caller data" {
@@ -272,7 +273,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(populated, "keep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(view, populated); err == nil {
+	if err := s.ExportTo(t.Context(), view, populated); err == nil {
 		t.Fatal("export replaced a populated target")
 	}
 	if _, err := os.Stat(filepath.Join(populated, "keep")); err != nil {
@@ -296,7 +297,7 @@ func TestExportOwnershipUnprivileged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := s.Export(img)
+	out, err := s.Export(t.Context(), img)
 	if err != nil {
 		t.Fatalf("unprivileged export failed: %v", err)
 	}
@@ -345,7 +346,7 @@ func TestPropertyExportAtomicOnDamage(t *testing.T) {
 			rt.Fatal(err)
 		}
 
-		if _, err := s.Export(img); err == nil {
+		if _, err := s.Export(t.Context(), img); err == nil {
 			rt.Fatal("export succeeded with a damaged CAS")
 		}
 		final := filepath.Join(dir, "exports", img.Hash().Algorithm, img.Hash().Hex)
@@ -356,7 +357,7 @@ func TestPropertyExportAtomicOnDamage(t *testing.T) {
 		if err := os.Rename(blob+".away", blob); err != nil {
 			rt.Fatal(err)
 		}
-		if _, err := s.Export(img); err != nil {
+		if _, err := s.Export(t.Context(), img); err != nil {
 			rt.Fatalf("repaired export failed: %v", err)
 		}
 		for i, n := range names {
@@ -366,4 +367,60 @@ func TestPropertyExportAtomicOnDamage(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestExportCancelLeavesNoResidue pins REQ-export-cancel's cleanup
+// clause at the store level: a context canceled during
+// materialization aborts with the context's error, the final path
+// never appears, and the temporary sibling is removed — for both
+// the cached tier and a caller-supplied target.
+func TestExportCancelLeavesNoResidue(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/export/cancel:v1"
+	exportFixture(t, reg, refStr)
+
+	s, dir := newTestStore(t, PullIfNotPresent, reg)
+	img, err := s.Image(context.Background(), refStr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := s.Export(ctx, img); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled cached export: %v, want context.Canceled", err)
+	}
+	final := filepath.Join(dir, "exports", img.Hash().Algorithm, img.Hash().Hex)
+	if _, err := os.Lstat(final); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("final path present after canceled export: %v", err)
+	}
+	tier := filepath.Join(dir, "exports", img.Hash().Algorithm)
+	ents, err := os.ReadDir(tier)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		t.Fatalf("residue in exports tier after canceled export: %s", e.Name())
+	}
+
+	view, err := img.Unify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "cancel-target")
+	if err := s.ExportTo(ctx, view, target); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled targeted export: %v, want context.Canceled", err)
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("target present after canceled export: %v", err)
+	}
+	parentEnts, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range parentEnts {
+		if strings.HasPrefix(e.Name(), ".export-") {
+			t.Fatalf("temporary residue after canceled export: %s", e.Name())
+		}
+	}
 }

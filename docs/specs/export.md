@@ -90,6 +90,22 @@ undisturbed. A crash leaves either no directory or a stale
 temporary, never a partial tree at the final path; stale temporaries
 are inert and may be deleted freely.
 
+**REQ-export-cancel** (behavior): Export MUST honor context
+cancellation throughout materialization, not only during
+acquisition: a canceled context aborts the export promptly — between
+entries and within a single file's content copy alike — returning
+the context's error, with the final path absent and the temporary
+sibling removed exactly as for any failed export (REQ-export-atomic
+covers the abort as it covers a crash). A multi-gigabyte
+materialization the caller cannot stop would make every consumer
+timeout unenforceable. Two carve-outs follow from the cache and
+atomicity rules: a canceled cached-tier export whose concurrent
+racer completed the same digest serves the winner's entry as any
+cache hit (REQ-export-cache — the tree is complete and identical);
+and rejections made before materialization begins (a cache hit, an
+existing caller target) precede the cancellation contract — their
+errors are not reordered behind the context's.
+
 **REQ-export-cache** (behavior): Store-managed exports live under
 the store's `exports/` tier, keyed by the digest of the manifest
 actually materialized (the platform-selected child, so distinct

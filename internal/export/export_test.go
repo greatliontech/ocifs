@@ -4,6 +4,7 @@ package export
 
 import (
 	"archive/tar"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -268,7 +269,7 @@ func TestPropertyExportMatchesView(t *testing.T) {
 		if err != nil {
 			rt.Fatal(err)
 		}
-		merr := Materialize(root, view, blobPath)
+		merr := Materialize(t.Context(), root, view, blobPath)
 		root.Close()
 		if merr != nil {
 			rt.Fatalf("Materialize: %v", merr)
@@ -334,7 +335,7 @@ func TestRootEntryAttributesApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err := Materialize(root, view, blobDir(t, dir, nil)); err != nil {
+	if err := Materialize(t.Context(), root, view, blobDir(t, dir, nil)); err != nil {
 		t.Fatal(err)
 	}
 	fi, err := os.Stat(rootDir)
@@ -379,7 +380,7 @@ func TestHardlinkStaleCaptureCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err := Materialize(root, view, blobDir(t, dir, contents)); err != nil {
+	if err := Materialize(t.Context(), root, view, blobDir(t, dir, contents)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -426,7 +427,7 @@ func TestHardlinkSameBytesNewAttrsCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err := Materialize(root, view, blobDir(t, dir, contents)); err != nil {
+	if err := Materialize(t.Context(), root, view, blobDir(t, dir, contents)); err != nil {
 		t.Fatal(err)
 	}
 	ln, _ := os.Stat(filepath.Join(rootDir, "ln"))
@@ -466,7 +467,7 @@ func TestHardlinkChainMaterializes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err := Materialize(root, view, blobDir(t, dir, contents)); err != nil {
+	if err := Materialize(t.Context(), root, view, blobDir(t, dir, contents)); err != nil {
 		t.Fatalf("chain export failed: %v", err)
 	}
 	a, _ := os.Stat(filepath.Join(rootDir, "a"))
@@ -519,7 +520,7 @@ func TestMissingBlobFailsNamingEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	err = Materialize(root, view, blobDir(t, dir, contents))
+	err = Materialize(t.Context(), root, view, blobDir(t, dir, contents))
 	if err == nil {
 		t.Fatal("export succeeded with a missing blob")
 	}
@@ -555,12 +556,121 @@ func TestHardlinkCycleMaterializes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err := Materialize(root, view, blobDir(t, dir, contents)); err != nil {
+	if err := Materialize(t.Context(), root, view, blobDir(t, dir, contents)); err != nil {
 		t.Fatalf("cyclic-view export failed: %v", err)
 	}
 	for _, name := range []string{"a", "b"} {
 		if got, err := os.ReadFile(filepath.Join(rootDir, name)); err != nil || string(got) != "cyclic" {
 			t.Fatalf("cycle member %q = %q, %v", name, got, err)
 		}
+	}
+}
+
+// TestCancellationAborts pins REQ-export-cancel at the materializer:
+// a pre-canceled context creates nothing, and a context canceled
+// mid-flight — from inside the first blob's CAS resolution — aborts
+// with the context's error before later entries materialize, even
+// though the canceled entry's copy had already begun.
+func TestCancellationAborts(t *testing.T) {
+	contents := map[string][]byte{}
+	reg := func(c string) []byte {
+		b := []byte(c)
+		contents[digestOf(b).Hex] = b
+		return b
+	}
+	a, b := reg("content-a"), reg("content-b")
+	stack := []layer.Layer{{
+		entryFile("a", a, 0o644, baseTime),
+		entryFile("b", b, 0o644, baseTime),
+	}}
+	view, err := layer.Unify(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := scratchtest.Dir(t, "export")
+	blobPath := blobDir(t, dir, contents)
+
+	newRoot := func(name string) (*os.Root, string) {
+		rd := filepath.Join(dir, name)
+		if err := os.Mkdir(rd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		root, err := os.OpenRoot(rd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return root, rd
+	}
+
+	// Pre-canceled: nothing is created at all.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	root, rootDir := newRoot("pre")
+	err = Materialize(ctx, root, view, blobPath)
+	root.Close()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("pre-canceled materialize: %v, want context.Canceled", err)
+	}
+	if ents, _ := os.ReadDir(rootDir); len(ents) != 0 {
+		t.Fatalf("pre-canceled materialize created entries: %v", ents)
+	}
+
+	// Mid-flight: the resolver cancels while serving the first
+	// entry's content — the guarded reader aborts that copy and no
+	// later entry appears.
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	defer cancel2()
+	tripping := func(h v1.Hash) string {
+		cancel2()
+		return blobPath(h)
+	}
+	root2, rootDir2 := newRoot("mid")
+	err = Materialize(ctx2, root2, view, tripping)
+	root2.Close()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("mid-flight materialize: %v, want context.Canceled", err)
+	}
+	// The guarded reader must have stopped the in-flight copy: the
+	// canceled entry's file may exist but never carries its bytes.
+	if b, readErr := os.ReadFile(filepath.Join(rootDir2, "a")); readErr == nil && len(b) != 0 {
+		t.Fatalf("canceled entry's copy completed anyway: %q", b)
+	}
+	if _, statErr := os.Lstat(filepath.Join(rootDir2, "b")); statErr == nil {
+		t.Fatal("entry after the cancellation point was materialized")
+	}
+
+	// Links pass: a stale-capture hardlink forces a copy through the
+	// resolver — cancellation from there aborts inside that entry's
+	// own guarded copy (the per-entry check between links has no
+	// deterministic trigger; see the disclosed probe survivors).
+	c := reg("content-c")
+	d := reg("content-d")
+	blobPath = blobDir(t, dir, contents) // refresh the CAS with c and d
+	lstack := []layer.Layer{
+		{entryFile("t", c, 0o644, baseTime), entryHardlink("l", "t")},
+		{entryFile("t", d, 0o644, baseTime)},
+	}
+	lview, err := layer.Unify(lstack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx3, cancel3 := context.WithCancel(t.Context())
+	defer cancel3()
+	calls := 0
+	tripSecond := func(h v1.Hash) string {
+		calls++
+		if calls == 2 {
+			cancel3()
+		}
+		return blobPath(h)
+	}
+	root3, rootDir3 := newRoot("links")
+	err = Materialize(ctx3, root3, lview, tripSecond)
+	root3.Close()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("links-pass materialize: %v, want context.Canceled", err)
+	}
+	if b, readErr := os.ReadFile(filepath.Join(rootDir3, "l")); readErr == nil && len(b) != 0 {
+		t.Fatalf("canceled stale-capture copy completed anyway: %q", b)
 	}
 }

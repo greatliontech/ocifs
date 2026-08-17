@@ -10,6 +10,7 @@ package export
 
 import (
 	"archive/tar"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -36,7 +37,12 @@ import (
 // first, so restrictive modes cannot block the export and creating
 // children cannot disturb recorded directory times
 // (REQ-export-fidelity).
-func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string) error {
+//
+// Cancellation: ctx is checked before each entry in every pass and
+// per chunk inside blob copies, so cancellation aborts promptly even
+// mid-way through a single large file (REQ-export-cancel); the
+// caller's temporary-cleanup error path covers the abort.
+func Materialize(ctx context.Context, root *os.Root, view *layer.View, blobPath func(v1.Hash) string) error {
 	// euid 0 includes user-namespace root: recorded ownership is
 	// applied natively there too, and a recorded id outside the
 	// namespace's mapping fails the chown (EINVAL) — surfaced, never
@@ -63,6 +69,9 @@ func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string)
 	var links []layer.Entry
 	entries := view.Entries()
 	for i := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		e := &entries[i]
 		name := e.Header.Name
 		if name == "." {
@@ -76,7 +85,7 @@ func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string)
 				return collide(name, err)
 			}
 		case tar.TypeReg:
-			if err := copyBlob(root, name, e, blobPath); err != nil {
+			if err := copyBlob(ctx, root, name, e, blobPath); err != nil {
 				return collide(name, err)
 			}
 			if err := applyFileAttrs(root, name, e, privileged); err != nil {
@@ -134,7 +143,10 @@ func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string)
 		return linkDepth(view, &links[i]) < linkDepth(view, &links[j])
 	})
 	for i := range links {
-		if err := materializeLink(root, view, &links[i], blobPath, privileged, collide); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := materializeLink(ctx, root, view, &links[i], blobPath, privileged, collide); err != nil {
 			return err
 		}
 		created(links[i].Header.Name)
@@ -143,6 +155,9 @@ func Materialize(root *os.Root, view *layer.View, blobPath func(v1.Hash) string)
 	// Reverse pass: directory attributes, children before parents,
 	// root last.
 	for i := view.Len() - 1; i >= 0; i-- {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		e := &entries[i]
 		if e.Header.Typeflag != tar.TypeDir && e.Header.Name != "." {
 			continue
@@ -190,7 +205,7 @@ func modeSpecial(e *layer.Entry) fs.FileMode {
 // exported file — a copy, never a link into the store
 // (REQ-export-copy); the CAS entry itself is never opened for
 // writing (REQ-export-immutable).
-func copyBlob(root *os.Root, name string, e *layer.Entry, blobPath func(v1.Hash) string) error {
+func copyBlob(ctx context.Context, root *os.Root, name string, e *layer.Entry, blobPath func(v1.Hash) string) error {
 	src, err := os.Open(blobPath(e.Digest))
 	if err != nil {
 		return fmt.Errorf("entry %q: content %s: %w", name, e.Digest, err)
@@ -200,12 +215,30 @@ func copyBlob(root *os.Root, name string, e *layer.Entry, blobPath func(v1.Hash)
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(dst, src); err != nil {
-		dst.Close()
-		return fmt.Errorf("entry %q: %w", name, err)
+	// Chunked copy: the per-chunk ctx check bounds cancellation
+	// latency within a single large blob (REQ-export-cancel), while
+	// each CopyN still reaches the kernel zero-copy path — os.File's
+	// ReadFrom unwraps the LimitedReader, so copy_file_range is
+	// preserved (a guard wrapping the reader itself would forfeit
+	// it for every export).
+	for {
+		if err := ctx.Err(); err != nil {
+			dst.Close()
+			return fmt.Errorf("entry %q: %w", name, err)
+		}
+		if _, err := io.CopyN(dst, src, copyChunk); err != nil {
+			if err == io.EOF {
+				break
+			}
+			dst.Close()
+			return fmt.Errorf("entry %q: %w", name, err)
+		}
 	}
 	return dst.Close()
 }
+
+// copyChunk bounds how many bytes one cancellation check covers.
+const copyChunk = 32 << 20
 
 // applyFileAttrs applies ownership (privileged only), permissions
 // including special bits, and recorded times to a non-directory,
@@ -230,7 +263,7 @@ func applyFileAttrs(root *os.Root, name string, e *layer.Entry, privileged bool)
 // captured, an independent copy of the captured content otherwise —
 // fidelity within the tree, never a link into the CAS
 // (REQ-export-copy).
-func materializeLink(root *os.Root, view *layer.View, e *layer.Entry, blobPath func(v1.Hash) string, privileged bool, collide func(string, error) error) error {
+func materializeLink(ctx context.Context, root *os.Root, view *layer.View, e *layer.Entry, blobPath func(v1.Hash) string, privileged bool, collide func(string, error) error) error {
 	name := e.Header.Name
 	target := e.Header.Linkname
 	// Linking requires more than equal content identity: the two
@@ -257,7 +290,7 @@ func materializeLink(root *os.Root, view *layer.View, e *layer.Entry, blobPath f
 			return nil
 		}
 	}
-	if err := copyBlob(root, name, e, blobPath); err != nil {
+	if err := copyBlob(ctx, root, name, e, blobPath); err != nil {
 		return collide(name, err)
 	}
 	return applyFileAttrs(root, name, e, privileged)

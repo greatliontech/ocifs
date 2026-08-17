@@ -47,13 +47,13 @@ func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOptio
 		return "", err
 	}
 	if r.target == "" {
-		return o.store.Export(img)
+		return o.store.Export(ctx, img)
 	}
 	view, err := img.Unify()
 	if err != nil {
 		return "", err
 	}
-	if err := o.store.ExportTo(view, r.target); err != nil {
+	if err := o.store.ExportTo(ctx, view, r.target); err != nil {
 		return "", err
 	}
 	return r.target, nil
