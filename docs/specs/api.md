@@ -50,6 +50,25 @@ without an upper MUST produce a read-only projection
 (`projection.md`) of its unified view; on linux the FUSE mount is
 additionally private to the invoking user (no `allow_other`).
 
+**REQ-api-self-access** (behavior): The process serving a mount
+(linux FUSE serves in-process) MUST NOT access that mount through
+kernel paths invisible to its language runtime; ocifs documents the
+constraint rather than detecting it. Ordinary syscalls (read,
+write, stat, readdir) against the own mount are safe — the runtime
+parks the thread and the serving goroutines stay schedulable.
+Unsafe: memory-mapping a mount-resident file and then faulting its
+pages; exec'ing a mount-resident file via a vfork-suspended child
+(with current Go runtimes, exec without a new user namespace); a
+child's pre-exec working-directory change or chroot into the
+mount. Each leaves a thread the
+runtime believes is running while it waits — in the kernel — on the
+process's own FUSE server; a concurrent garbage-collection
+stop-the-world then deadlocks the whole process intermittently.
+Consumers needing exec or mmap of mount content do so from a
+separate process (with current Go runtimes a plainly-forked
+user-namespace child suffices; a fully separate process is the
+durable form).
+
 **REQ-api-mount-writable** (behavior): A mount MUST accept an upper
 (`writable.md`) — a caller-supplied directory, or a store-managed
 named upper created on first use (`store.md`) — and then serve the

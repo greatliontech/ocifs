@@ -48,6 +48,10 @@ func acceptanceMount(t *testing.T, name string) (*ImageMount, *OCIFS, string) {
 // written through the mount executes from it, and mapped pages read
 // back written content (REQ-proj-content over the write path).
 func TestAcceptanceExecAndMmap(t *testing.T) {
+	if os.Getenv("OCIFS_MMAP_CHILD_PATH") != "" {
+		mmapChild(t)
+		return
+	}
 	im, ofs, refStr := acceptanceMount(t, "wexec")
 	mnt := im.MountPoint()
 
@@ -59,7 +63,14 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	if err := os.Chmod(script, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(script).CombinedOutput()
+	// Mount-resident files are exec'd through a host-backed shell:
+	// exec.Command's vfork suspends the parent thread — invisibly to
+	// the Go runtime — until the child's execve commits, and
+	// committing a mount-resident binary needs THIS process's FUSE
+	// server; a concurrent GC stop-the-world then deadlocks the
+	// whole process. The shell (host-backed) commits immediately and
+	// re-execs the mount file in the detached child.
+	out, err := execViaHostShell(script).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "exec-ok") {
 		t.Fatalf("exec from mount: %q %v", out, err)
 	}
@@ -99,17 +110,57 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	binPath = filepath.Join(mnt, "shcopy")
 	dataPath = filepath.Join(mnt, "mapped")
 
-	out, err = exec.Command(script).CombinedOutput()
+	out, err = execViaHostShell(script).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "exec-ok") {
 		t.Fatalf("script exec after remount: %q %v", out, err)
 	}
-	out, err = exec.Command(binPath, "-c", "echo elf-ok").CombinedOutput()
+	out, err = execViaHostShell(binPath, "-c", "echo elf-ok").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "elf-ok") {
 		t.Fatalf("ELF exec from mount: %q %v", out, err)
 	}
 
-	// mmap read-back of written content through the fresh mount.
-	f, err := os.Open(dataPath)
+	// mmap read-back through the fresh mount, from a CHILD process.
+	// Like exec above, the serving process must never touch its own
+	// mount through page faults: a fault on a FUSE-backed mapping is
+	// invisible to the Go runtime, so a concurrent GC stop-the-world
+	// waits on the faulting thread while the server goroutine that
+	// would satisfy it is frozen — a whole-process deadlock (observed
+	// as intermittent full-suite timeouts). Plain read/write
+	// syscalls through the mount are safe; mapping, exec, and a
+	// child's pre-exec chdir (cmd.Dir) into the mount are not.
+	// Userns children (CLONE_NEWUSER) are exempt: that flag disables
+	// vfork, so the container/capability arms below fork plainly.
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := exec.Command(exe, "-test.run", "^TestAcceptanceExecAndMmap$")
+	child.Env = append(os.Environ(),
+		"OCIFS_MMAP_CHILD_PATH="+dataPath,
+		"OCIFS_MMAP_CHILD_WANT="+string(want))
+	out, err = child.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "mmap-ok") {
+		t.Fatalf("mmap child: %q %v", out, err)
+	}
+}
+
+// execViaHostShell runs a mount-resident program through a
+// host-backed /bin/sh so the vfork window never depends on this
+// process's own FUSE server (see the exec comment in
+// TestAcceptanceExecAndMmap). Argv passthrough — no shell quoting
+// surface: the path and args reach the child verbatim as $0/$@.
+func execViaHostShell(path string, args ...string) *exec.Cmd {
+	argv := append([]string{"-c", `exec "$0" "$@"`, path}, args...)
+	return exec.Command("/bin/sh", argv...)
+}
+
+// mmapChild maps the file at OCIFS_MMAP_CHILD_PATH and compares it
+// against the expected content — in a separate process, whose page
+// faults the parent's FUSE server serves like any foreign consumer's.
+func mmapChild(t *testing.T) {
+	p := os.Getenv("OCIFS_MMAP_CHILD_PATH")
+	want := []byte(os.Getenv("OCIFS_MMAP_CHILD_WANT"))
+	f, err := os.Open(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +171,9 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	}
 	defer unix.Munmap(mem)
 	if !bytes.Equal(mem, want) {
-		t.Fatalf("mapped bytes %q", mem)
+		t.Fatalf("mapped bytes %q, want %q", mem, want)
 	}
+	fmt.Println("mmap-ok")
 }
 
 // TestAcceptanceConcurrentBuild runs a parallel make on the mount —
@@ -153,14 +205,17 @@ func TestAcceptanceConcurrentBuild(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command(makeBin, "-j4")
-	cmd.Dir = proj
+	// cd-then-exec through the host shell: cmd.Dir into the mount
+	// would chdir inside the vfork window — the same self-access
+	// deadlock as exec'ing a mount-resident file (see
+	// TestAcceptanceExecAndMmap's exec comment).
+	cmd := exec.Command("/bin/sh", "-c", `CDPATH= cd "$0" && exec "$1" -j4`, proj, makeBin)
 	cmd.Env = append(os.Environ(), "CC="+ccBin)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("make -j4 on the mount: %v\n%s", err, out)
 	}
-	run, err := exec.Command(filepath.Join(proj, "app")).Output()
+	run, err := execViaHostShell(filepath.Join(proj, "app")).Output()
 	if err != nil || strings.TrimSpace(string(run)) != "42" {
 		t.Fatalf("built app: %q %v", run, err)
 	}
