@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +32,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/greatliontech/gmdb"
+
+	"github.com/greatliontech/ocifs/internal/projection"
 
 	"github.com/greatliontech/ocifs/internal/layer"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
@@ -269,6 +273,50 @@ func refFiles(t *testing.T, storeDir string) []string {
 	return keys
 }
 
+// deleteLayerIdxRow removes one layeridx row through a second
+// read-write database handle — the damage self-heal recovers from.
+func deleteLayerIdxRow(t testing.TB, storeDir string, ld v1.Hash) {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksLayerIdx)
+		if err != nil {
+			return err
+		}
+		err = ks.Delete(layerKey(ld))
+		if errors.Is(err, gmdb.ErrNotFound) {
+			return nil
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeLayerIdxRow plants raw bytes at a layeridx key — the damaged
+// or foreign-format state self-heal must not serve.
+func writeLayerIdxRow(t testing.TB, storeDir string, ld v1.Hash, raw []byte) {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksLayerIdx)
+		if err != nil {
+			return err
+		}
+		return ks.Put(layerKey(ld), raw)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // clearRefRows deletes every refs row through a second read-write
 // database handle — a concurrent writer like any other process.
 func clearRefRows(t testing.TB, storeDir string) {
@@ -339,7 +387,7 @@ func TestIngestRoundtrip(t *testing.T) {
 		filepath.Join(dir, "oci", "oci-layout"),
 		filepath.Join(dir, "oci", "index.json"),
 		filepath.Join(dir, "blobs"),
-		filepath.Join(dir, "layers"),
+		filepath.Join(dir, "bookkeeping"),
 		filepath.Join(dir, "mounts"),
 		filepath.Join(dir, "exports"),
 	} {
@@ -354,7 +402,7 @@ func TestIngestRoundtrip(t *testing.T) {
 	// Layer indexes are keyed by the digests the manifest lists.
 	for _, l := range []*rawLayer{l1, l2} {
 		ld, _ := l.Digest()
-		if _, err := os.Stat(filepath.Join(dir, "layers", ld.Algorithm, ld.Hex)); err != nil {
+		if _, err := s.bk.LayerIdxGet(context.Background(), ld); err != nil {
 			t.Fatalf("missing layer index for %s: %v", ld, err)
 		}
 	}
@@ -427,18 +475,17 @@ func TestLayerIndexAndContentKeyspacesDisjoint(t *testing.T) {
 	}
 
 	ld, _ := l1.Digest() // == sha256 of embedded.tgz's content
-	indexPath := filepath.Join(dir, "layers", ld.Algorithm, ld.Hex)
-	blobPath := filepath.Join(dir, "blobs", ld.Algorithm, ld.Hex)
-	indexData, err := os.ReadFile(indexPath)
-	if err != nil {
+	idx, err := s.bk.LayerIdxGet(context.Background(), ld)
+	if err != nil || len(idx) == 0 {
 		t.Fatalf("layer index missing at colliding key: %v", err)
 	}
+	blobPath := filepath.Join(dir, "blobs", ld.Algorithm, ld.Hex)
 	blobData, err := os.ReadFile(blobPath)
 	if err != nil {
 		t.Fatalf("content blob missing at colliding key: %v", err)
 	}
-	if bytes.Equal(indexData, blobData) {
-		t.Fatalf("index and blob at colliding key hold identical bytes; keyspaces not disjoint")
+	if !bytes.Equal(blobData, l1.compressed) {
+		t.Fatalf("blob at colliding key is not the embedded content")
 	}
 	if got := readEntry(t, s, img, "embedded.tgz"); !bytes.Equal(got, l1.compressed) {
 		t.Fatalf("embedded file bytes corrupted by keyspace collision")
@@ -512,7 +559,6 @@ func TestSelfHeal(t *testing.T) {
 		return e.Digest
 	}()
 	ld, _ := l.Digest()
-	indexPath := filepath.Join(dir, "layers", ld.Algorithm, ld.Hex)
 
 	// Every heal below must be network-free: cut the transport so
 	// any registry round trip fails loudly.
@@ -522,9 +568,7 @@ func TestSelfHeal(t *testing.T) {
 	})}
 
 	// 1. Missing index.
-	if err := os.Remove(indexPath); err != nil {
-		t.Fatal(err)
-	}
+	deleteLayerIdxRow(t, dir, ld)
 	img, err = s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatalf("heal of missing index: %v", err)
@@ -533,10 +577,9 @@ func TestSelfHeal(t *testing.T) {
 		t.Fatalf("data = %q after index heal", got)
 	}
 
-	// 2. Corrupt index.
-	if err := os.WriteFile(indexPath, []byte("{torn"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// 2. Corrupt index: a foreign-version row is the corrupt form a
+	// versioned record admits.
+	writeLayerIdxRow(t, dir, ld, []byte{layerIdxVersion + 1, 0xde, 0xad})
 	img, err = s.Image(context.Background(), refStr, nil)
 	if err != nil {
 		t.Fatalf("heal of corrupt index: %v", err)
@@ -938,14 +981,17 @@ func TestNoTemporariesAfterIngest(t *testing.T) {
 	}
 }
 
-// TestLayerIndexBinaryRoundTrip pins the layers-tier encoding:
-// header strings are arbitrary bytes (binary xattr values like
-// security.capability blobs, unusual names and link targets) and
-// must survive the persisted JSON document byte-exactly; a foreign
-// format version heals like a missing document.
+// TestLayerIndexBinaryRoundTrip pins the layeridx record encoding
+// (REQ-store-bookkeeping): header strings are arbitrary bytes
+// (binary xattr values like security.capability blobs, unusual
+// names and link targets) and survive the persisted record
+// byte-exactly; a foreign version heals like a missing row.
 func TestLayerIndexBinaryRoundTrip(t *testing.T) {
-	dir := scratchtest.Dir(t, "store")
-	li := layerIndexes{root: dir}
+	bk, err := openBookkeeping(scratchtest.Dir(t, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bk.Close()
 	capBlob := string([]byte{0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xff, 0xfe, 0x00, 0x00, 0xe8, 0x03})
 	in := layer.Layer{
 		{Header: tar.Header{
@@ -969,10 +1015,10 @@ func TestLayerIndexBinaryRoundTrip(t *testing.T) {
 		}, Digest: v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}},
 	}
 	ld := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cd", 32)}
-	if err := li.Put(ld, in); err != nil {
+	if err := bk.LayerIdxPut(t.Context(), ld, in); err != nil {
 		t.Fatal(err)
 	}
-	out, err := li.Get(ld)
+	out, err := bk.LayerIdxGet(t.Context(), ld)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -997,13 +1043,29 @@ func TestLayerIndexBinaryRoundTrip(t *testing.T) {
 		t.Fatalf("digest mangled")
 	}
 
-	// A version-1-style document heals as missing.
-	old := `{"entries":[{"header":{"Name":"x"},"digest":""}]}`
-	if err := os.WriteFile(li.path(ld), []byte(old), 0o644); err != nil {
+	// A foreign-version record heals as missing — write one directly
+	// through a second handle, as a future format would leave it.
+	foreign := append([]byte{layerIdxVersion + 1}, encodeLayer(in)[1:]...)
+	db2, err := gmdb.Open(context.Background(), filepath.Join(bk.dir, "db"), gmdb.Options{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := li.Get(ld); !errors.Is(err, os.ErrNotExist) {
+	defer db2.Close()
+	if err := db2.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksLayerIdx)
+		if err != nil {
+			return err
+		}
+		return ks.Put(layerKey(ld), foreign)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bk.LayerIdxGet(t.Context(), ld); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("foreign version served: %v", err)
+	}
+	// A truncated record is unparseable, not a panic, and not served.
+	if _, err := decodeLayer(encodeLayer(in)[:7]); err == nil {
+		t.Fatal("truncated record decoded")
 	}
 }
 
@@ -1064,5 +1126,169 @@ func TestAdoptRefusalOrder(t *testing.T) {
 	}
 	if _, err := NewStore(dir, nil, PullNever, v1.Platform{}, nil); !errors.Is(err, ErrPreLayoutStore) {
 		t.Fatalf("both signatures: %v, want ErrPreLayoutStore first", err)
+	}
+}
+
+// TestMountRecordRoundTrip pins the mounts-row encoding
+// (REQ-store-bookkeeping, projection.md REQ-proj-report): report
+// paths are exact bytes — including non-UTF-8 names no JSON
+// encoding could carry — and every field survives; a foreign
+// version heals as an absent row; an empty report decodes present.
+func TestMountRecordRoundTrip(t *testing.T) {
+	in := MountRecord{
+		Owner:      LivenessIdentity{Pid: 42, StartTime: 987654, PidNS: "pid:[4026531836]", BootID: "boot-uuid"},
+		Image:      v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ef", 32)},
+		UpperName:  "scratch-upper",
+		Mountpoint: "/mnt/with\xffbyte",
+		Report: projection.Report{Entries: []projection.ReportEntry{{
+			Path:        "dir/bad\xf0\x00name",
+			Disposition: projection.DispositionOmitted,
+			Reason:      projection.ReasonNameUnrepresentable,
+			Detail:      "detail with \x00 nul",
+		}}},
+	}
+	out, err := decodeMountRecord(encodeMountRecord(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Owner != in.Owner || out.Image != in.Image ||
+		out.UpperName != in.UpperName || out.Mountpoint != in.Mountpoint ||
+		len(out.Report.Entries) != 1 || out.Report.Entries[0] != in.Report.Entries[0] {
+		t.Fatalf("round trip mangled:\n got  %+v\n want %+v", out, in)
+	}
+
+	empty := MountRecord{Owner: in.Owner, Image: in.Image}
+	out2, err := decodeMountRecord(encodeMountRecord(empty))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out2.Report.Entries == nil || len(out2.Report.Entries) != 0 {
+		t.Fatalf("empty report decoded as %+v, want present empty entries", out2.Report)
+	}
+
+	foreign := append([]byte{mountRecVersion + 1}, encodeMountRecord(in)[1:]...)
+	if _, err := decodeMountRecord(foreign); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("foreign version: %v", err)
+	}
+	if _, err := decodeMountRecord(encodeMountRecord(in)[:5]); err == nil {
+		t.Fatal("truncated record decoded")
+	}
+}
+
+// TestCommitRecordsLocalImageRoot pins the localimages row
+// (REQ-store-gc-roots): commit records the root that keeps the
+// committed image reachable.
+func TestCommitRecordsLocalImageRoot(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/commit/root:v1"
+	l := newRawLayer(t, tarBytes(t, tfile("f", "base")))
+	push(t, reg, refStr, makeImage(t, l))
+	s, _ := newTestStore(t, PullIfNotPresent, reg)
+	img, err := s.Image(context.Background(), refStr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := filepath.Join(scratchDir(t), "up")
+	if err := os.MkdirAll(up, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(up, "new"), []byte("delta"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := s.CommitUpper(img, up)
+	if err != nil {
+		t.Fatal(err)
+	}
+	present, err := s.bk.LocalImagePresent(context.Background(), digest)
+	if err != nil || !present {
+		t.Fatalf("localimages root after commit: present=%v err=%v", present, err)
+	}
+	absent, err := s.bk.LocalImagePresent(context.Background(), img.Hash())
+	if err != nil || absent {
+		t.Fatalf("uncommitted digest has a root row: %v %v", absent, err)
+	}
+}
+
+// TestCorruptCountRowsHealNotPanic pins the decoders' count bound:
+// a row whose entry count exceeds what its bytes can hold errors —
+// self-heal territory — and never allocates or panics.
+func TestCorruptCountRowsHealNotPanic(t *testing.T) {
+	huge := binary.AppendUvarint([]byte{layerIdxVersion}, 1<<62)
+	if _, err := decodeLayer(huge); err == nil {
+		t.Fatal("huge-count layer row decoded")
+	}
+	big := binary.AppendUvarint([]byte{layerIdxVersion}, 1<<30)
+	if _, err := decodeLayer(big); err == nil {
+		t.Fatal("large-count layer row decoded")
+	}
+	hugeRec := append(encodeMountRecord(MountRecord{})[:0], mountRecVersion)
+	hugeRec = append(hugeRec, encodeMountRecord(MountRecord{})[1:]...)
+	// Replace the trailing (zero) entry count with a huge one.
+	hugeRec = append(hugeRec[:len(hugeRec)-1], binary.AppendUvarint(nil, 1<<62)...)
+	if _, err := decodeMountRecord(hugeRec); err == nil {
+		t.Fatal("huge-count mount record decoded")
+	}
+
+	// End to end: a count-corrupt layeridx row heals by re-unpack.
+	reg := newTestRegistry()
+	refStr := testHost + "/heal/count:v1"
+	l := newRawLayer(t, tarBytes(t, tfile("data", "precious")))
+	push(t, reg, refStr, makeImage(t, l))
+	s, dir := newTestStore(t, PullIfNotPresent, reg)
+	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
+		t.Fatal(err)
+	}
+	ld, _ := l.Digest()
+	writeLayerIdxRow(t, dir, ld, huge)
+	img, err := s.Image(context.Background(), refStr, nil)
+	if err != nil {
+		t.Fatalf("heal of count-corrupt index: %v", err)
+	}
+	if got := string(readEntry(t, s, img, "data")); got != "precious" {
+		t.Fatalf("data = %q after count-corrupt heal", got)
+	}
+}
+
+// TestSelfIdentityCollected pins the liveness-identity collection
+// (REQ-store-bookkeeping): a registered mount record carries this
+// process's pid, a nonzero kernel start time, and the namespace and
+// boot discriminators exactly as the kernel reports them.
+func TestSelfIdentityCollected(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("identity discriminators are linux-collected; other platforms record pid only")
+	}
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("aa", 32)}
+	if err := s.RegisterMountRecord(context.Background(), "ident", h, "", "/mnt/x"); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.MountRecord(context.Background(), "ident")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Owner.Pid != int64(os.Getpid()) {
+		t.Fatalf("pid %d, want %d", rec.Owner.Pid, os.Getpid())
+	}
+	if rec.Owner.StartTime == 0 {
+		t.Fatal("start time not collected")
+	}
+	wantNS, err := os.Readlink("/proc/self/ns/pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Owner.PidNS != wantNS {
+		t.Fatalf("pidns %q, want %q", rec.Owner.PidNS, wantNS)
+	}
+	wantBoot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Owner.BootID != strings.TrimSpace(string(wantBoot)) {
+		t.Fatalf("boot id %q, want %q", rec.Owner.BootID, strings.TrimSpace(string(wantBoot)))
 	}
 }

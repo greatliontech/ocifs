@@ -4,10 +4,10 @@ package projection
 
 import (
 	"errors"
-	"sort"
 	"fmt"
-	"strings"
 	"os"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 

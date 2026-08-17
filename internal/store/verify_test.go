@@ -133,7 +133,7 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 		s := newStoreAt(t, dir, PullIfNotPresent, linux, reg)
 		s.verifier = rejectAll
 		before := map[string]map[string]int64{}
-		for _, tier := range []string{"blobs", "layers", "oci"} {
+		for _, tier := range []string{"blobs", "oci"} {
 			before[tier] = treeFiles(t, filepath.Join(dir, tier))
 		}
 		beforeRefs := refsContent(t, dir)
@@ -146,7 +146,7 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 			rt.Fatalf("VerificationError does not wrap the verifier's error: %v", err)
 		}
 
-		for _, tier := range []string{"blobs", "layers"} {
+		for _, tier := range []string{"blobs"} {
 			after := treeFiles(t, filepath.Join(dir, tier))
 			if !sameTree(before[tier], after) {
 				rt.Fatalf("rejected request mutated %s/: before %v, after %v", tier, before[tier], after)

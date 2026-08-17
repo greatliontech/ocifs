@@ -1,18 +1,11 @@
 package projection
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"os"
-
-	"github.com/greatliontech/ocifs/internal/atomicfile"
-)
-
-// ReportFileName is the projection report's file name inside the
-// mount's per-mount state directory (REQ-proj-report,
-// store.md REQ-store-layout mounts tier).
-const ReportFileName = "projection-report.json"
+// ReportSink persists a projection report into the mount's
+// bookkeeping record (REQ-proj-report; store.md
+// REQ-store-bookkeeping mounts keyspace). Backends that accumulate
+// residuals call it again with the grown report; publication is
+// transactional at the sink.
+type ReportSink func(Report) error
 
 // Disposition classifies a report entry: the projection either
 // omitted the view entry or presented it altered.
@@ -44,10 +37,10 @@ const (
 // ReportEntry records one omission or alteration relative to the
 // unified view (REQ-proj-report).
 type ReportEntry struct {
-	Path        string      `json:"path"`
-	Disposition Disposition `json:"disposition"`
-	Reason      Reason      `json:"reason"`
-	Detail      string      `json:"detail,omitempty"`
+	Path        string
+	Disposition Disposition
+	Reason      Reason
+	Detail      string
 }
 
 // Report is the per-projection record of every entry omitted or
@@ -56,7 +49,7 @@ type ReportEntry struct {
 // same classification, so the report is exactly the complement of
 // what the projection presents.
 type Report struct {
-	Entries []ReportEntry `json:"entries"`
+	Entries []ReportEntry
 }
 
 func (r *Report) add(path string, reason Reason, detail string) {
@@ -66,34 +59,4 @@ func (r *Report) add(path string, reason Reason, detail string) {
 		Reason:      reason,
 		Detail:      detail,
 	})
-}
-
-// WriteFile persists the report atomically at path. The entries
-// array is always present — an empty report is `{"entries":[]}`,
-// distinguishable from an absent or unwritten file.
-func (r Report) WriteFile(path string) error {
-	entries := r.Entries
-	if entries == nil {
-		entries = []ReportEntry{}
-	}
-	data, err := json.MarshalIndent(Report{Entries: entries}, "", "  ")
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(path, bytes.NewReader(data), 0o644)
-}
-
-// ReadReportFile loads a persisted projection report — the read
-// surface for consumers, orchestrators, and inspecting CLIs
-// (REQ-proj-report).
-func ReadReportFile(path string) (*Report, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var r Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		return nil, fmt.Errorf("projection report %s: %w", path, err)
-	}
-	return &r, nil
 }

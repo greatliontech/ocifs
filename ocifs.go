@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/ocifs/internal/projection"
 	"github.com/greatliontech/ocifs/internal/store"
 )
 
@@ -351,13 +352,38 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	srv, err := platformMount(o, imgRef, img, view, stateDir, im.mountPoint, im.upperRoot)
+	// The mount's bookkeeping record (store.md REQ-store-bookkeeping
+	// mounts keyspace): liveness identity, image, upper name,
+	// mountpoint; the projection report joins it once built. A
+	// failed attempt leaves no row (REQ-store-mount-registry).
+	im.id = filepath.Base(stateDir)
+	if err := o.store.RegisterMountRecord(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if im.server == nil {
+			o.store.DeleteMountRecord(context.Background(), im.id)
+		}
+	}()
+
+	srv, err := platformMount(o, imgRef, img, view, im.id, stateDir, im.mountPoint, im.upperRoot)
 	if err != nil {
 		return nil, err
 	}
 	im.server = srv
 
 	return im, nil
+}
+
+// MountReport reads a mount's projection report from its
+// bookkeeping record (projection.md REQ-proj-report: enumerable by
+// the consumer through the store).
+func (o *OCIFS) MountReport(id string) (projection.Report, error) {
+	rec, err := o.store.MountRecord(context.Background(), id)
+	if err != nil {
+		return projection.Report{}, err
+	}
+	return rec.Report, nil
 }
 
 // Close releases the store's coordination resources — the

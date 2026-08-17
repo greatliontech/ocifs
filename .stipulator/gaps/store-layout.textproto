@@ -3,6 +3,6 @@
 
 requirement_id: "REQ-store-layout"
 reason: "amended contract (refs/layers file tiers replaced by the bookkeeping database) not yet met by code; existing witnesses pin the pre-arc layout"
-lands { manual { condition: "store-gc chunk 3 landed: file tiers replaced by bookkeeping keyspaces" } }
+lands { manual { condition: "store-gc chunk 3 landed: file tiers replaced by bookkeeping keyspaces" fired: true } }
 excuses: GAP_EXCUSE_UNCOVERED
 excuses: GAP_EXCUSE_STALE

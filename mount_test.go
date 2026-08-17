@@ -27,8 +27,6 @@ import (
 
 	"golang.org/x/sys/unix"
 	"pgregory.net/rapid"
-
-	"github.com/greatliontech/ocifs/internal/projection"
 )
 
 var fixtureMtime = time.Date(2020, 3, 4, 5, 6, 7, 0, time.UTC)
@@ -387,13 +385,18 @@ func TestMountShortReadOnlyAtEOF(t *testing.T) {
 }
 
 // TestMountReportPersisted pins the per-mount arm of
-// REQ-proj-report: every mount writes its projection report into the
-// state directory beside the mnt/ mountpoint, readable while the
+// REQ-proj-report: every mount records its projection report in the
+// mount's bookkeeping record, readable through the store while the
 // mount is live.
 func TestMountReportPersisted(t *testing.T) {
-	im, _, work := mountFixture(t, "report", MountWithID("withreport"))
+	ofs, refStr, work := fixtureEnv(t, "report")
+	im, err := ofs.Mount(refStr, MountWithID("withreport"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { im.Unmount() })
 
-	r, err := projection.ReadReportFile(filepath.Join(work, "mounts", "withreport", projection.ReportFileName))
+	r, err := ofs.MountReport("withreport")
 	if err != nil {
 		t.Fatalf("report not persisted: %v", err)
 	}

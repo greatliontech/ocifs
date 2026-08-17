@@ -3,8 +3,8 @@
 package ocifs
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 
 	"github.com/greatliontech/ocifs/internal/layer"
 	"github.com/greatliontech/ocifs/internal/store"
@@ -19,6 +19,6 @@ func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
 	return nil
 }
 
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, mountID, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	return nil, errors.New("in-process mounting is not supported on this platform")
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	fskit "github.com/greatliontech/fskit-go"
 
-	"github.com/greatliontech/ocifs/internal/projection"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 	"github.com/greatliontech/ocifs/internal/store"
 )
@@ -129,8 +128,16 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 	// The appex's side: the registry is gone; everything is cached.
 	srv.Close()
 
-	stateDir := filepath.Join(scratch, "state")
+	// State is the mount's mounts/<id> directory; the orchestrator
+	// registers the mount record the appex's report joins.
+	stateDir := filepath.Join(storeDir, "mounts", "fskit-e2e")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterMountRecord(context.Background(), "fskit-e2e", simg.Hash(), "", filepath.Join(stateDir, "mnt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	cfg := Config{Store: storeDir, Image: digestRef, ExtraDirs: []string{"anchor"}, State: stateDir}
@@ -156,9 +163,9 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 		t.Fatalf("extra dir: %v", err)
 	}
 
-	rep, err := projection.ReadReportFile(filepath.Join(stateDir, projection.ReportFileName))
-	if err != nil || rep.Entries == nil {
-		t.Fatalf("appex-side report: %+v, %v", rep, err)
+	rec, err := readMountRecord(t, storeDir, "fskit-e2e")
+	if err != nil || rec.Report.Entries == nil {
+		t.Fatalf("appex-side report: %+v, %v", rec, err)
 	}
 
 	// Identity is stable across loads (VolumeIdentity contract).
@@ -228,3 +235,15 @@ type fakeResource string
 func (r fakeResource) Revoked() bool                          { return false }
 func (r fakeResource) URL() (string, bool)                    { return string(r), true }
 func (r fakeResource) BlockDevice() (fskit.BlockDevice, bool) { return nil, false }
+
+// readMountRecord opens a fresh store handle to read the mount's
+// bookkeeping record, as any inspecting process would.
+func readMountRecord(t *testing.T, storeDir, id string) (store.MountRecord, error) {
+	t.Helper()
+	s, err := store.NewStore(storeDir, anonKeychain{}, store.PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	return s.MountRecord(context.Background(), id)
+}

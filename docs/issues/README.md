@@ -18,12 +18,6 @@
   the dead-state recognition problem with store GC. Lands: when
   mount-state reclamation or mount-id reuse is first needed — at the
   latest with store GC.
-- `docs/issues/projection-report-binary-names.md` — projection report
-  persists entry paths as plain JSON strings, mangling non-UTF-8
-  names (same encoding-fault class the layer index fixed). Lands:
-  when the projection report gains a consumer resolving paths against
-  image entries, or the next change set touching
-  `internal/projection/report.go`.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform

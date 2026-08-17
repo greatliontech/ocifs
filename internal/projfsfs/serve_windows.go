@@ -152,19 +152,20 @@ func placeholderResidue(inst *projfs.Instance, root string) []string {
 // Serve starts projecting p at root — an existing directory that
 // becomes the virtualization root (the caller's mountpoint,
 // REQ-api-mountpoint). The projection's report was already persisted
-// at reportPath; the server republishes it as read-only residuals
+// through the report sink; the server republishes it as read-only
+// residuals
 // accumulate (REQ-proj-ro, REQ-proj-report).
-func Serve(p *projection.Projection, blobPath func(v1.Hash) string, reportPath, root string) (*Server, error) {
+func Serve(p *projection.Projection, blobPath func(v1.Hash) string, publish projection.ReportSink, root string) (*Server, error) {
 	var instPtr atomic.Pointer[projfs.Instance]
 	pr := &provider{
-		p:          p,
-		blobPath:   blobPath,
-		symlinks:   p.Capabilities().Symlinks,
-		instp:      &instPtr,
-		enums:      map[projfs.GUID]*enumSession{},
-		report:     p.Report(),
-		reportPath: reportPath,
-		recorded:   map[string]bool{},
+		p:        p,
+		blobPath: blobPath,
+		symlinks: p.Capabilities().Symlinks,
+		instp:    &instPtr,
+		enums:    map[projfs.GUID]*enumSession{},
+		report:   p.Report(),
+		publish:  publish,
+		recorded: map[string]bool{},
 	}
 	inst, err := projfs.Start(root, pr, &projfs.Options{
 		UseNegativePathCache: true,

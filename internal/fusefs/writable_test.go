@@ -4,9 +4,9 @@ package fusefs
 
 import (
 	"archive/tar"
-	"errors"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,9 +16,9 @@ import (
 	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"golang.org/x/sys/unix"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"golang.org/x/sys/unix"
 
 	"github.com/greatliontech/ocifs/internal/layer"
 	"github.com/greatliontech/ocifs/internal/projection"

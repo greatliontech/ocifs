@@ -3,10 +3,10 @@
 package ocifs
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -59,12 +59,12 @@ func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
 // merge with one (REQ-api-mount-writable) — presented modes enforced
 // by the kernel (default_permissions; the upper's host bits are
 // machinery under the mode fidelity override).
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, mountID, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	proj, err := projection.New(view, o.extraDirs, fusefs.Capabilities())
 	if err != nil {
 		return nil, err
 	}
-	if err := proj.Report().WriteFile(filepath.Join(stateDir, projection.ReportFileName)); err != nil {
+	if err := o.store.PublishMountReport(context.Background(), mountID, proj.Report()); err != nil {
 		return nil, err
 	}
 	opts := &fs.Options{

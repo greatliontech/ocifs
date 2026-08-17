@@ -79,10 +79,10 @@ type provider struct {
 	mu    sync.Mutex
 	enums map[projfs.GUID]*enumSession
 
-	reportMu   sync.Mutex
-	report     projection.Report
-	reportPath string
-	recorded   map[string]bool
+	reportMu sync.Mutex
+	report   projection.Report
+	publish  projection.ReportSink
+	recorded map[string]bool
 }
 
 // enumSession is one OS enumeration: the target directory and the
@@ -361,7 +361,7 @@ func (pr *provider) recordResidual(path, detail string) {
 		Reason:      projection.ReasonResidualForeignFile,
 		Detail:      detail,
 	})
-	_ = pr.report.WriteFile(pr.reportPath)
+	_ = pr.publish(pr.report)
 }
 
 // flushReport republishes the accumulated report once more — the
@@ -369,7 +369,7 @@ func (pr *provider) recordResidual(path, detail string) {
 func (pr *provider) flushReport() {
 	pr.reportMu.Lock()
 	defer pr.reportMu.Unlock()
-	_ = pr.report.WriteFile(pr.reportPath)
+	_ = pr.publish(pr.report)
 }
 
 func basicInfo(e *projection.Entry) *projfs.FileBasicInfo {

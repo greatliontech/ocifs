@@ -40,7 +40,7 @@ func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
 	return nil
 }
 
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, mountID, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	ref, err := name.ParseReference(imgRef)
 	if err != nil {
 		return nil, err

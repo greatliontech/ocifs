@@ -587,14 +587,10 @@ func TestPullThroughHealsMissingOCIBlob(t *testing.T) {
 	// Erase the compressed layer from oci/ AND its layer index, so
 	// re-serving needs the compressed bytes back.
 	ld := mustDigest(t, l)
-	for _, p := range []string{
-		filepath.Join(dir, "oci", "blobs", ld.Algorithm, ld.Hex),
-		filepath.Join(dir, "layers", ld.Algorithm, ld.Hex),
-	} {
-		if err := os.Remove(p); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.Remove(filepath.Join(dir, "oci", "blobs", ld.Algorithm, ld.Hex)); err != nil {
+		t.Fatal(err)
 	}
+	deleteLayerIdxRow(t, dir, ld)
 
 	rec := &recordingTransport{inner: reg}
 	s.transport = tagGuardTransport{t: t, inner: rec}
@@ -676,14 +672,10 @@ func TestPullThroughUnderNeverFailsNamingBlob(t *testing.T) {
 	}
 
 	ld := mustDigest(t, l)
-	for _, p := range []string{
-		filepath.Join(dir, "oci", "blobs", ld.Algorithm, ld.Hex),
-		filepath.Join(dir, "layers", ld.Algorithm, ld.Hex),
-	} {
-		if err := os.Remove(p); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.Remove(filepath.Join(dir, "oci", "blobs", ld.Algorithm, ld.Hex)); err != nil {
+		t.Fatal(err)
 	}
+	deleteLayerIdxRow(t, dir, ld)
 
 	never := newStoreAt(t, dir, PullNever, v1.Platform{}, cutTransport(t))
 	_, err := never.Image(context.Background(), refStr, nil)

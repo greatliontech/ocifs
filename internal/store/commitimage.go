@@ -4,20 +4,19 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"golang.org/x/sys/unix"
 
-	"github.com/greatliontech/ocifs/internal/atomicfile"
 	"github.com/greatliontech/ocifs/internal/commit"
 	"github.com/greatliontech/ocifs/internal/upper"
 )
@@ -37,17 +36,12 @@ func (s *Store) NewUpper(name string, base v1.Hash) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	bindingPath := filepath.Join(root, "base")
-	err := atomicfile.WriteNew(bindingPath, strings.NewReader(base.String()), 0o644)
-	if err != nil && !errors.Is(err, fs.ErrExist) {
+	recorded, err := s.bk.UpperBind(context.Background(), name, base)
+	if err != nil {
 		return "", err
 	}
-	recorded, rerr := os.ReadFile(bindingPath)
-	if rerr != nil {
-		return "", rerr
-	}
-	if got := strings.TrimSpace(string(recorded)); got != base.String() {
-		return "", fmt.Errorf("upper %q is bound to base %s; refusing base %s — a whiteout set produced over one base applied to another materializes a tree nobody wrote", name, got, base)
+	if recorded != base {
+		return "", fmt.Errorf("upper %q is bound to base %s; refusing base %s — a whiteout set produced over one base applied to another materializes a tree nobody wrote", name, recorded, base)
 	}
 	return dir, nil
 }
@@ -172,19 +166,24 @@ func (s *Store) CommitUpper(img *Image, upperRoot string) (v1.Hash, error) {
 	}); err != nil {
 		return v1.Hash{}, err
 	}
+	// The localimages row is the committed image's root
+	// (REQ-store-gc-roots), written last like any root
+	// (REQ-store-single-writer's row-last ordering).
+	if err := s.bk.LocalImagePut(context.Background(), manifestDigest, time.Now().Unix()); err != nil {
+		return v1.Hash{}, err
+	}
 	return manifestDigest, nil
 }
 
 // CommitNamedUpper is CommitUpper against a store-managed upper,
 // validating its base binding first (REQ-writable-base-binding).
 func (s *Store) CommitNamedUpper(img *Image, name string) (v1.Hash, error) {
-	bindingPath := filepath.Join(s.path, "uppers", name, "base")
-	recorded, err := os.ReadFile(bindingPath)
+	recorded, err := s.bk.UpperBinding(context.Background(), name)
 	if err != nil {
-		return v1.Hash{}, fmt.Errorf("upper %q has no base binding: %w", name, err)
+		return v1.Hash{}, err
 	}
-	if got := strings.TrimSpace(string(recorded)); got != img.Hash().String() {
-		return v1.Hash{}, fmt.Errorf("upper %q is bound to base %s; refusing commit over %s", name, got, img.Hash())
+	if recorded != img.Hash() {
+		return v1.Hash{}, fmt.Errorf("upper %q is bound to base %s; refusing commit over %s", name, recorded, img.Hash())
 	}
 	return s.CommitUpper(img, s.UpperDir(name))
 }

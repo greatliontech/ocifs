@@ -3,4 +3,4 @@
 
 requirement_id: "REQ-proj-report"
 reason: "report still persists as projection-report.json; re-homing lands with store-gc chunk 3"
-lands { manual { condition: "store-gc chunk 3 landed: report in mounts keyspace" } }
+lands { manual { condition: "store-gc chunk 3 landed: report in mounts keyspace" fired: true } }

@@ -136,11 +136,18 @@ func TestBaseBinding(t *testing.T) {
 	if _, err := s.NewUpper("work", other); err == nil || !strings.Contains(err.Error(), "bound to base") {
 		t.Fatalf("mismatched base accepted: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(s.path, "uppers", "work", "base")); err != nil {
-		t.Fatalf("binding record missing: %v", err)
+	if recorded, err := s.bk.UpperBinding(context.Background(), "work"); err != nil || recorded != img.Hash() {
+		t.Fatalf("binding row: %s, %v", recorded, err)
 	}
-	if _, err := os.Stat(filepath.Join(s.path, "uppers", "work", "upper", "base")); err == nil {
-		t.Fatal("binding record inside the dialect tree")
+	// Nothing beside or inside the dialect tree carries the binding
+	// (REQ-writable-base-binding: bookkeeping only).
+	for _, p := range []string{
+		filepath.Join(s.path, "uppers", "work", "base"),
+		filepath.Join(s.path, "uppers", "work", "upper", "base"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Fatalf("binding file present at %s; the record lives in bookkeeping", p)
+		}
 	}
 
 	if _, err := s.CommitNamedUpper(img, "work"); err != nil {
@@ -189,12 +196,7 @@ func TestLocalNamespaceNeverDials(t *testing.T) {
 		t.Fatal(err)
 	}
 	committedLayer := man.Layers[len(man.Layers)-1].Digest
-	if err := os.RemoveAll(filepath.Join(dir, "layers")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "layers"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	deleteLayerIdxRow(t, dir, committedLayer)
 	if err := os.Remove(filepath.Join(blob, committedLayer.Hex)); err != nil {
 		t.Fatal(err)
 	}

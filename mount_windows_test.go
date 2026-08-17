@@ -19,8 +19,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-
-	"github.com/greatliontech/ocifs/internal/projection"
 )
 
 // TestMountWindowsEndToEnd exercises the full windows path — pull
@@ -97,7 +95,7 @@ func TestMountWindowsEndToEnd(t *testing.T) {
 		t.Fatalf("extra dir: %v %v", fi, err)
 	}
 
-	rep, err := projection.ReadReportFile(filepath.Join(work, "mounts", "win-e2e", projection.ReportFileName))
+	rep, err := ofs.MountReport("win-e2e")
 	if err != nil || rep.Entries == nil {
 		t.Fatalf("report: %+v %v", rep, err)
 	}

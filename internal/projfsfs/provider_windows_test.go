@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,7 +32,8 @@ import (
 type fixture struct {
 	srv        *Server
 	root       string
-	reportPath string
+	reportMu   sync.Mutex
+	lastReport projection.Report
 	symlinks   bool
 	proj       *projection.Projection
 }
@@ -92,17 +94,24 @@ func serveFixture(t *testing.T, specs []fileSpec) *fixture {
 	}
 
 	root := t.TempDir()
-	reportPath := filepath.Join(t.TempDir(), projection.ReportFileName)
-	if err := proj.Report().WriteFile(reportPath); err != nil {
+	f := &fixture{symlinks: symlinks, proj: proj}
+	sink := projection.ReportSink(func(rep projection.Report) error {
+		f.reportMu.Lock()
+		defer f.reportMu.Unlock()
+		f.lastReport = rep
+		return nil
+	})
+	if err := sink(proj.Report()); err != nil {
 		t.Fatal(err)
 	}
 	blobPath := func(h v1.Hash) string { return filepath.Join(blobDir, h.Hex) }
-	srv, err := Serve(proj, blobPath, reportPath, root)
+	srv, err := Serve(proj, blobPath, sink, root)
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { srv.Unmount() })
-	return &fixture{srv: srv, root: root, reportPath: reportPath, symlinks: symlinks, proj: proj}
+	f.srv, f.root = srv, root
+	return f
 }
 
 func basicSpecs() []fileSpec {
@@ -242,10 +251,7 @@ func TestUnrepresentableNameOmittedAndReported(t *testing.T) {
 		}
 	}
 
-	rep, err := projection.ReadReportFile(f.reportPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rep := f.report()
 	reasons := map[string]projection.Reason{}
 	for _, re := range rep.Entries {
 		reasons[re.Path] = re.Reason
@@ -286,10 +292,7 @@ func TestSymlinkProjectionOrDeclaredFallback(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(f.root, "link")); err == nil {
 		t.Fatal("symlink presented despite failed feature probe")
 	}
-	rep, err := projection.ReadReportFile(f.reportPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rep := f.report()
 	found := false
 	for _, re := range rep.Entries {
 		if re.Path == "link" && re.Reason == projection.ReasonSymlinkUnsupported {
@@ -426,21 +429,19 @@ func TestMoveInFromOutsideAllowedAndRecorded(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		rep, err := projection.ReadReportFile(f.reportPath)
+		rep := f.report()
 		found := false
-		if err == nil {
-			for _, re := range rep.Entries {
-				if re.Disposition == projection.DispositionResidual &&
-					strings.EqualFold(re.Path, "movedin.txt") {
-					found = true
-				}
+		for _, re := range rep.Entries {
+			if re.Disposition == projection.DispositionResidual &&
+				strings.EqualFold(re.Path, "movedin.txt") {
+				found = true
 			}
 		}
 		if found {
 			break
 		}
 		if time.Now().After(deadline) {
-			rep, _ := projection.ReadReportFile(f.reportPath)
+			rep := f.report()
 			t.Fatalf("move-in never recorded; report: %+v", rep)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -588,8 +589,8 @@ func TestResidualForeignFileRecorded(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		rep, err := projection.ReadReportFile(f.reportPath)
-		if err == nil {
+		rep := f.report()
+		{
 			for _, re := range rep.Entries {
 				if re.Disposition == projection.DispositionResidual &&
 					re.Reason == projection.ReasonResidualForeignFile &&
@@ -599,7 +600,7 @@ func TestResidualForeignFileRecorded(t *testing.T) {
 			}
 		}
 		if time.Now().After(deadline) {
-			rep, _ := projection.ReadReportFile(f.reportPath)
+			rep := f.report()
 			t.Fatalf("residual foreign file never recorded; report: %+v", rep)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -608,11 +609,15 @@ func TestResidualForeignFileRecorded(t *testing.T) {
 
 func TestReportPersistedBeforeServing(t *testing.T) {
 	f := serveFixture(t, basicSpecs())
-	rep, err := projection.ReadReportFile(f.reportPath)
-	if err != nil {
-		t.Fatalf("report unreadable while serving: %v", err)
-	}
+	rep := f.report()
 	if rep.Entries == nil {
 		t.Fatal("report entries array absent")
 	}
+}
+
+func (f *fixture) report() *projection.Report {
+	f.reportMu.Lock()
+	defer f.reportMu.Unlock()
+	r := f.lastReport
+	return &r
 }

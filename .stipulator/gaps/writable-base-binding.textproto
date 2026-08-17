@@ -2,7 +2,7 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-writable-base-binding"
-reason: "binding still a sibling file; re-homing lands with store-gc chunk 3; existing witnesses pin the sibling-file shape"
-lands { manual { condition: "store-gc chunk 3 landed: binding in uppers keyspace" } }
+reason: "binding row landed; the arbitration clause re-homed to the mounts registry still runs on the transitional flock until chunk 4"
+lands { manual { condition: "store-gc chunk 4 landed: registry-based mount arbitration" } }
 excuses: GAP_EXCUSE_UNCOVERED
 excuses: GAP_EXCUSE_STALE

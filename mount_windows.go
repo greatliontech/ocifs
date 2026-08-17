@@ -3,6 +3,7 @@
 package ocifs
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -25,7 +26,7 @@ func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
 	return nil
 }
 
-func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, stateDir, mountPoint, upperRoot string) (mountServer, error) {
+func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, mountID, stateDir, mountPoint, upperRoot string) (mountServer, error) {
 	symlinks, err := projfsfs.ProbeSymlinkSupport(filepath.Join(stateDir, "probe"))
 	if err != nil {
 		return nil, err
@@ -34,9 +35,11 @@ func platformMount(o *OCIFS, imgRef string, img *store.Image, view *layer.View, 
 	if err != nil {
 		return nil, err
 	}
-	reportPath := filepath.Join(stateDir, projection.ReportFileName)
-	if err := proj.Report().WriteFile(reportPath); err != nil {
+	sink := projection.ReportSink(func(rep projection.Report) error {
+		return o.store.PublishMountReport(context.Background(), mountID, rep)
+	})
+	if err := sink(proj.Report()); err != nil {
 		return nil, err
 	}
-	return projfsfs.Serve(proj, o.store.BlobPath, reportPath, mountPoint)
+	return projfsfs.Serve(proj, o.store.BlobPath, sink, mountPoint)
 }

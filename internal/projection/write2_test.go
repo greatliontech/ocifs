@@ -305,7 +305,6 @@ func TestWriteXattrArms(t *testing.T) {
 	}
 }
 
-
 // TestWriteRenameOntoDirAndAliases pins the replacing-directory
 // compound (marker, dismantle, swap-beside-marker), the
 // two-names-one-inode no-op, and survivor link counts after alias

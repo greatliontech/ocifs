@@ -198,7 +198,7 @@ func loadVolume(cfg Config) (*Volume, fskit.VolumeIdentity, error) {
 		// nothing reclaims.
 		return nil, fskit.VolumeIdentity{}, fmt.Errorf("mount options name no per-mount state directory (state=…)")
 	}
-	if err := proj.Report().WriteFile(filepath.Join(cfg.State, projection.ReportFileName)); err != nil {
+	if err := s.PublishMountReport(context.Background(), filepath.Base(cfg.State), proj.Report()); err != nil {
 		return nil, fskit.VolumeIdentity{}, err
 	}
 

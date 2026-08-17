@@ -1,7 +1,7 @@
 // Package store is ocifs's on-disk home for pulled OCI images
 // (docs/specs/store.md): the retained OCI content under oci/, the
-// content CAS under blobs/, layer indexes under layers/ (moving to
-// the bookkeeping database), mount scaffolding under mounts/, and
+// content CAS under blobs/, mount scaffolding under mounts/, and
+// every ocifs-interpreted record — references, layer indexes — in
 // the bookkeeping database under bookkeeping/. Content tiers are a
 // cache — re-derivable from a registry, or from the retained OCI
 // content for the extraction tiers.
@@ -79,7 +79,6 @@ type Store struct {
 	defaultPlatform v1.Platform
 	bk              *bookkeeping
 	cas             *cas.CAS
-	layers          layerIndexes
 	ociDir          string
 	// transport overrides the registry transport when non-nil; the
 	// injection seam that lets the test harness serve a registry
@@ -137,17 +136,17 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		return nil, err
 	}
 
-	// A refs/ directory is the pre-database layout's signature:
-	// reference bookkeeping lived in a file tier there, and this
-	// layout does not adopt it (REQ-store-adopt). The layers/ tier
-	// joins the database with the layeridx keyspace; until then it
-	// remains a filesystem tier.
-	if _, err := os.Stat(filepath.Join(path, "refs")); err == nil {
-		return nil, fmt.Errorf("%s: %w", path, ErrPreDatabaseStore)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+	// A refs/ or layers/ directory is the pre-database layout's
+	// signature: bookkeeping lived in file tiers there, and this
+	// layout does not adopt it (REQ-store-adopt).
+	for _, oldTier := range []string{"refs", "layers"} {
+		if _, err := os.Stat(filepath.Join(path, oldTier)); err == nil {
+			return nil, fmt.Errorf("%s: %w", path, ErrPreDatabaseStore)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
 	}
-	for _, dir := range []string{"blobs", "layers", "oci", "mounts", "exports"} {
+	for _, dir := range []string{"blobs", "oci", "mounts", "exports"} {
 		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return nil, err
 		}
@@ -195,7 +194,6 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		defaultPlatform: defaultPlatform,
 		bk:              bk,
 		cas:             contentCAS,
-		layers:          layerIndexes{root: filepath.Join(path, "layers")},
 		ociDir:          ociDir,
 		verifier:        verifier,
 		ingestMu:        ingestLockFor(path),
@@ -530,7 +528,7 @@ func (s *Store) assemble(ctx context.Context, req request, top v1.Hash, f *fetch
 
 	layers := make([]layer.Layer, len(m.Layers))
 	for i, ld := range m.Layers {
-		l, err := s.layers.Get(ld.Digest)
+		l, err := s.bk.LayerIdxGet(ctx, ld.Digest)
 		if err != nil || !s.blobsPresent(l) {
 			// Missing or unreadable index, or an index naming a
 			// content blob that is gone: re-derive both from the
@@ -774,7 +772,7 @@ func (s *Store) unpackLayer(ctx context.Context, ld v1.Hash) (layer.Layer, error
 	if err != nil {
 		return nil, err
 	}
-	if err := s.layers.Put(ld, l); err != nil {
+	if err := s.bk.LayerIdxPut(ctx, ld, l); err != nil {
 		return nil, err
 	}
 	return l, nil

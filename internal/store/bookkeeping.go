@@ -20,12 +20,19 @@ import (
 // database lives under bookkeeping/ and is owned entirely by gmdb;
 // ocifs never touches the files directly.
 type bookkeeping struct {
-	db *gmdb.DB
+	db  *gmdb.DB
+	dir string // the bookkeeping/ tier, for concurrent test handles
 }
 
 // Keyspace names are wire contract (REQ-store-bookkeeping). Later
 // plan chunks add layeridx, mounts, uppers, localimages, ops, gc.
-const ksRefs = "refs"
+const (
+	ksRefs        = "refs"
+	ksLayerIdx    = "layeridx"
+	ksMounts      = "mounts"
+	ksUppers      = "uppers"
+	ksLocalImages = "localimages"
+)
 
 var emptyHash = v1.Hash{}
 
@@ -47,13 +54,17 @@ func openBookkeeping(root string) (*bookkeeping, error) {
 		return nil, fmt.Errorf("bookkeeping database: %w", err)
 	}
 	if err := db.Update(ctx, func(tx *gmdb.Tx) error {
-		_, err := tx.CreateKeyspaceIfNotExists(ksRefs)
-		return err
+		for _, name := range []string{ksRefs, ksLayerIdx, ksMounts, ksUppers, ksLocalImages} {
+			if _, err := tx.CreateKeyspaceIfNotExists(name); err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("bookkeeping keyspaces: %w", err)
 	}
-	return &bookkeeping{db: db}, nil
+	return &bookkeeping{db: db, dir: dir}, nil
 }
 
 func (b *bookkeeping) Close() error { return b.db.Close() }
@@ -117,4 +128,92 @@ func (b *bookkeeping) RefPut(ctx context.Context, ref name.Reference, hash v1.Ha
 		}
 		return ks.Put(refKey(ref), []byte(hash.String()))
 	})
+}
+
+// UpperBind records the named upper's base binding transactionally
+// without replacement (writable.md REQ-writable-base-binding): the
+// first binder wins, and every caller gets the recorded base back
+// for validation.
+func (b *bookkeeping) UpperBind(ctx context.Context, name string, base v1.Hash) (v1.Hash, error) {
+	var recorded v1.Hash
+	err := b.db.Update(ctx, func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksUppers)
+		if err != nil {
+			return err
+		}
+		v, err := ks.Get([]byte(name))
+		if err == nil {
+			recorded, err = v1.NewHash(string(v))
+			return err
+		}
+		if !errors.Is(err, gmdb.ErrNotFound) {
+			return err
+		}
+		recorded = base
+		return ks.Insert([]byte(name), []byte(base.String()))
+	})
+	return recorded, err
+}
+
+// UpperBinding reads the named upper's base binding; a missing row
+// is os.ErrNotExist.
+func (b *bookkeeping) UpperBinding(ctx context.Context, name string) (v1.Hash, error) {
+	var recorded v1.Hash
+	err := b.db.View(ctx, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksUppers)
+		if err != nil {
+			return err
+		}
+		v, err := ks.Get([]byte(name))
+		if errors.Is(err, gmdb.ErrNotFound) {
+			return fmt.Errorf("upper %q has no base binding: %w", name, os.ErrNotExist)
+		}
+		if err != nil {
+			return err
+		}
+		recorded, err = v1.NewHash(string(v))
+		return err
+	})
+	return recorded, err
+}
+
+const localImageVersion = 1
+
+// LocalImagePut records a committed image — the root that keeps it
+// reachable (REQ-store-gc-roots) until explicitly removed.
+func (b *bookkeeping) LocalImagePut(ctx context.Context, manifest v1.Hash, createdUnix int64) error {
+	return b.db.Update(ctx, func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksLocalImages)
+		if err != nil {
+			return err
+		}
+		w := &binWriter{}
+		w.byteVal(localImageVersion)
+		w.i64(createdUnix)
+		return ks.Put(layerKey(manifest), w.buf)
+	})
+}
+
+// LocalImagePresent reports whether a committed image's root row
+// exists.
+func (b *bookkeeping) LocalImagePresent(ctx context.Context, manifest v1.Hash) (bool, error) {
+	present := false
+	err := b.db.View(ctx, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksLocalImages)
+		if err != nil {
+			return err
+		}
+		v, err := ks.Get(layerKey(manifest))
+		if errors.Is(err, gmdb.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// Version discipline: a foreign version is the absent-row
+		// case (REQ-store-bookkeeping).
+		present = len(v) > 0 && v[0] == localImageVersion
+		return nil
+	})
+	return present, err
 }

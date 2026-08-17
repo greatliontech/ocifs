@@ -19,7 +19,7 @@ files, binding siblings) are refused by adoption, not migrated.
       init (`bookkeeping/` tier); `refs` keyspace replaces the file
       tier and its percent-encoding machinery; adoption signature
       updated to refuse pre-database layouts.
-- [ ] 3. Regenerable records into the database: `layeridx` keyspace
+- [x] 3. Regenerable records into the database: `layeridx` keyspace
       replaces the `layers/` file tier and its base64 encoding
       (self-heal semantics unchanged); mount records into `mounts`
       carrying the full wire contract (liveness identity, upper

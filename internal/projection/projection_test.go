@@ -12,7 +12,6 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/greatliontech/ocifs/internal/layer"
-	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 // fakeDigest derives a syntactically valid content key from a path;
@@ -342,36 +341,6 @@ func TestSeekResumesAfterName(t *testing.T) {
 	}
 	if got := p.Seek(root, "0"); got != 0 {
 		t.Fatalf("Seek before first = %d, want 0", got)
-	}
-}
-
-func TestReportRoundtrip(t *testing.T) {
-	dir := scratchtest.Dir(t, "projection")
-	path := filepath.Join(dir, ReportFileName)
-
-	empty := &Report{}
-	if err := empty.WriteFile(path); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ReadReportFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Entries == nil || len(got.Entries) != 0 {
-		t.Fatalf("empty report round-trip = %+v, want present empty entries", got)
-	}
-
-	r := &Report{}
-	r.add("a/b", ReasonCaseCollision, "collides with a/B")
-	if err := r.WriteFile(path); err != nil {
-		t.Fatal(err)
-	}
-	got, err = ReadReportFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Entries) != 1 || got.Entries[0] != r.Entries[0] {
-		t.Fatalf("report round-trip = %+v", got.Entries)
 	}
 }
 

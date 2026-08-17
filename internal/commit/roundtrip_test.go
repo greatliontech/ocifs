@@ -99,8 +99,8 @@ func refMerge(base *layer.View, up *upper.State) map[string]refEntry {
 		out[p] = refEntry{
 			kind: kind, digest: be.Digest.Hex, target: target,
 			mode: be.Header.Mode & 0o7777, uid: be.Header.Uid, gid: be.Header.Gid,
-			mtime: presentedNanos(be.Header.ModTime),
-			rdev:  [2]int64{be.Header.Devmajor, be.Header.Devminor},
+			mtime:  presentedNanos(be.Header.ModTime),
+			rdev:   [2]int64{be.Header.Devmajor, be.Header.Devminor},
 			xattrs: sortedJoin(xs),
 		}
 	}

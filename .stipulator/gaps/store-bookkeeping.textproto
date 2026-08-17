@@ -2,7 +2,7 @@
 # proto-message: stipulator.v1.Gap
 
 requirement_id: "REQ-store-bookkeeping"
-reason: "keyspace contract spans chunks 2-3; coverage of one keyspace must not resolve the gap"
-lands { manual { condition: "store-gc chunk 3 landed: all keyspaces populated" } }
+reason: "refs/layeridx/mounts/uppers/localimages populated; ops and gc keyspaces land with chunks 5-6"
+lands { manual { condition: "store-gc chunk 6 landed: ops and gc keyspaces exist" } }
 excuses: GAP_EXCUSE_UNCOVERED
 excuses: GAP_EXCUSE_STALE

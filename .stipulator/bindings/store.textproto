@@ -630,3 +630,30 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "15be3a831eba6ea59c6fa39adb77204809e2cf47e95c1e50130cfefa003c5903"
 }
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestLayerIndexBinaryRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "b7e2ba834043c6c8303a7cd0f8e386137aa84cb8c32250d6169dd8e85d7a096a"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestMountRecordRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "5f7936b161b4c482b5cd365cbb3dad1edbbda9a5a80d96ba8046a0077cc1e4ec"
+}
+
+bindings {
+  requirement_id: "REQ-store-gc-roots"
+  content_hash: "08a56f951c735f12fa6da76aa899ff6fd1875e356a802e3b75d4af7c49d23f13"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCommitRecordsLocalImageRoot"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "fe7d2ab111f8f9fb58b36d92896d18b5d1999fd7ba08645812704037b269bf10"
+}
