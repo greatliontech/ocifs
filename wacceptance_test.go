@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 	"golang.org/x/sys/unix"
 )
 
@@ -369,11 +370,7 @@ func TestAcceptancePackageManager(t *testing.T) {
 	if !usernsSupported() {
 		t.Skip("deferred: unprivileged user namespaces unavailable")
 	}
-	scratch := filepath.Join(".scratch", "ocifs-wpkg")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-wpkg"))
 	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
 	if err != nil {
 		t.Fatal(err)
@@ -476,12 +473,7 @@ func exportPrivilegedChild(t *testing.T) {
 	if err := remote.Write(ref, img); err != nil {
 		t.Fatal(err)
 	}
-	scratch := filepath.Join(".scratch", "ocifs-wexport-uns")
-	os.RemoveAll(scratch)
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(scratch)
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-wexport-uns"))
 	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
 	if err != nil {
 		t.Fatal(err)

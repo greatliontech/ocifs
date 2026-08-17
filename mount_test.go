@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 
 	"golang.org/x/sys/unix"
 	"pgregory.net/rapid"
@@ -101,11 +102,7 @@ func fixtureEnv(t *testing.T, scratchName string) (*OCIFS, string, string) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "ocifs-"+scratchName)
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-"+scratchName))
 	work := filepath.Join(scratch, "work")
 
 	ofs, err := New(WithWorkDir(work), WithExtraDirs([]string{"proc", "x/y"}))

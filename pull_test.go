@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 func testPlatformImage(t *testing.T, p v1.Platform, file, content string) v1.Image {
@@ -93,11 +94,7 @@ func TestPullSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "ocifs-pull")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-pull"))
 
 	ofs, err := New(
 		WithWorkDir(filepath.Join(scratch, "work")),
@@ -164,11 +161,7 @@ func TestPullSurface(t *testing.T) {
 // tier.
 func TestFailedMountLeavesNoMountDir(t *testing.T) {
 	skipUnderMutationCampaign(t)
-	scratch := filepath.Join(".scratch", "ocifs-mountfail")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-mountfail"))
 
 	workDir := filepath.Join(scratch, "work")
 	ofs, err := New(WithWorkDir(workDir), WithPullPolicy(PullNever))
@@ -191,11 +184,10 @@ func TestFailedMountLeavesNoMountDir(t *testing.T) {
 // clause of REQ-api-construction: New fails when the store cannot be
 // initialized (here: a pre-layout work directory).
 func TestConstructionFailsOnUninitializableStore(t *testing.T) {
-	scratch := filepath.Join(".scratch", "ocifs-badstore")
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-badstore"))
 	if err := os.MkdirAll(filepath.Join(scratch, "oci"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
 	if err := os.WriteFile(filepath.Join(scratch, "oci", "index.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +229,7 @@ func TestVerifierSeamOnAcquisition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "ocifs-seam")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-seam"))
 
 	rejected := errors.New("untrusted")
 	var seen []ResolvedIdentity

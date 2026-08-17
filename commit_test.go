@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 
 	"github.com/greatliontech/ocifs/internal/upper"
 )
@@ -42,11 +43,7 @@ func TestCommitSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "ocifs-commit")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-commit"))
 
 	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
 	if err != nil {

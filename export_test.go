@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 // TestExportSurface pins REQ-api-export: export by reference into
@@ -48,11 +49,7 @@ func TestExportSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "ocifs-export")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-export"))
 
 	ofs, err := New(
 		WithWorkDir(filepath.Join(scratch, "work")),

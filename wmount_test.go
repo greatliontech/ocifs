@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 var wfixMtime = time.Date(2022, 5, 6, 7, 8, 9, 0, time.UTC)
@@ -80,11 +81,7 @@ func writableFixtureEnv(t *testing.T, scratchName string) (*OCIFS, string) {
 	if err := remote.Write(ref, img); err != nil {
 		t.Fatal(err)
 	}
-	scratch := filepath.Join(".scratch", "ocifs-"+scratchName)
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-"+scratchName))
 	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
 	if err != nil {
 		t.Fatal(err)

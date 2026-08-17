@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 // TestMountLocalImage mounts an image served by an in-process
@@ -76,21 +76,14 @@ func TestMountLocalImage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	workDir := filepath.Join(".scratch", "ocifs", "work")
-	mnt := filepath.Join(".scratch", "ocifs", "mnt")
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs"))
+	workDir := filepath.Join(scratch, "work")
+	mnt := filepath.Join(scratch, "mnt")
 	for _, d := range []string{workDir, mnt} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
-			// A prior run killed mid-mount (mutation testing does
-			// this) leaves a disconnected FUSE endpoint here; detach
-			// it and retry once.
-			exec.Command("fusermount3", "-u", mnt).Run()
-			exec.Command("fusermount", "-u", mnt).Run()
-			if err := os.MkdirAll(d, 0o755); err != nil {
-				t.Fatal(err)
-			}
+			t.Fatal(err)
 		}
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(".scratch", "ocifs")) })
 
 	ofs, err := New(WithWorkDir(workDir))
 	if err != nil {

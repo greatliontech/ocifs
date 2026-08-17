@@ -35,13 +35,13 @@
   when the projection report gains a consumer resolving paths against
   image entries, or the next change set touching
   `internal/projection/report.go`.
-- `docs/issues/test-fixture-stale-mount-recovery.md` — test fixtures
-  hang on FUSE mounts leaked by a killed prior run; setup should
-  lazy-unmount stale scratch mounts before removing. Lands: next
-  change set touching the shared test fixture helpers, or the next
-  stale-mount incident.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform
   validation findings are dispositioned and a writable mount there
   is first needed.
+- `docs/issues/concurrent-test-runs-collide-on-scratch-paths.md` —
+  deterministic scratch paths make concurrent same-package test runs
+  mutually destructive (tree removal and stale-mount reaping hit the
+  other run's live state). Lands: when concurrent same-package runs
+  become a supported flow, or the next collision incident.

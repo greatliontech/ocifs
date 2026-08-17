@@ -2,9 +2,12 @@
 // under <repo>/.scratch/<tier>/<seq> instead of the OS temp
 // directory: the paths sit inside the mutation/witness observation
 // bracket, names are deterministic, and nothing machine-local (no
-// /tmp, no PWD via filepath.Abs) enters a test's input surface.
-// Callers are the internal package test suites, which all live two
-// levels below the repo root.
+// /tmp, no absolute paths) enters a test's input surface — the
+// stale-mount reap resolves absolute paths internally for
+// mount-table comparison only, never handing them to a test.
+// Dir serves the internal package test suites, which all live two
+// levels below the repo root; suites elsewhere choose their own
+// relative path through In.
 package scratchtest
 
 import (
@@ -41,16 +44,32 @@ func forceRemoveAll(p string) error {
 // calling test's working directory (its package dir).
 func Dir(t testing.TB, tier string) string {
 	t.Helper()
-	dir := filepath.Join("..", "..", ".scratch", tier, strconv.FormatUint(seq.Add(1), 10))
-	// Freshness is enforced, not assumed: a killed test process (a
-	// mutation campaign's timed-out mutant) skips Cleanup and leaves
-	// residue exactly where the next process's sequence restarts.
-	if err := forceRemoveAll(dir); err != nil {
+	return In(t, filepath.Join("..", "..", ".scratch", tier, strconv.FormatUint(seq.Add(1), 10)))
+}
+
+// In prepares the caller-chosen scratch directory and registers the
+// same teardown: stale mounts reaped, residue removed, directory
+// created fresh. Freshness is enforced, not assumed: a killed test
+// process (a SIGKILLed run, a mutation campaign's timed-out mutant)
+// skips Cleanup and leaves residue — restrictive modes and live
+// kernel mounts included — exactly where the next process starts.
+// Mount reaping precedes any path operation on the tree: a dead
+// FUSE mountpoint blocks stats indefinitely, so recovery is driven
+// by the mount table alone.
+func In(t testing.TB, dir string) string {
+	t.Helper()
+	clear := func() error {
+		if err := reapMounts(dir); err != nil {
+			return err
+		}
+		return forceRemoveAll(dir)
+	}
+	if err := clear(); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = forceRemoveAll(dir) })
+	t.Cleanup(func() { _ = clear() })
 	return dir
 }

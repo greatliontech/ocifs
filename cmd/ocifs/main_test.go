@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 // TestCLISmoke pins REQ-api-cli network-free: the built binary
@@ -73,11 +74,7 @@ func TestCLISmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scratch := filepath.Join(".scratch", "cli")
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(".scratch")) })
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "cli"))
 
 	bin := filepath.Join(scratch, "ocifs-test-bin")
 	build := exec.Command("go", "build", "-o", bin, ".")
