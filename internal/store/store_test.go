@@ -29,6 +29,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	"github.com/greatliontech/gmdb"
+
 	"github.com/greatliontech/ocifs/internal/layer"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
@@ -229,22 +231,71 @@ func descriptorCount(t *testing.T, storeDir string) int {
 	return len(idx.Manifests)
 }
 
-func refFiles(t *testing.T, storeDir string) []string {
+// refRows snapshots every refs row (key=value) through a read-only
+// database handle — a concurrent reader like any inspecting process.
+func refRows(t testing.TB, storeDir string) map[string]string {
 	t.Helper()
-	var files []string
-	err := filepath.WalkDir(filepath.Join(storeDir, "refs"), func(path string, d os.DirEntry, err error) error {
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{ReadOnly: true})
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]string{}
+		}
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows := map[string]string{}
+	err = db.View(context.Background(), func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksRefs)
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() {
-			files = append(files, path)
+		for k, v := range ks.All() {
+			rows[string(k)] = string(v)
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return files
+	return rows
+}
+
+func refFiles(t *testing.T, storeDir string) []string {
+	t.Helper()
+	var keys []string
+	for k := range refRows(t, storeDir) {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// clearRefRows deletes every refs row through a second read-write
+// database handle — a concurrent writer like any other process.
+func clearRefRows(t testing.TB, storeDir string) {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksRefs)
+		if err != nil {
+			return err
+		}
+		var keys [][]byte
+		for k := range ks.All() {
+			keys = append(keys, append([]byte(nil), k...))
+		}
+		for _, k := range keys {
+			if err := ks.Delete(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // --- tests ---
@@ -343,11 +394,7 @@ func TestIngestIdempotent(t *testing.T) {
 
 	// Drop the ref so the second call re-runs the full ingest
 	// against already-present content.
-	for _, f := range refFiles(t, dir) {
-		if err := os.Remove(f); err != nil {
-			t.Fatal(err)
-		}
-	}
+	clearRefRows(t, dir)
 	if _, err := s.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -957,5 +1004,65 @@ func TestLayerIndexBinaryRoundTrip(t *testing.T) {
 	}
 	if _, err := li.Get(ld); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("foreign version served: %v", err)
+	}
+}
+
+// TestPreDatabaseStoreRejected pins REQ-store-adopt's refusal of the
+// pre-database layout: a refs/ file tier is never adopted, migrated,
+// or deleted.
+func TestPreDatabaseStoreRejected(t *testing.T) {
+	dir := scratchDir(t)
+	if err := os.MkdirAll(filepath.Join(dir, "refs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dir, "refs", "old-row")
+	if err := os.WriteFile(sentinel, []byte("sha256:deadbeef"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(dir, nil, PullNever, v1.Platform{}, nil); !errors.Is(err, ErrPreDatabaseStore) {
+		t.Fatalf("NewStore over a refs/ tier: %v, want ErrPreDatabaseStore", err)
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("refusal touched the old store's state: %v", err)
+	}
+}
+
+// TestCloseLifecycle pins the Close counterpart of construction
+// (api.md REQ-api-construction): Close is idempotent, and store
+// operations after Close fail rather than hang or corrupt.
+func TestCloseLifecycle(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if _, err := s.Image(context.Background(), "r.io/x:y", nil); err == nil {
+		t.Fatal("Image after Close succeeded")
+	}
+}
+
+// TestAdoptRefusalOrder pins the refusal precedence: a directory
+// carrying BOTH pre-layout and pre-database signatures reports the
+// older, more specific pre-layout condition.
+func TestAdoptRefusalOrder(t *testing.T) {
+	dir := scratchDir(t)
+	// Pre-layout signature: index.json without the oci-layout marker.
+	if err := os.MkdirAll(filepath.Join(dir, "oci"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "oci", "index.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "refs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(dir, nil, PullNever, v1.Platform{}, nil); !errors.Is(err, ErrPreLayoutStore) {
+		t.Fatalf("both signatures: %v, want ErrPreLayoutStore first", err)
 	}
 }

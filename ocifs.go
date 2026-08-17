@@ -359,3 +359,13 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 
 	return im, nil
 }
+
+// Close releases the store's coordination resources — the
+// bookkeeping database's reader slots, heartbeat, and writer
+// coordination (docs/specs/store.md REQ-store-bookkeeping). Live
+// mounts are unaffected by construction-state release; a consumer
+// done with the handle closes it, and a process-lifetime handle may
+// equally leave it to exit — the database is crash-safe either way.
+func (o *OCIFS) Close() error {
+	return o.store.Close()
+}

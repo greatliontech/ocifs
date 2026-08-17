@@ -15,7 +15,7 @@ files, binding siblings) are refused by adoption, not migrated.
       single-writer resolution), api.md (knobs, remove, gc),
       projection.md (report re-homed), writable.md (binding
       re-homed); compile the corpus, declare gaps; this plan.
-- [ ] 2. Bookkeeping seam: gmdb dependency and lifecycle in store
+- [x] 2. Bookkeeping seam: gmdb dependency and lifecycle in store
       init (`bookkeeping/` tier); `refs` keyspace replaces the file
       tier and its percent-encoding machinery; adoption signature
       updated to refuse pre-database layouts.

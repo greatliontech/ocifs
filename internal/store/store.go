@@ -1,17 +1,19 @@
 // Package store is ocifs's on-disk home for pulled OCI images
 // (docs/specs/store.md): the retained OCI content under oci/, the
-// content CAS under blobs/, layer indexes under layers/, the
-// reference cache under refs/, and per-mount state under mounts/.
-// Content tiers are a cache — re-derivable from a registry, or from
-// the retained OCI content for the extraction tiers.
+// content CAS under blobs/, layer indexes under layers/ (moving to
+// the bookkeeping database), mount scaffolding under mounts/, and
+// the bookkeeping database under bookkeeping/. Content tiers are a
+// cache — re-derivable from a registry, or from the retained OCI
+// content for the extraction tiers.
 //
 // The OCI append is written here rather than through
 // layout.AppendImage: the library call appends a duplicate index
 // descriptor on every ingest and rewrites index.json in place
 // (non-atomic, never fsynced), which would break both ingest
-// idempotence and the crash story — the reference-cache entry is
-// only a valid completion barrier if everything written before it is
-// durable in order. Blobs and index.json go through
+// idempotence and the crash story — the refs row is only a valid
+// completion barrier if everything written before it lands as a
+// whole file or not at all (durability ORDER is self-heal's job,
+// not the barrier's). Blobs and index.json go through
 // internal/atomicfile instead, and the descriptor append deduplicates
 // by digest.
 //
@@ -59,6 +61,12 @@ import (
 // mounts) and re-pull.
 var ErrPreLayoutStore = errors.New("work directory holds a pre-layout ocifs store; delete it and re-pull")
 
+// ErrPreDatabaseStore reports a work directory written by an ocifs
+// version whose bookkeeping lived in file tiers (refs/, layers/)
+// rather than the bookkeeping database (REQ-store-adopt refuses,
+// never migrates: every record in those tiers is regenerable).
+var ErrPreDatabaseStore = errors.New("work directory holds a pre-database ocifs store; delete it and re-pull")
+
 // errIncomplete classifies the read-only assembly pass finding local
 // state missing or unreadable; the caller retries with a mutating
 // pass that may fetch and unpack. Never returned by a mutating pass.
@@ -69,7 +77,7 @@ type Store struct {
 	auth            authn.Keychain
 	pullPolicy      PullPolicy
 	defaultPlatform v1.Platform
-	refs            referenceStore
+	bk              *bookkeeping
 	cas             *cas.CAS
 	layers          layerIndexes
 	ociDir          string
@@ -129,7 +137,17 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		return nil, err
 	}
 
-	for _, dir := range []string{"refs", "blobs", "layers", "oci", "mounts", "exports"} {
+	// A refs/ directory is the pre-database layout's signature:
+	// reference bookkeeping lived in a file tier there, and this
+	// layout does not adopt it (REQ-store-adopt). The layers/ tier
+	// joins the database with the layeridx keyspace; until then it
+	// remains a filesystem tier.
+	if _, err := os.Stat(filepath.Join(path, "refs")); err == nil {
+		return nil, fmt.Errorf("%s: %w", path, ErrPreDatabaseStore)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	for _, dir := range []string{"blobs", "layers", "oci", "mounts", "exports"} {
 		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return nil, err
 		}
@@ -165,13 +183,17 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 	if err != nil {
 		return nil, err
 	}
+	bk, err := openBookkeeping(path)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Store{
 		path:            path,
 		auth:            auth,
 		pullPolicy:      pullPolicy,
 		defaultPlatform: defaultPlatform,
-		refs:            referenceStore(filepath.Join(path, "refs")),
+		bk:              bk,
 		cas:             contentCAS,
 		layers:          layerIndexes{root: filepath.Join(path, "layers")},
 		ociDir:          ociDir,
@@ -290,7 +312,7 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	// recorded only after the artifact and the requested platform are
 	// fully materialized (REQ-store-ingest-order).
 	if needRecord {
-		if err := s.refs.Put(req.ref, top); err != nil {
+		if err := s.bk.RefPut(ctx, req.ref, top); err != nil {
 			return nil, err
 		}
 	}
@@ -302,7 +324,7 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 // before returning. The second result reports whether the
 // reference-cache entry must still be recorded after materialization.
 func (s *Store) resolveTop(ctx context.Context, req request) (v1.Hash, bool, error) {
-	cached, found, err := s.refs.Get(req.ref)
+	cached, found, err := s.bk.RefGet(ctx, req.ref)
 	if err != nil {
 		return emptyHash, false, err
 	}
@@ -795,4 +817,12 @@ func (s *Store) extractTar(ctx context.Context, r io.Reader) (layer.Layer, error
 	}
 
 	return l, nil
+}
+
+// Close releases the store's coordination resources — the
+// bookkeeping database's reader slots, heartbeat, and writer
+// coordination. Content tiers need no closing; a store left open
+// until process exit is crash-safe by the database's own contract.
+func (s *Store) Close() error {
+	return s.bk.Close()
 }

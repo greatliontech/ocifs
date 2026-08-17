@@ -91,6 +91,7 @@ func newStoreAt(t *testing.T, dir string, policy PullPolicy, platform v1.Platfor
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { s.Close() })
 	s.transport = rt
 	return s
 }
@@ -188,17 +189,15 @@ func TestIndexPullServesHostDefaultChild(t *testing.T) {
 		t.Fatalf("image digest = %s, want the platform-selected child %s (REQ-store-platform-serves-child)", img.Hash(), hostChild)
 	}
 
-	// The ref records the top-level (index) digest.
-	files := refFiles(t, dir)
-	if len(files) != 1 {
-		t.Fatalf("%d ref files, want 1", len(files))
+	// The refs row records the top-level (index) digest.
+	rows := refRows(t, dir)
+	if len(rows) != 1 {
+		t.Fatalf("%d refs rows, want 1", len(rows))
 	}
-	refContent, err := os.ReadFile(files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(refContent) != idxDigest.String() {
-		t.Fatalf("ref holds %q, want the index digest %s (REQ-store-ref-complete)", refContent, idxDigest)
+	for _, v := range rows {
+		if v != idxDigest.String() {
+			t.Fatalf("refs row holds %q, want the index digest %s (REQ-store-ref-complete)", v, idxDigest)
+		}
 	}
 
 	// oci/ retains the index itself alongside the selected child; the
@@ -469,11 +468,7 @@ func TestDigestEntry(t *testing.T) {
 	// Fully cached: completes under Never with no network access —
 	// and with no reference-cache entry: the digest is the identity,
 	// so the resolution must not route through the refs tier.
-	for _, f := range refFiles(t, dir) {
-		if err := os.Remove(f); err != nil {
-			t.Fatal(err)
-		}
-	}
+	clearRefRows(t, dir)
 	never := newStoreAt(t, dir, PullNever, linuxAMD64, cutTransport(t))
 	img2, err := never.Image(context.Background(), digestRef, pp(linuxARM64))
 	if err != nil {
@@ -560,16 +555,14 @@ func TestPullAlwaysRevalidatesTopLevel(t *testing.T) {
 	if got := string(readEntry(t, s, img3, "v")); got != "two" {
 		t.Fatalf("v = %q after tag move", got)
 	}
-	files := refFiles(t, dir)
-	if len(files) != 1 {
-		t.Fatalf("%d ref files", len(files))
+	rows2 := refRows(t, dir)
+	if len(rows2) != 1 {
+		t.Fatalf("%d refs rows", len(rows2))
 	}
-	refContent, err := os.ReadFile(files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(refContent) != mustDigest(t, idx2).String() {
-		t.Fatalf("ref not re-recorded to the new index digest")
+	for _, v := range rows2 {
+		if v != mustDigest(t, idx2).String() {
+			t.Fatalf("refs row not re-recorded to the new index digest")
+		}
 	}
 }
 

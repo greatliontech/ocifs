@@ -576,3 +576,57 @@ bindings {
   role: BINDING_ROLE_IMPLEMENTS
   shape_hash: "e84dc0b3faa028c27ef2b35929d0fac73c87b14dad6b7536b842d4dd6809b85b"
 }
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRefsKeyspaceRoundTrip"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "20e8c9882389b6898859df13ac16a1ee92d51d13a38c3d94fd990bcd7bcc31d2"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRefsKeyInjective"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "4f1cf34515f5af44f1bbd177f0f9d840ca24ed959c8e1ae3794a0ef9317c6a9f"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRefsRegistryCaseFolds"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3c0b43f1706c509b130d5a61b9bb8177c5c409ed683ef3c2f7237df602365d31"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRefsSurviveReopen"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "57fd8c8a0b7876203ba6622e43394de3164ffd249be1b1656f7d256f53b40cc3"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.openBookkeeping"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "0c14cdb1cf7642825e3900aeb18c7b7dccb64c126cc10ccaa98d6a008dc6cfe2"
+}
+
+bindings {
+  requirement_id: "REQ-store-adopt"
+  content_hash: "7c5029ffb6b1bdffa7ac360da15b06d0551817478dcef5b5c1d1b4ffe8c5498f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestPreDatabaseStoreRejected"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "15be3a831eba6ea59c6fa39adb77204809e2cf47e95c1e50130cfefa003c5903"
+}

@@ -1,0 +1,29 @@
+# 2026/08/17 18:45:39.799671 [TestPropertyRefKeyInjective] [rapid] draw a-host: "r.io"
+# 2026/08/17 18:45:39.799683 [TestPropertyRefKeyInjective] [rapid] draw a-depth: 1
+# 2026/08/17 18:45:39.799685 [TestPropertyRefKeyInjective] [rapid] draw a-seg: "ab"
+# 2026/08/17 18:45:39.799688 [TestPropertyRefKeyInjective] [rapid] draw a-tag: "v1"
+# 2026/08/17 18:45:39.799690 [TestPropertyRefKeyInjective] [rapid] draw b-host: "r.io"
+# 2026/08/17 18:45:39.799696 [TestPropertyRefKeyInjective] [rapid] draw b-depth: 1
+# 2026/08/17 18:45:39.799696 [TestPropertyRefKeyInjective] [rapid] draw b-seg: "ab"
+# 2026/08/17 18:45:39.799697 [TestPropertyRefKeyInjective] [rapid] draw b-tag: "v1"
+# 2026/08/17 18:45:39.799701 [TestPropertyRefKeyInjective] boundary shift of r.io/ab:v1 collides: key "r.ioabv1"
+# 
+v0.4.8#8024981220325630645
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0

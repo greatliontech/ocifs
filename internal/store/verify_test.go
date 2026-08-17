@@ -48,34 +48,11 @@ func treeFiles(t testing.TB, root string) map[string]int64 {
 }
 
 // refsContent snapshots the reference cache by full content: a
-// rejection must not record anything, and a rewritten ref entry is
-// size-identical to the one it clobbers.
+// rejection must not record anything, and a rewritten row is
+// content-identical to the one it clobbers only when nothing
+// changed.
 func refsContent(t testing.TB, dir string) map[string]string {
-	t.Helper()
-	files := map[string]string{}
-	root := filepath.Join(dir, "refs")
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		files[rel] = string(data)
-		return nil
-	})
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-	return files
+	return refRows(t, dir)
 }
 
 func sameContent(a, b map[string]string) bool {
@@ -156,7 +133,7 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 		s := newStoreAt(t, dir, PullIfNotPresent, linux, reg)
 		s.verifier = rejectAll
 		before := map[string]map[string]int64{}
-		for _, tier := range []string{"refs", "blobs", "layers", "oci"} {
+		for _, tier := range []string{"blobs", "layers", "oci"} {
 			before[tier] = treeFiles(t, filepath.Join(dir, tier))
 		}
 		beforeRefs := refsContent(t, dir)
@@ -169,17 +146,17 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 			rt.Fatalf("VerificationError does not wrap the verifier's error: %v", err)
 		}
 
-		for _, tier := range []string{"refs", "blobs", "layers"} {
+		for _, tier := range []string{"blobs", "layers"} {
 			after := treeFiles(t, filepath.Join(dir, tier))
 			if !sameTree(before[tier], after) {
 				rt.Fatalf("rejected request mutated %s/: before %v, after %v", tier, before[tier], after)
 			}
 		}
 		// Size equality is too coarse for the reference cache — an
-		// overwritten digest is digest-sized — so refs/ is compared
-		// by content.
+		// overwritten digest is digest-sized — so refs rows are
+		// compared by content.
 		if afterRefs := refsContent(t, dir); !sameContent(beforeRefs, afterRefs) {
-			rt.Fatalf("rejected request rewrote refs/: before %v, after %v", beforeRefs, afterRefs)
+			rt.Fatalf("rejected request rewrote refs rows: before %v, after %v", beforeRefs, afterRefs)
 		}
 		// oci/ may gain exactly the retained top-level artifact — the
 		// seam's input — and nothing else; index.json never lists it.
