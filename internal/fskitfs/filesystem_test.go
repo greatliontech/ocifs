@@ -182,7 +182,7 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 
 	// A missing state directory fails loudly: the report must have a
 	// per-mount home, and silent self-registration would leak state
-	// (docs/issues/mount-state-lifecycle.md).
+	// the registry never reclaims (store.md REQ-store-mount-registry).
 	cfg2 := cfg
 	cfg2.State = ""
 	if _, _, err := loadVolume(cfg2); err == nil {

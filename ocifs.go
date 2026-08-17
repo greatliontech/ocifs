@@ -201,10 +201,9 @@ type ImageMount struct {
 	upperDir   string
 	upperName  string
 	// upperRoot is the resolved upper the mount serves ("" for a
-	// read-only mount); upperLock holds a named upper's
-	// one-writable-mount flock until unmount.
+	// read-only mount); the named upper's one-writable-mount
+	// arbitration lives in the mount registry row.
 	upperRoot string
-	upperLock *os.File
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
@@ -217,12 +216,14 @@ func (im *ImageMount) Wait() {
 
 func (im *ImageMount) Unmount() error {
 	err := im.server.Unmount()
-	// The upper's one-writable-mount lock releases only when the
-	// mount actually stopped serving — a failed unmount keeps the
-	// second-mount refusal in force.
-	if err == nil && im.upperLock != nil {
-		im.upperLock.Close()
-		im.upperLock = nil
+	// Deregistration only when the mount actually stopped serving —
+	// a failed unmount keeps the row, and with it the named upper's
+	// one-writable-mount refusal, in force
+	// (REQ-store-mount-registry).
+	if err == nil {
+		if derr := im.ofs.store.DeregisterMount(context.Background(), im.id); derr != nil {
+			return derr
+		}
 	}
 	return err
 }
@@ -311,14 +312,6 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	if err := platformResolveUpper(o, im, img); err != nil {
 		return nil, err
 	}
-	defer func() {
-		// A failure before the server exists releases a named
-		// upper's mount lock.
-		if im.server == nil && im.upperLock != nil {
-			im.upperLock.Close()
-			im.upperLock = nil
-		}
-	}()
 
 	view, err := img.Unify()
 	if err != nil {
@@ -357,7 +350,7 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	// mountpoint; the projection report joins it once built. A
 	// failed attempt leaves no row (REQ-store-mount-registry).
 	im.id = filepath.Base(stateDir)
-	if err := o.store.RegisterMountRecord(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint); err != nil {
+	if err := o.store.RegisterMountRecordArbitrated(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint); err != nil {
 		return nil, err
 	}
 	defer func() {

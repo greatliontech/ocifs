@@ -41,14 +41,10 @@ func platformResolveUpper(o *OCIFS, im *ImageMount, img *store.Image) error {
 		if err != nil {
 			return err
 		}
-		// One writable mount at a time per named upper
-		// (REQ-writable-base-binding): a process-lifetime flock,
-		// released at unmount.
-		lock, err := o.store.LockUpper(im.upperName)
-		if err != nil {
-			return err
-		}
-		im.upperRoot, im.upperLock = root, lock
+		// One writable mount at a time per named upper is arbitrated
+		// by the registry row at registration
+		// (REQ-writable-base-binding).
+		im.upperRoot = root
 	}
 	return nil
 }

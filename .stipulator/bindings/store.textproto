@@ -657,3 +657,39 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "fe7d2ab111f8f9fb58b36d92896d18b5d1999fd7ba08645812704037b269bf10"
 }
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "35e30380e709c6945b663cad27d799f13423d6db896b93c489929d6be1ab2573"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestReclaimDeadMounts"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "f59e448c5fa0b9801be4863720cf8572fb1991a187f4e2ce91942a5c8fc370fd"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "35e30380e709c6945b663cad27d799f13423d6db896b93c489929d6be1ab2573"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestMountIDReusableAfterUnmount"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3326624954ed0b8dc300564e1ff80c7d219d293c1800fb16819bfa356e660d99"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "35e30380e709c6945b663cad27d799f13423d6db896b93c489929d6be1ab2573"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.ReclaimDeadMounts"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "05db8a25c4e7980ad888283f4c3f3fb27ccf6ed864d342d51c063aa0ba4d9b59"
+}
+
+bindings {
+  requirement_id: "REQ-store-bookkeeping"
+  content_hash: "1475abdeef564082eae2e7550a7d5c0de7efc225cdf3330af37ec4389fdf245e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestLivenessVerdicts"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "9037dec399ab40942f78bd0104af8e8f6dea8b0f2b90426b8e9c545332c5afa1"
+}

@@ -13,11 +13,6 @@
   `.export-*` temporaries nothing sweeps; caller-target temporaries
   land outside the store. Lands: with store GC, or earlier if
   accumulation surfaces in practice.
-- `docs/issues/mount-state-lifecycle.md` — per-mount state is never
-  reclaimed and mount ids are single-use; reclamation design shares
-  the dead-state recognition problem with store GC. Lands: when
-  mount-state reclamation or mount-id reuse is first needed — at the
-  latest with store GC.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform

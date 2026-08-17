@@ -459,3 +459,12 @@ bindings {
   role: BINDING_ROLE_IMPLEMENTS
   shape_hash: "3e14f3299a3c607f80326faa54120790f1755d910bd032e1c2788910fe547e67"
 }
+
+bindings {
+  requirement_id: "REQ-writable-base-binding"
+  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestUpperArbitrationIgnoresDeadHolder"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "bf82d0e9a6ae20571811d5ad0eb919c07f42fce525dd93739224570584446abd"
+}

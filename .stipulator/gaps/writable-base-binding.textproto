@@ -3,6 +3,6 @@
 
 requirement_id: "REQ-writable-base-binding"
 reason: "binding row landed; the arbitration clause re-homed to the mounts registry still runs on the transitional flock until chunk 4"
-lands { manual { condition: "store-gc chunk 4 landed: registry-based mount arbitration" } }
+lands { manual { condition: "store-gc chunk 4 landed: registry-based mount arbitration" fired: true } }
 excuses: GAP_EXCUSE_UNCOVERED
 excuses: GAP_EXCUSE_STALE

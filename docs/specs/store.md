@@ -318,9 +318,14 @@ consumer that just held it (`api.md` REQ-api-mountpoint) and is
 thereafter store scaffolding owned by no row — collectible like
 any orphaned tier file once the retention grace passes. A
 caller-supplied mountpoint is the caller's property; no sweep
-touches it. A mount id is reusable once its row and directory are
-gone — including a caller-supplied id whose mount attempt failed
-before serving (the failed attempt leaves no row).
+touches it. A mount id is reusable once its row is gone: a rowless
+state directory is store scaffolding the next mount of that id
+adopts (its mountpoint verified empty), never a refusal — waiting
+for collection to remove an empty directory would block remounting
+an id its own unmount just released. A dead row's id becomes
+reusable through reclamation; a caller-supplied id whose mount
+attempt failed before serving leaves no row and is immediately
+reusable.
 
 ## Garbage collection
 

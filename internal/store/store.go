@@ -219,11 +219,39 @@ func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) 
 		return "", "", fmt.Errorf("mount id %q is not a single path element", id)
 	}
 	stateDir = filepath.Join(s.path, "mounts", id)
-	if err := os.Mkdir(stateDir, 0o755); err != nil {
-		return "", "", err
-	}
 	mountDir = filepath.Join(stateDir, "mnt")
-	if err := os.Mkdir(mountDir, 0o755); err != nil {
+	if err := os.Mkdir(stateDir, 0o755); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return "", "", err
+		}
+		// A rowless state directory is scaffolding the next mount of
+		// this id adopts — never a refusal; a LIVE row is an active
+		// mount and refuses (re-checked transactionally at
+		// registration — REQ-store-mount-registry). Detach comes
+		// FIRST, unconditionally: a leftover kernel mount from a
+		// killed predecessor would wedge the ReadDir below, and
+		// detach is idempotent on a bare directory.
+		detachStaleMount(mountDir)
+		rec, rerr := s.bk.MountGet(context.Background(), id)
+		switch {
+		case rerr == nil && !rec.Owner.Dead():
+			return "", "", fmt.Errorf("mount id %q is in use by a live mount", id)
+		case rerr == nil:
+			// Dead row: left for the registration transaction to
+			// overwrite — deleting it here would race the sweep's
+			// claim.
+		case !errors.Is(rerr, os.ErrNotExist):
+			return "", "", rerr
+		}
+		entries, err := os.ReadDir(mountDir)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", "", err
+		}
+		if len(entries) != 0 {
+			return "", "", fmt.Errorf("mount id %q: leftover mountpoint is not empty", id)
+		}
+	}
+	if err := os.Mkdir(mountDir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 		os.Remove(stateDir)
 		return "", "", err
 	}

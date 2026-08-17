@@ -221,3 +221,29 @@ func TestWritableNamedUpper(t *testing.T) {
 		t.Fatalf("foreign base accepted: %v", err)
 	}
 }
+
+// TestMountIDReusableAfterUnmount pins the reuse clause of
+// REQ-store-mount-registry: a clean unmount releases the id — the
+// rowless state directory is adopted by the next mount, not
+// refused.
+func TestMountIDReusableAfterUnmount(t *testing.T) {
+	ofs, refStr := writableFixtureEnv(t, "wreuse")
+	im, err := ofs.Mount(refStr, MountWithID("reused-id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := im.Unmount(); err != nil {
+		t.Fatal(err)
+	}
+	// The row is gone with the unmount (deregistration).
+	if _, err := ofs.MountReport("reused-id"); err == nil {
+		t.Fatal("mount row survived clean unmount")
+	}
+	im2, err := ofs.Mount(refStr, MountWithID("reused-id"))
+	if err != nil {
+		t.Fatalf("id reuse after clean unmount: %v", err)
+	}
+	if err := im2.Unmount(); err != nil {
+		t.Fatal(err)
+	}
+}

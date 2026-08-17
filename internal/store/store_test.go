@@ -31,6 +31,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	"golang.org/x/sys/unix"
+
 	"github.com/greatliontech/gmdb"
 
 	"github.com/greatliontech/ocifs/internal/projection"
@@ -1290,5 +1292,220 @@ func TestSelfIdentityCollected(t *testing.T) {
 	}
 	if rec.Owner.BootID != strings.TrimSpace(string(wantBoot)) {
 		t.Fatalf("boot id %q, want %q", rec.Owner.BootID, strings.TrimSpace(string(wantBoot)))
+	}
+}
+
+// deadIdentity fabricates an identity that is definitively dead on
+// this system: our boot and namespace, a pid from the far end of
+// the space with a start time no live process carries.
+func deadIdentity() LivenessIdentity {
+	self := selfIdentity()
+	return LivenessIdentity{Pid: 1<<30 - 3, StartTime: 1, PidNS: self.PidNS, BootID: self.BootID}
+}
+
+// TestReclaimDeadMounts pins REQ-store-mount-registry's reclamation:
+// dead rows and their state directories go; live rows and same-boot
+// foreign-namespace rows stay.
+func TestReclaimDeadMounts(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("aa", 32)}
+
+	// Dead row with state directory.
+	if _, _, err := s.NewMountState("deadmount"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bk.MountPut(context.Background(), "deadmount", MountRecord{
+		Owner: deadIdentity(), Image: h,
+		Mountpoint: filepath.Join(dir, "mounts", "deadmount", "mnt"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Live row (this process).
+	if err := s.RegisterMountRecord(context.Background(), "livemount", h, "", "/x"); err != nil {
+		t.Fatal(err)
+	}
+	// Same-boot foreign-namespace row: unjudgeable, stays.
+	foreign := deadIdentity()
+	foreign.PidNS = "pid:[999999]"
+	if err := s.bk.MountPut(context.Background(), "foreignmount", MountRecord{Owner: foreign, Image: h}); err != nil {
+		t.Fatal(err)
+	}
+
+	reclaimed, err := s.ReclaimDeadMounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reclaimed) != 1 || reclaimed[0] != "deadmount" {
+		t.Fatalf("reclaimed %v, want [deadmount]", reclaimed)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "mounts", "deadmount")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dead mount's state directory survived: %v", err)
+	}
+	if _, err := s.MountRecord(context.Background(), "deadmount"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dead row survived: %v", err)
+	}
+	if _, err := s.MountRecord(context.Background(), "livemount"); err != nil {
+		t.Fatalf("live row reclaimed: %v", err)
+	}
+	if _, err := s.MountRecord(context.Background(), "foreignmount"); err != nil {
+		t.Fatalf("foreign-namespace row reclaimed: %v", err)
+	}
+}
+
+// TestUpperArbitrationIgnoresDeadHolder pins the crash arm of the
+// registry arbitration (REQ-writable-base-binding): a dead row
+// holding the upper name never blocks a new writable mount.
+func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("bb", 32)}
+	if err := s.bk.MountPut(context.Background(), "crashed", MountRecord{
+		Owner: deadIdentity(), Image: h, UpperName: "shared-upper",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterMountRecordArbitrated(context.Background(), "fresh", h, "shared-upper", "/y"); err != nil {
+		t.Fatalf("dead holder blocked a new writable mount: %v", err)
+	}
+	// And a LIVE holder refuses.
+	if err := s.RegisterMountRecordArbitrated(context.Background(), "third", h, "shared-upper", "/z"); err == nil {
+		t.Fatal("live holder did not refuse a second writable mount")
+	}
+}
+
+// TestLivenessVerdicts pins each arm of the Dead() rule
+// (REQ-store-bookkeeping): live self; PID reuse (same pid, foreign
+// start time) dead; absent pid dead; foreign boot dead; same-boot
+// foreign namespace conservatively live.
+func TestLivenessVerdicts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("full discriminators are linux-only")
+	}
+	self := selfIdentity()
+	if self.Dead() {
+		t.Fatal("own identity judged dead")
+	}
+	reused := self
+	reused.StartTime = self.StartTime + 1
+	if !reused.Dead() {
+		t.Fatal("PID reuse (start-time mismatch) judged live")
+	}
+	absent := self
+	absent.Pid = 1<<30 - 3
+	if !absent.Dead() {
+		t.Fatal("absent pid judged live")
+	}
+	otherBoot := self
+	otherBoot.BootID = "not-this-boot"
+	if !otherBoot.Dead() {
+		t.Fatal("foreign boot judged live")
+	}
+	foreignNS := absent
+	foreignNS.PidNS = "pid:[1]"
+	if foreignNS.Dead() {
+		t.Fatal("same-boot foreign-namespace row judged dead")
+	}
+	// A live foreign-user pid answers the signal probe with EPERM —
+	// exists, unjudgeable further, conservative live. pid 1 is the
+	// canonical foreign-user process for an unprivileged run.
+	if err := unix.Kill(1, 0); err == unix.EPERM {
+		init := self
+		init.Pid = 1
+		init.StartTime = 0
+		if init.Dead() {
+			t.Fatal("EPERM (live foreign-user pid) judged dead")
+		}
+	} else {
+		t.Log("EPERM arm skipped: kill(1,0) did not return EPERM here")
+	}
+}
+
+// TestSameIDLiveRowRefusedAtRegistration pins the registration
+// transaction as the same-id serialization point
+// (REQ-store-mount-registry): a live row under the id refuses; a
+// dead row is overwritten.
+func TestSameIDLiveRowRefusedAtRegistration(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cc", 32)}
+	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/b"); err == nil {
+		t.Fatal("second registration of a live id succeeded")
+	}
+	if err := s.bk.MountPut(context.Background(), "dup2", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup2", h, "", "/c"); err != nil {
+		t.Fatalf("dead same-id row blocked registration: %v", err)
+	}
+}
+
+// TestReclaimSkipsRevivedRow pins the claim transaction
+// (REQ-store-gc-safe's verdict/action discipline applied to
+// reclamation): a row that went live between the sweep's mark and
+// its claim is skipped, its state untouched.
+func TestReclaimSkipsRevivedRow(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("dd", 32)}
+	// The mark-then-revive interleaving, exercised at the claim
+	// boundary directly: a LIVE row presented to the claim (as a
+	// stale mark would present it) must be skipped untouched.
+	if err := s.RegisterMountRecord(context.Background(), "revived", h, "", "/r"); err != nil {
+		t.Fatal(err)
+	}
+	_, claimed, err := s.claimDeadMount(context.Background(), "revived")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed {
+		t.Fatal("claim touched a live row")
+	}
+	if _, err := s.MountRecord(context.Background(), "revived"); err != nil {
+		t.Fatalf("revived row gone: %v", err)
+	}
+	// A genuinely dead row claims by OWNERSHIP REWRITE: the row
+	// stays, now live under the sweeper, so a racing remount
+	// refuses instead of serving paths mid-deletion.
+	if err := s.bk.MountPut(context.Background(), "corpse", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
+		t.Fatal(err)
+	}
+	orig, claimed, err := s.claimDeadMount(context.Background(), "corpse")
+	if err != nil || !claimed {
+		t.Fatalf("dead row not claimed: %v %v", claimed, err)
+	}
+	rec, err := s.MountRecord(context.Background(), "corpse")
+	if err != nil {
+		t.Fatalf("claimed row deleted before the paths were: %v", err)
+	}
+	if rec.Owner.Dead() {
+		t.Fatal("claimed row not owned by the live sweeper")
+	}
+	// Deferral restores the original dead owner, re-arming sweeps.
+	if err := s.restoreMountOwner(context.Background(), "corpse", orig); err != nil {
+		t.Fatal(err)
+	}
+	rec, err = s.MountRecord(context.Background(), "corpse")
+	if err != nil || !rec.Owner.Dead() {
+		t.Fatalf("restored row not dead-sweepable: %+v %v", rec.Owner, err)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,7 +14,6 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/types"
-	"golang.org/x/sys/unix"
 
 	"github.com/greatliontech/ocifs/internal/commit"
 	"github.com/greatliontech/ocifs/internal/upper"
@@ -50,27 +48,6 @@ func (s *Store) NewUpper(name string, base v1.Hash) (string, error) {
 // or validating anything.
 func (s *Store) UpperDir(name string) string {
 	return filepath.Join(s.path, "uppers", name, "upper")
-}
-
-// LockUpper takes the named upper's writable-mount lock: a named
-// upper admits one writable mount at a time
-// (REQ-writable-base-binding). The lock is a flock beside the
-// binding record — it drops with the holding process, so a crash
-// never wedges the upper. The caller closes the returned file to
-// release.
-func (s *Store) LockUpper(name string) (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(s.path, "uppers", name, "mountlock"), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		f.Close()
-		if errors.Is(err, unix.EWOULDBLOCK) {
-			return nil, fmt.Errorf("upper %q already serves a writable mount", name)
-		}
-		return nil, err
-	}
-	return f, nil
 }
 
 // CommitUpper serializes the canonical diff of img and the upper at

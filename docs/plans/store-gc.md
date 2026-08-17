@@ -26,7 +26,7 @@ files, binding siblings) are refused by adoption, not migrated.
       name, report) from the start; base bindings into `uppers`;
       `localimages` rows written by commit. Folds
       docs/issues/projection-report-binary-names.md.
-- [ ] 4. Mount registry liveness and reclamation: registration
+- [x] 4. Mount registry liveness and reclamation: registration
       before serve with the full liveness identity, deregistration
       on unmount,
       dead-row recognition, mount-id reuse. Folds
