@@ -31,7 +31,7 @@ files, binding siblings) are refused by adoption, not migrated.
       on unmount,
       dead-row recognition, mount-id reuse. Folds
       docs/issues/mount-state-lifecycle.md.
-- [ ] 5. Cross-process ingest lease and ops rows: single ingesting
+- [x] 5. Cross-process ingest lease and ops rows: single ingesting
       process enforced through a live `ops` row spanning content
       writes through root publication (commit included); export
       and commit ops pin their digests and record their

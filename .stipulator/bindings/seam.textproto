@@ -7,7 +7,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.verify"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "7458aa88958a360534f05f25e4b2da7fbff5223aa174ff448f27a6b25f4d5289"
+  shape_hash: "93401f3f35a53367bc54563721ec21ae007516ca6058c7c1e976b7d678728028"
 }
 
 bindings {

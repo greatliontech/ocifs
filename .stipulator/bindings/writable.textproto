@@ -124,7 +124,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.CommitUpper"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "5f6ab34ed94f8c5e27e459c5dcc8bb017d9cbf177394653037962db78598f97e"
+  shape_hash: "718fe4eaa8b55826a3df88b706a7480ff92a36a6b7d95c156128ee9593e5f471"
 }
 
 bindings {

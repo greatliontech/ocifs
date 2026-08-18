@@ -70,13 +70,19 @@ func (e *VerificationError) Unwrap() error { return e.Err }
 // the fetch branch below covers the rest — a digest-form request's
 // first contact as much as a damaged retained copy — by digest under
 // the ingest lock.
-func (s *Store) verify(ctx context.Context, req request, top v1.Hash) error {
+func (s *Store) verify(ctx context.Context, req request, top v1.Hash, lg *leaseGuard) error {
 	if s.verifier == nil {
 		return nil
 	}
 	raw, err := s.ensureManifest(ctx, nil, top)
 	if errors.Is(err, errIncomplete) {
 		f := &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever}
+		// A heal writes the content tiers: lease before mutex
+		// (REQ-store-single-writer; the reverse order deadlocks
+		// against the commit path).
+		if lerr := lg.ensure(ctx); lerr != nil {
+			return lerr
+		}
 		s.ingestMu.Lock()
 		raw, err = s.ensureManifest(ctx, f, top)
 		s.ingestMu.Unlock()

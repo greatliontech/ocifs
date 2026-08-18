@@ -105,6 +105,37 @@ type Store struct {
 // storage.
 var ingestLocks sync.Map
 
+// leaseGuard is one request's lazily-acquired hold on the ingest
+// lease: the first content-tier write acquires
+// (REQ-store-single-writer's span starts at the first write), and
+// the request's exit releases — after the root row on success.
+// Acquisition happens only OUTSIDE ingestMu (eagerly, before the
+// mutex, on paths known to write), so the lock order is always
+// lease then mutex — the commit path's order.
+type leaseGuard struct {
+	s     *Store
+	token string
+}
+
+func (lg *leaseGuard) ensure(ctx context.Context) error {
+	if lg.token != "" {
+		return nil
+	}
+	tok, err := lg.s.AcquireIngestLease(ctx)
+	if err != nil {
+		return err
+	}
+	lg.token = tok
+	return nil
+}
+
+func (lg *leaseGuard) release(ctx context.Context) {
+	if lg.token != "" {
+		_ = lg.s.ReleaseIngestLease(ctx, lg.token)
+		lg.token = ""
+	}
+}
+
 func ingestLockFor(root string) *sync.Mutex {
 	m, _ := ingestLocks.LoadOrStore(filepath.Clean(root), &sync.Mutex{})
 	return m.(*sync.Mutex)
@@ -307,7 +338,13 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 		req.digest = &h
 	}
 
-	top, needRecord, err := s.resolveTop(ctx, req)
+	// The lease guard spans this request: acquired at the first
+	// content-tier write (a remote retention in resolveTop, a heal
+	// in verify, materialization in assemble), released — after the
+	// root row — at exit (REQ-store-single-writer).
+	lg := &leaseGuard{s: s}
+	defer lg.release(context.WithoutCancel(ctx))
+	top, needRecord, err := s.resolveTop(ctx, req, lg)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +353,7 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	// materialization for this request (REQ-seam-position); a
 	// rejection returns before assemble touches layer content and
 	// before the reference-cache record below (REQ-seam-abort).
-	if err := s.verify(ctx, req, top); err != nil {
+	if err := s.verify(ctx, req, top, lg); err != nil {
 		return nil, err
 	}
 
@@ -326,6 +363,13 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 		// is store damage, failing as under Never
 		// (REQ-store-local-images).
 		f := &fetcher{store: s, repo: ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(ref.Context().RegistryStr())}
+		// Acquire BEFORE the mutex (lease → mutex, the commit
+		// path's order — the reverse deadlocks): this path is about
+		// to materialize, so the eager acquisition is the first
+		// write's.
+		if lerr := lg.ensure(ctx); lerr != nil {
+			return nil, lerr
+		}
 		s.ingestMu.Lock()
 		img, err = s.assemble(ctx, req, top, f)
 		s.ingestMu.Unlock()
@@ -349,7 +393,7 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 // policy, retaining a remotely fetched top-level artifact in oci/
 // before returning. The second result reports whether the
 // reference-cache entry must still be recorded after materialization.
-func (s *Store) resolveTop(ctx context.Context, req request) (v1.Hash, bool, error) {
+func (s *Store) resolveTop(ctx context.Context, req request, lg *leaseGuard) (v1.Hash, bool, error) {
 	cached, found, err := s.bk.RefGet(ctx, req.ref)
 	if err != nil {
 		return emptyHash, false, err
@@ -395,6 +439,11 @@ func (s *Store) resolveTop(ctx context.Context, req request) (v1.Hash, bool, err
 
 	desc, err := remote.Get(req.ref, s.remoteOpts(ctx)...)
 	if err != nil {
+		return emptyHash, false, err
+	}
+	// Retention is this request's first content-tier write: the
+	// lease span starts here (REQ-store-single-writer).
+	if err := lg.ensure(ctx); err != nil {
 		return emptyHash, false, err
 	}
 	if err := s.writeOCIBlob(desc.Digest, func() (io.ReadCloser, error) {

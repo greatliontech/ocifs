@@ -53,7 +53,7 @@ func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOptio
 	if err != nil {
 		return "", err
 	}
-	if err := o.store.ExportTo(ctx, view, r.target); err != nil {
+	if err := o.store.ExportTo(ctx, view, r.target, img.Hash()); err != nil {
 		return "", err
 	}
 	return r.target, nil

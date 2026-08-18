@@ -32,6 +32,8 @@ const (
 	ksMounts      = "mounts"
 	ksUppers      = "uppers"
 	ksLocalImages = "localimages"
+	ksOps         = "ops"
+	ksGC          = "gc"
 )
 
 var emptyHash = v1.Hash{}
@@ -54,7 +56,7 @@ func openBookkeeping(root string) (*bookkeeping, error) {
 		return nil, fmt.Errorf("bookkeeping database: %w", err)
 	}
 	if err := db.Update(ctx, func(tx *gmdb.Tx) error {
-		for _, name := range []string{ksRefs, ksLayerIdx, ksMounts, ksUppers, ksLocalImages} {
+		for _, name := range []string{ksRefs, ksLayerIdx, ksMounts, ksUppers, ksLocalImages, ksOps, ksGC} {
 			if _, err := tx.CreateKeyspaceIfNotExists(name); err != nil {
 				return err
 			}

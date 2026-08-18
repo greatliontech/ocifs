@@ -106,7 +106,7 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "a71828769b56e8f7592ad6f8faf749cdfdc0842dd1e85293d5b8b70a8bc2f6ff"
+  shape_hash: "a198e9b565fbc179be499552d05fe84f255c1967cab149ca70c6bf0dafcbeaf4"
 }
 
 bindings {
@@ -187,5 +187,5 @@ bindings {
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.materializeAt"
   role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "a71828769b56e8f7592ad6f8faf749cdfdc0842dd1e85293d5b8b70a8bc2f6ff"
+  shape_hash: "a198e9b565fbc179be499552d05fe84f255c1967cab149ca70c6bf0dafcbeaf4"
 }

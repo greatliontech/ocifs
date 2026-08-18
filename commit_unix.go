@@ -34,9 +34,9 @@ func (o *OCIFS) Commit(ctx context.Context, baseRef string, opts ...CommitOption
 	}
 	var digest = base.Hash()
 	if r.upperName != "" {
-		digest, err = o.store.CommitNamedUpper(base, r.upperName)
+		digest, err = o.store.CommitNamedUpper(ctx, base, r.upperName)
 	} else {
-		digest, err = o.store.CommitUpper(base, r.upperDir)
+		digest, err = o.store.CommitUpper(ctx, base, r.upperDir)
 	}
 	if err != nil {
 		return nil, err

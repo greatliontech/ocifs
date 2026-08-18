@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1197,7 +1198,7 @@ func TestCommitRecordsLocalImageRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(up, "new"), []byte("delta"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	digest, err := s.CommitUpper(img, up)
+	digest, err := s.CommitUpper(context.Background(), img, up)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1507,5 +1508,324 @@ func TestReclaimSkipsRevivedRow(t *testing.T) {
 	rec, err = s.MountRecord(context.Background(), "corpse")
 	if err != nil || !rec.Owner.Dead() {
 		t.Fatalf("restored row not dead-sweepable: %+v %v", rec.Owner, err)
+	}
+}
+
+// opsRows snapshots the ops keyspace through a second handle.
+func opsRows(t testing.TB, storeDir string) map[string]OpRecord {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows := map[string]OpRecord{}
+	err = db.View(context.Background(), func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksOps)
+		if err != nil {
+			return err
+		}
+		for k, v := range ks.All() {
+			rec, derr := decodeOpRecord(v)
+			if derr != nil {
+				t.Fatalf("undecodable op row %q: %v", k, derr)
+			}
+			rows[string(k)] = rec
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
+// TestIngestLease pins REQ-store-single-writer's lease: a live
+// holder excludes a second acquirer until release; a dead holder's
+// lease claims immediately; release touches only the caller's own
+// lease.
+func TestIngestLease(t *testing.T) {
+	dir := scratchDir(t)
+	s1, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s1.Close() })
+	s2, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s2.Close() })
+
+	tok1, err := s1.AcquireIngestLease(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A live FOREIGN holder excludes; a same-process holder is
+	// reclaimable (in-process content safety is the shared ingest
+	// mutex), so the exclusion arm uses a planted foreign owner.
+	foreign := OpRecord{Kind: opKindIngest, Owner: LivenessIdentity{Pid: 1, StartTime: 12345, PidNS: selfIdentity().PidNS, BootID: selfIdentity().BootID}, Nonce: "f"}
+	if err := writeOpRow(t, dir, ingestLeaseKey, foreign); err != nil {
+		t.Fatal(err)
+	}
+	short, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if _, err := s2.AcquireIngestLease(short); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("second acquire under a live foreign lease: %v", err)
+	}
+	// A foreign owner's lease is never released by this process —
+	// nor is a same-owner row with a foreign NONCE.
+	if err := s2.ReleaseIngestLease(context.Background(), "not-mine"); err != nil {
+		t.Fatal(err)
+	}
+	if len(opsRows(t, dir)) != 1 {
+		t.Fatal("release dropped a lease it does not own")
+	}
+	// Releasing tok1 is a no-op now (the row is the foreign plant),
+	// harmless.
+	if err := s1.ReleaseIngestLease(context.Background(), tok1); err != nil {
+		t.Fatal(err)
+	}
+
+	// A dead holder's lease claims immediately.
+	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: deadIdentity(), Nonce: "d"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel3()
+	tok3, err := s1.AcquireIngestLease(ctx3)
+	if err != nil {
+		t.Fatalf("claim of a dead lease: %v", err)
+	}
+	// A sibling acquisition in the same process waits on the slot,
+	// context-aware — never steals the live hold.
+	short3, cancel5 := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel5()
+	if _, err := s2.AcquireIngestLease(short3); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("sibling acquisition under a live in-process hold: %v", err)
+	}
+	if err := s1.ReleaseIngestLease(context.Background(), tok3); err != nil {
+		t.Fatal(err)
+	}
+
+	// Self-reclaim: residue of a failed release (row present, slot
+	// free) never wedges this process's next acquisition.
+	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: selfIdentity(), Nonce: "stale-residue"}); err != nil {
+		t.Fatal(err)
+	}
+	tok4, err := s2.AcquireIngestLease(ctx3)
+	if err != nil {
+		t.Fatalf("self-owned residue not reclaimed: %v", err)
+	}
+	// A stale same-owner nonce releases NOTHING.
+	if err := s1.ReleaseIngestLease(context.Background(), "stale-residue"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(opsRows(t, dir)); n != 1 {
+		t.Fatalf("stale-nonce release dropped the live lease (%d rows)", n)
+	}
+	if err := s2.ReleaseIngestLease(context.Background(), tok4); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(opsRows(t, dir)); n != 0 {
+		t.Fatalf("%d ops rows after release", n)
+	}
+
+	// A foreign-VERSION lease row means an unknown holder: wait,
+	// never claim (REQ-store-single-writer over foreign-as-absent).
+	foreignVer := encodeOpRecord(OpRecord{Kind: opKindIngest, Owner: deadIdentity()})
+	foreignVer[0] = opRecVersion + 1
+	if err := writeRawOpRow(t, dir, ingestLeaseKey, foreignVer); err != nil {
+		t.Fatal(err)
+	}
+	short2, cancel4 := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel4()
+	if _, err := s1.AcquireIngestLease(short2); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("foreign-version lease claimed: %v", err)
+	}
+}
+
+func writeRawOpRow(t testing.TB, storeDir, id string, raw []byte) error {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksOps)
+		if err != nil {
+			return err
+		}
+		return ks.Put([]byte(id), raw)
+	})
+}
+
+func writeOpRow(t testing.TB, storeDir, id string, rec OpRecord) error {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksOps)
+		if err != nil {
+			return err
+		}
+		return ks.Put([]byte(id), encodeOpRecord(rec))
+	})
+}
+
+// TestOpRowLifecycle pins the ops rows (REQ-store-gc-roots): a
+// begun op's pins and temporaries are recorded; End removes it; a
+// completed or failed export leaves no rows; the record codec
+// round-trips and refuses foreign versions.
+func TestOpRowLifecycle(t *testing.T) {
+	in := OpRecord{
+		Kind:  opKindExport,
+		Owner: LivenessIdentity{Pid: 7, StartTime: 9, PidNS: "pid:[1]", BootID: "b"},
+		Pins:  []v1.Hash{{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}},
+		Temps: []string{"/some/.export-x", "/other/with\xffbyte"},
+	}
+	out, err := decodeOpRecord(encodeOpRecord(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Kind != in.Kind || out.Owner != in.Owner ||
+		len(out.Pins) != 1 || out.Pins[0] != in.Pins[0] ||
+		len(out.Temps) != 2 || out.Temps[0] != in.Temps[0] || out.Temps[1] != in.Temps[1] {
+		t.Fatalf("op record round trip mangled: %+v", out)
+	}
+	foreign := append([]byte{opRecVersion + 1}, encodeOpRecord(in)[1:]...)
+	if _, err := decodeOpRecord(foreign); err == nil {
+		t.Fatal("foreign op version decoded")
+	}
+
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	id, err := s.BeginOp(context.Background(), opKindExport, in.Pins, in.Temps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := opsRows(t, dir)
+	rec, ok := rows[id]
+	if !ok || len(rec.Pins) != 1 || rec.Pins[0] != in.Pins[0] || len(rec.Temps) != 2 {
+		t.Fatalf("begun op row: %+v", rows)
+	}
+	if rec.Owner.Dead() {
+		t.Fatal("own op row judged dead")
+	}
+	if err := s.EndOp(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if len(opsRows(t, dir)) != 0 {
+		t.Fatalf("ops rows after EndOp: %+v", opsRows(t, dir))
+	}
+}
+
+// TestExportLeavesNoOpRows pins the export op's lifecycle around
+// both completion and cancellation.
+func TestExportLeavesNoOpRows(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/ops/export:v1"
+	l := newRawLayer(t, tarBytes(t, tfile("f", "content")))
+	push(t, reg, refStr, makeImage(t, l))
+	s, dir := newTestStore(t, PullIfNotPresent, reg)
+	img, err := s.Image(context.Background(), refStr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Export(context.Background(), img); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(opsRows(t, dir)); n != 0 {
+		t.Fatalf("%d ops rows after successful export", n)
+	}
+	view, err := img.Unify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.ExportTo(canceled, view, filepath.Join(scratchDir(t), "t"), img.Hash()); err == nil {
+		t.Fatal("canceled export succeeded")
+	}
+	if n := len(opsRows(t, dir)); n != 0 {
+		t.Fatalf("%d ops rows after canceled export", n)
+	}
+}
+
+// TestLeaseWaitIsCancelable pins the lock order
+// (REQ-store-single-writer): a request blocked behind another
+// ingest waits on the LEASE — context-aware — never on the shared
+// mutex; the reversed order would park uninterruptibly and, against
+// the commit path, deadlock.
+func TestLeaseWaitIsCancelable(t *testing.T) {
+	gate := make(chan struct{})
+	parked := make(chan struct{}, 4)
+	var gateOn atomic.Bool
+	reg := newTestRegistry()
+	slow := handlerTransport{h: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if gateOn.Load() && strings.Contains(r.URL.Path, "/blobs/") && r.Method == http.MethodGet {
+			parked <- struct{}{}
+			<-gate
+		}
+		reg.h.ServeHTTP(w, r)
+	})}
+	ref1 := testHost + "/lease/slow:v1"
+	ref2 := testHost + "/lease/second:v1"
+	push(t, reg, ref1, makeImage(t, newRawLayer(t, tarBytes(t, tfile("a", "1")))))
+	img2 := makeImage(t, newRawLayer(t, tarBytes(t, tfile("b", "2"))))
+	push(t, reg, ref2, img2)
+	s, dir := newTestStore(t, PullIfNotPresent, slow)
+
+	// Pre-pull ref2 (ungated: no gated blob GET runs while nothing
+	// holds the lease), then damage it so the second Image below
+	// reaches the heal branch DIRECTLY — cached resolution, no
+	// resolveTop write, its first lease contact the branch's own
+	// ensure. That is the call site whose lock order the test pins.
+	if _, err := s.Image(context.Background(), ref2, nil); err != nil {
+		t.Fatal(err)
+	}
+	child2 := mustDigest(t, img2)
+	if err := os.Remove(filepath.Join(dir, "oci", "blobs", child2.Algorithm, child2.Hex)); err != nil {
+		t.Fatal(err)
+	}
+	gateOn.Store(true)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Image(context.Background(), ref1, nil)
+		done <- err
+	}()
+	// Wait until the slow ingest is PARKED in the gated blob fetch —
+	// at that point it provably holds both the lease and the ingest
+	// mutex (assemble runs under both).
+	select {
+	case <-parked:
+	case <-time.After(5 * time.Second):
+		close(gate)
+		t.Fatal("slow ingest never reached the gated fetch")
+	}
+
+	short, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := s.Image(short, ref2, nil)
+	elapsed := time.Since(start)
+	close(gate)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("second ingest under a held lease: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("second ingest blocked %v — parked on the mutex, not the cancelable lease", elapsed)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("slow ingest: %v", err)
 	}
 }

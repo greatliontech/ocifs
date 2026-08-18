@@ -63,7 +63,7 @@ func commitFixture(t *testing.T) (*Store, string, *Image, string) {
 // truth, and never dials.
 func TestCommitUpperMaterializesLocally(t *testing.T) {
 	s, dir, img, upperDir := commitFixture(t)
-	digest, err := s.CommitUpper(img, upperDir)
+	digest, err := s.CommitUpper(context.Background(), img, upperDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +109,11 @@ func readCAS(t *testing.T, s *Store, h interface{ String() string }) []byte {
 // yields the same digest — layer, config, manifest all.
 func TestCommitDeterministic(t *testing.T) {
 	s, _, img, upperDir := commitFixture(t)
-	d1, err := s.CommitUpper(img, upperDir)
+	d1, err := s.CommitUpper(context.Background(), img, upperDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d2, err := s.CommitUpper(img, upperDir)
+	d2, err := s.CommitUpper(context.Background(), img, upperDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,14 +150,14 @@ func TestBaseBinding(t *testing.T) {
 		}
 	}
 
-	if _, err := s.CommitNamedUpper(img, "work"); err != nil {
+	if _, err := s.CommitNamedUpper(context.Background(), img, "work"); err != nil {
 		t.Fatalf("bound commit failed: %v", err)
 	}
 	fake := &Image{h: other, conf: img.ConfigFile()}
-	if _, err := s.CommitNamedUpper(fake, "work"); err == nil || !strings.Contains(err.Error(), "bound to base") {
+	if _, err := s.CommitNamedUpper(context.Background(), fake, "work"); err == nil || !strings.Contains(err.Error(), "bound to base") {
 		t.Fatalf("commit over foreign base accepted: %v", err)
 	}
-	if _, err := s.CommitNamedUpper(img, "unbound"); err == nil {
+	if _, err := s.CommitNamedUpper(context.Background(), img, "unbound"); err == nil {
 		t.Fatal("commit of unbound upper succeeded")
 	}
 	if _, err := s.NewUpper("bad/name", img.Hash()); err == nil {
@@ -171,7 +171,7 @@ func TestBaseBinding(t *testing.T) {
 // dial happens.
 func TestLocalNamespaceNeverDials(t *testing.T) {
 	s, dir, img, upperDir := commitFixture(t)
-	digest, err := s.CommitUpper(img, upperDir)
+	digest, err := s.CommitUpper(context.Background(), img, upperDir)
 	if err != nil {
 		t.Fatal(err)
 	}

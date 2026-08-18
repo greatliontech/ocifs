@@ -3,4 +3,4 @@
 
 requirement_id: "REQ-store-single-writer"
 reason: "ingest lease not yet built; single-writer is in-process only until store-gc chunk 5"
-lands { manual { condition: "store-gc chunk 5 landed: cross-process ingest lease" } }
+lands { manual { condition: "store-gc chunk 5 landed: cross-process ingest lease" fired: true } }

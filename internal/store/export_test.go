@@ -243,7 +243,7 @@ func TestExportToCallerTarget(t *testing.T) {
 
 	scratch := scratchDir(t)
 	absent := filepath.Join(scratch, "fresh")
-	if err := s.ExportTo(t.Context(), view, absent); err != nil {
+	if err := s.ExportTo(t.Context(), view, absent, img.Hash()); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(absent, "copy")); err != nil || string(b) != "shared bits" {
@@ -254,7 +254,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.Mkdir(empty, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(t.Context(), view, empty); err == nil {
+	if err := s.ExportTo(t.Context(), view, empty, img.Hash()); err == nil {
 		t.Fatal("export replaced an existing (empty) target")
 	}
 
@@ -262,7 +262,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.WriteFile(fileTarget, []byte("caller data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(t.Context(), view, fileTarget); err == nil {
+	if err := s.ExportTo(t.Context(), view, fileTarget, img.Hash()); err == nil {
 		t.Fatal("export replaced an existing file target")
 	}
 	if b, err := os.ReadFile(fileTarget); err != nil || string(b) != "caller data" {
@@ -273,7 +273,7 @@ func TestExportToCallerTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(populated, "keep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExportTo(t.Context(), view, populated); err == nil {
+	if err := s.ExportTo(t.Context(), view, populated, img.Hash()); err == nil {
 		t.Fatal("export replaced a populated target")
 	}
 	if _, err := os.Stat(filepath.Join(populated, "keep")); err != nil {
@@ -408,7 +408,7 @@ func TestExportCancelLeavesNoResidue(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(dir, "cancel-target")
-	if err := s.ExportTo(ctx, view, target); !errors.Is(err, context.Canceled) {
+	if err := s.ExportTo(ctx, view, target, img.Hash()); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled targeted export: %v, want context.Canceled", err)
 	}
 	if _, err := os.Lstat(target); !errors.Is(err, fs.ErrNotExist) {

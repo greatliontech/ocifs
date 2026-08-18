@@ -56,7 +56,15 @@ func (s *Store) UpperDir(name string) string {
 // store's ingest ordering, and returns the new image's digest,
 // acquirable under the local namespace (REQ-writable-commit-image).
 // No live mount is involved: the upper is read from disk as-is.
-func (s *Store) CommitUpper(img *Image, upperRoot string) (v1.Hash, error) {
+func (s *Store) CommitUpper(ctx context.Context, img *Image, upperRoot string) (v1.Hash, error) {
+	// A commit is an ingest under the lease, row-last
+	// (REQ-store-single-writer): content blobs, descriptor, then the
+	// localimages root row, all inside the leased span.
+	tok, err := s.AcquireIngestLease(ctx)
+	if err != nil {
+		return v1.Hash{}, err
+	}
+	defer func() { _ = s.ReleaseIngestLease(context.WithoutCancel(ctx), tok) }()
 	view, err := img.Unify()
 	if err != nil {
 		return v1.Hash{}, err
@@ -146,7 +154,7 @@ func (s *Store) CommitUpper(img *Image, upperRoot string) (v1.Hash, error) {
 	// The localimages row is the committed image's root
 	// (REQ-store-gc-roots), written last like any root
 	// (REQ-store-single-writer's row-last ordering).
-	if err := s.bk.LocalImagePut(context.Background(), manifestDigest, time.Now().Unix()); err != nil {
+	if err := s.bk.LocalImagePut(ctx, manifestDigest, time.Now().Unix()); err != nil {
 		return v1.Hash{}, err
 	}
 	return manifestDigest, nil
@@ -154,13 +162,13 @@ func (s *Store) CommitUpper(img *Image, upperRoot string) (v1.Hash, error) {
 
 // CommitNamedUpper is CommitUpper against a store-managed upper,
 // validating its base binding first (REQ-writable-base-binding).
-func (s *Store) CommitNamedUpper(img *Image, name string) (v1.Hash, error) {
-	recorded, err := s.bk.UpperBinding(context.Background(), name)
+func (s *Store) CommitNamedUpper(ctx context.Context, img *Image, name string) (v1.Hash, error) {
+	recorded, err := s.bk.UpperBinding(ctx, name)
 	if err != nil {
 		return v1.Hash{}, err
 	}
 	if recorded != img.Hash() {
 		return v1.Hash{}, fmt.Errorf("upper %q is bound to base %s; refusing commit over %s", name, recorded, img.Hash())
 	}
-	return s.CommitUpper(img, s.UpperDir(name))
+	return s.CommitUpper(ctx, img, s.UpperDir(name))
 }

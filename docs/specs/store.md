@@ -119,7 +119,16 @@ direction. No clock, no heartbeat, ever decides death.
 Version discipline: every value whose shape can evolve carries a
 version discriminator, and a foreign version is handled exactly as
 that keyspace's absent-row case — never a hard failure for
-regenerable records.
+regenerable records — with one exception: a foreign-version INGEST
+LEASE row is an unknown holder and means wait, never claim. An
+older binary treating a newer one's live lease as absent would put
+two writers on the content tiers, the exact state
+REQ-store-single-writer exists to forbid. The mounts keyspace's
+foreign rows are likewise never acted on destructively
+(REQ-store-mount-registry reclaims only rows it can decode and
+judge dead). Lease rows additionally carry a per-acquisition
+nonce: release matches identity and nonce, so no release can drop
+another acquisition's hold.
 
 **REQ-store-adopt** (behavior): Store initialization MUST refuse a
 work directory holding store state it does not recognize as this
