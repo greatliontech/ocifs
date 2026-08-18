@@ -35,7 +35,7 @@ report publication marker.
       lease (nonce, in-process slot, self-reclaim delete);
       op-<id> locks replace op-owner verdicts; sweep's dead-sweeper
       rule becomes a try-lock; condemned-set fencing unchanged.
-- [ ] 7. gmdb: reader-slot liveness reworked onto OFD byte-range
+- [x] 7. gmdb: reader-slot liveness reworked onto OFD byte-range
       locks (heartbeat and PID-namespace machinery deletes);
       cross-process.md rewritten; gmdb's own crash/soak suites are
       the net. Committed in gmdb; tag; ocifs bump.
