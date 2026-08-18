@@ -202,6 +202,16 @@ const localImageVersion = 1
 // reachable (REQ-store-gc-roots) until explicitly removed.
 func (b *bookkeeping) LocalImagePut(ctx context.Context, manifest v1.Hash, createdUnix int64) error {
 	return b.db.Update(ctx, func(tx *gmdb.Tx) error {
+		// The row is a root: consult the condemned set like every
+		// root-publishing write (REQ-store-gc-safe). Commit holds
+		// the ingest lease here, which already excludes the sweep —
+		// the consult keeps the fence uniform rather than making
+		// localimages the one lease-argued exception.
+		if cond, cerr := b.s.condemnedByLiveSweep(ctx, tx, manifest); cerr != nil {
+			return cerr
+		} else if cond {
+			return ErrCondemned
+		}
 		ks, err := tx.OpenKeyspace(ksLocalImages)
 		if err != nil {
 			return err

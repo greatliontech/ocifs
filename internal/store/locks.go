@@ -74,14 +74,14 @@ func upperDirOf(path, name string) string {
 	return filepath.Join(path, "uppers", name)
 }
 
-// mountClaimHeld is the judge-only three-valued verdict on a mount
-// id's claim (held-lock liveness): acquired means dead — released
+// claimHeld is the judge-only three-valued verdict on any claim
+// lock (held-lock liveness): acquired means dead — released
 // immediately without unlink, the deferral shape, leaving disposal
 // to the sweep — and both held and UNDECIDED read as alive, because
 // undecided is never death. Callers that must KEEP the acquisition
 // (reclamation) take the lock themselves.
-func (s *Store) mountClaimHeld(id string) bool {
-	l, err := oslock.TryAcquire(s.mountLockPath(id))
+func claimHeld(path string) bool {
+	l, err := oslock.TryAcquire(path)
 	if err == nil {
 		l.Close()
 		return false
@@ -89,13 +89,18 @@ func (s *Store) mountClaimHeld(id string) bool {
 	return true
 }
 
-// mountRowExists reports whether ANY mounts row occupies the id —
-// decodable or foreign — with an undecided read counting as
-// existing (never a destruction verdict).
-func (s *Store) mountRowExists(ctx context.Context, id string) bool {
+// mountClaimHeld is claimHeld over a mount id's claim.
+func (s *Store) mountClaimHeld(id string) bool {
+	return claimHeld(s.mountLockPath(id))
+}
+
+// rowExists reports whether ANY row occupies the id in the named
+// keyspace — decodable or foreign — with an undecided read counting
+// as existing (never a destruction verdict).
+func (s *Store) rowExists(ctx context.Context, keyspace, id string) bool {
 	exists := true
-	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
-		ks, err := rtx.OpenKeyspaceReadOnly(ksMounts)
+	err := dbView(ctx, s.bk.db, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(keyspace)
 		if err != nil {
 			return err
 		}
@@ -129,14 +134,19 @@ func (s *Store) sweepLockTier(ctx context.Context) {
 		if err != nil {
 			continue // held (live) or undecided: untouched
 		}
+		// RAW row existence, never decodability: a foreign-version
+		// row deliberately reads as absent through the decoding
+		// getters (heal-as-absent), but its FILE must stay with the
+		// row (the deferral shape). Only a proven-absent row makes
+		// the file residue-free; an undecided read keeps it too.
 		if id, ok := strings.CutPrefix(name, "mount-"); ok {
-			// RAW row existence, never decodability: a
-			// foreign-version row deliberately reads as absent
-			// through MountGet (heal-as-absent), but its FILE must
-			// stay with the row (the deferral shape). Only a
-			// proven-absent row makes the file residue-free; an
-			// undecided read keeps it too.
-			if s.mountRowExists(ctx, id) {
+			if s.rowExists(ctx, ksMounts, id) {
+				l.Close()
+				continue
+			}
+		}
+		if id, ok := strings.CutPrefix(name, "op-"); ok {
+			if s.rowExists(ctx, ksOps, id) {
 				l.Close()
 				continue
 			}

@@ -43,13 +43,13 @@ type GCResult struct {
 	CollectedPaths []string
 	// ReclaimedMounts lists dead mount ids reclaimed.
 	ReclaimedMounts []string
-	// ForeignVersionRows lists LIVE mounts rows written by a
-	// different ocifs version: their liveness is judged by lock
-	// like any row, but a live one's image cannot be read by this
-	// binary, so image-tier collection halts visibly — the one
-	// irreducible foreign-version conservatism
-	// (REQ-store-bookkeeping). Dead foreign rows reclaim normally
-	// and are never listed.
+	// ForeignVersionRows lists LIVE mounts or ops rows written by
+	// a different ocifs version: their liveness is judged by lock
+	// like any row, but a live one's image or pins cannot be read
+	// by this binary, so image-tier collection halts visibly — the
+	// one irreducible foreign-version conservatism
+	// (REQ-store-bookkeeping). Dead foreign rows halt nothing and
+	// are never listed.
 	ForeignVersionRows []string
 	// Deferred lists items whose deletion failed this pass; they
 	// stay condemnation-eligible and retry next pass.
@@ -71,12 +71,12 @@ func (s *Store) Collect(ctx context.Context, opts CollectOpts) (*GCResult, error
 	// The sweep is itself an operation, and it runs under the
 	// ingest lease: leased writers and the sweep exclude each other
 	// structurally (REQ-store-gc-safe).
-	tok, err := s.AcquireIngestLease(ctx)
+	lease, err := s.AcquireIngestLease(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = s.ReleaseIngestLease(context.WithoutCancel(ctx), tok) }()
-	sweepOp, err := s.BeginOp(ctx, "sweep", nil, nil)
+	defer func() { _ = s.ReleaseIngestLease(context.WithoutCancel(ctx), lease) }()
+	sweepOp, err := s.BeginOp(ctx, opKindSweep, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +101,8 @@ func (s *Store) Collect(ctx context.Context, opts CollectOpts) (*GCResult, error
 		return nil, err
 	}
 	if len(foreignRows) > 0 {
-		// A foreign-version mounts row makes the mark unjudgeable:
-		// its mount may be live and its image unreadable to this
+		// A live foreign-version mounts or ops row makes the mark
+		// unjudgeable: its image or pins are unreadable to this
 		// binary. Debris was reclaimed above; image-tier collection
 		// stops here, visibly (REQ-store-gc-safe: false-dead — and
 		// false-unrooted — never destroys served content).
@@ -143,10 +143,11 @@ func (s *Store) Collect(ctx context.Context, opts CollectOpts) (*GCResult, error
 
 	// Condemn inside one write transaction, re-verifying roots
 	// (REQ-store-gc-safe); then delete files; then clear rows.
-	condemned, err := s.condemn(ctx, sweepOp, due)
+	condemned, deferredPaths, err := s.condemn(ctx, sweepOp.ID, due)
 	if err != nil {
 		return nil, err
 	}
+	res.Deferred = append(res.Deferred, deferredPaths...)
 	for _, item := range condemned {
 		if err := s.deleteItem(ctx, item, res); err != nil {
 			// Deferral, visibly: clear the condemned row, keep the
@@ -189,10 +190,21 @@ type markedMount struct {
 	foreign bool
 }
 
+// markedOp is an ops row awaiting the same treatment.
+type markedOp struct {
+	id      string
+	pins    []v1.Hash
+	foreign bool
+}
+
 func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
+	if markHook != nil {
+		markHook()
+	}
 	var roots []v1.Hash
 	var foreignRows []string
 	var mountRows []markedMount
+	var opRows []markedOp
 	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
 		refs, err := rtx.OpenKeyspaceReadOnly(ksRefs)
 		if err != nil {
@@ -237,12 +249,11 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
 		if err != nil {
 			return err
 		}
-		for _, v := range ops.All() {
+		for k, v := range ops.All() {
 			rec, derr := decodeOpRecord(v)
-			if derr != nil || rec.Owner.Dead() {
-				continue
-			}
-			roots = append(roots, rec.Pins...)
+			opRows = append(opRows, markedOp{
+				id: string(k), pins: rec.Pins, foreign: derr != nil,
+			})
 		}
 		return nil
 	})
@@ -266,6 +277,20 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
 			continue
 		}
 		roots = append(roots, m.image)
+	}
+	// Ops rows: identical treatment — a LIVE foreign-version op row
+	// pins digests this binary cannot read, so it halts image-tier
+	// collection exactly like a live foreign mounts row
+	// (REQ-store-bookkeeping); dead rows pin nothing.
+	for _, o := range opRows {
+		if !s.opClaimHeld(o.id) {
+			continue
+		}
+		if o.foreign {
+			foreignRows = append(foreignRows, o.id)
+			continue
+		}
+		roots = append(roots, o.pins...)
 	}
 	return roots, foreignRows, nil
 }
@@ -479,26 +504,95 @@ func walkDigestTier(root string, fn func(v1.Hash)) error {
 
 // tempOwnedByLiveOp reports whether any live ops row records p.
 func (s *Store) tempOwnedByLiveOp(ctx context.Context, p string) bool {
-	owned := false
-	_ = s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
+	type opTemps struct {
+		id    string
+		temps []string
+	}
+	var rows []opTemps
+	verr := dbView(ctx, s.bk.db, func(rtx *gmdb.ReadTx) error {
 		ks, err := rtx.OpenKeyspaceReadOnly(ksOps)
 		if err != nil {
 			return err
 		}
-		for _, v := range ks.All() {
+		for k, v := range ks.All() {
 			rec, derr := decodeOpRecord(v)
-			if derr != nil || rec.Owner.Dead() {
-				continue
+			if derr != nil {
+				continue // foreign temps unreadable: not matchable
+			}
+			rows = append(rows, opTemps{id: string(k), temps: rec.Temps})
+		}
+		return nil
+	})
+	if verr != nil {
+		// An undecided read is never a destruction verdict
+		// (held-lock liveness): an unreadable ops keyspace reads as
+		// "owned" and the path survives this pass.
+		return true
+	}
+	for _, r := range rows {
+		for _, t := range r.temps {
+			if t == p && s.opClaimHeld(r.id) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pathReclaimed reports whether a path candidate has been re-owned
+// since enumeration: a mounts state directory whose id's claim is
+// now held, or a temporary an op row records (ownedTemps, one
+// snapshot per condemnation — never one read transaction per
+// candidate under the write grant; the caller defers everything
+// when the snapshot is undecided). Condemnation re-checks path
+// items with this exactly as it re-marks digests
+// (REQ-store-gc-safe).
+func (s *Store) pathReclaimed(p string, ownedTemps map[string]string) bool {
+	mountsRoot := filepath.Join(s.path, "mounts") + string(filepath.Separator)
+	if rest, ok := strings.CutPrefix(p, mountsRoot); ok {
+		id := rest
+		if i := strings.IndexByte(rest, filepath.Separator); i >= 0 {
+			id = rest[:i]
+		}
+		if s.mountClaimHeld(id) {
+			return true
+		}
+	}
+	if op, ok := ownedTemps[p]; ok && s.opClaimHeld(op) {
+		return true
+	}
+	return false
+}
+
+// opsTempsSnapshot maps every recorded temporary to its op id —
+// one read pass, judged lazily per hit. A nil return means the
+// read was undecided.
+func (s *Store) opsTempsSnapshot(ctx context.Context) map[string]string {
+	owned := map[string]string{}
+	err := dbView(ctx, s.bk.db, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksOps)
+		if err != nil {
+			return err
+		}
+		for k, v := range ks.All() {
+			rec, derr := decodeOpRecord(v)
+			if derr != nil {
+				continue // foreign temps unreadable: not matchable
 			}
 			for _, t := range rec.Temps {
-				if t == p {
-					owned = true
-					return nil
-				}
+				owned[t] = string(k)
 			}
 		}
 		return nil
 	})
+	if err != nil {
+		// Reachable only on a transient: rootSet reads this same
+		// keyspace moments earlier in the same condemnation and
+		// propagates ITS failure as a hard error of the pass — that
+		// ordering is what bounds the deferral below; a reordering
+		// that drops the rootSet read would silently unbound it.
+		return nil
+	}
 	return owned
 }
 
@@ -558,23 +652,39 @@ func (s *Store) applyGrace(ctx context.Context, candidates []gcItem, grace time.
 	return due, err
 }
 
-// condemn re-verifies roots and writes the condemned set inside one
-// write transaction (REQ-store-gc-safe). Items reachable under the
-// fresh snapshot are dropped.
-func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gcItem, error) {
-	roots, foreignRows, err := s.rootSet(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(foreignRows) > 0 {
-		return nil, nil // unjudgeable: condemn nothing
-	}
-	reachable, err := s.reachableFrom(ctx, roots)
-	if err != nil {
-		return nil, err
-	}
+// markHook fires at the top of every mark (rootSet) — the seam
+// that lets a test assert condemn's re-mark runs UNDER the write
+// grant: hoisting the mark out of the transaction moves this hook
+// with it, and the test's probe write then succeeds where it must
+// fail. Never set outside tests.
+var markHook func()
+
+// condemn re-marks and writes the condemned set INSIDE one write
+// transaction (REQ-store-gc-safe): the re-mark runs while this
+// transaction holds the database's write grant, so every root
+// publish is serialized either before it — a fresh read snapshot
+// under the grant sees all committed roots, and nothing new can
+// commit while it is held — or after the condemned rows exist,
+// where the publisher's consult refuses. No fence reasoning about
+// the acquisition-to-row span is needed: the ordering is the
+// writer's own serialization. Items reachable under the re-mark
+// are dropped.
+func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gcItem, []string, error) {
 	var out []gcItem
-	err = s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+	var deferredPaths []string
+	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+		roots, foreignRows, err := s.rootSet(ctx)
+		if err != nil {
+			return err
+		}
+		if len(foreignRows) > 0 {
+			return nil // unjudgeable: condemn nothing
+		}
+		reachable, err := s.reachableFrom(ctx, roots)
+		if err != nil {
+			return err
+		}
+		ownedTemps := s.opsTempsSnapshot(ctx)
 		ks, err := tx.OpenKeyspace(ksGC)
 		if err != nil {
 			return err
@@ -583,6 +693,24 @@ func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gc
 			if c.tier != "path" && reachable[c.tier+"\x00"+c.digest.Algorithm+"\x00"+c.digest.Hex] {
 				continue
 			}
+			// Path items get the same fresh re-check as digests:
+			// ownership may have appeared since enumeration (a
+			// registrant claiming the id, an op adopting the temp).
+			// An UNDECIDED snapshot defers them VISIBLY: a re-owned
+			// path is not garbage and stays silent, but a skip the
+			// operator did not cause must never be one they cannot
+			// see (Deferred is the vocabulary for exactly this).
+			if c.tier == "path" {
+				if ownedTemps == nil {
+					// The keyed form, matching every other Deferred
+					// element (one parse rule for the whole list).
+					deferredPaths = append(deferredPaths, c.key())
+					continue
+				}
+				if s.pathReclaimed(c.path, ownedTemps) {
+					continue
+				}
+			}
 			if err := ks.Put([]byte(gcCondemnedPrefix+c.key()), []byte(sweepOp)); err != nil {
 				return err
 			}
@@ -590,13 +718,13 @@ func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gc
 		}
 		return nil
 	})
-	return out, err
+	return out, deferredPaths, err
 }
 
 // condemnedByLiveSweep reports whether the digest is condemned by a
 // LIVE sweeper — the consult every unleased root-publishing write
 // runs (REQ-store-gc-safe).
-func (s *Store) condemnedByLiveSweep(rtxCtx context.Context, tx *gmdb.Tx, h v1.Hash) (bool, error) {
+func (s *Store) condemnedByLiveSweep(_ context.Context, tx *gmdb.Tx, h v1.Hash) (bool, error) {
 	gcks, err := tx.OpenKeyspace(ksGC)
 	if err != nil {
 		return false, err
@@ -613,20 +741,81 @@ func (s *Store) condemnedByLiveSweep(rtxCtx context.Context, tx *gmdb.Tx, h v1.H
 		if err != nil {
 			return false, err
 		}
-		ov, err := ops.Get(v)
-		if errors.Is(err, gmdb.ErrNotFound) {
-			continue // sweeper's op row gone: binds nobody
-		}
-		if err != nil {
+		sweeper := string(v)
+		if _, err := ops.Get(v); errors.Is(err, gmdb.ErrNotFound) {
+			// Row gone: a finished sweeper binds nobody, and its
+			// stale condemned rows are provably clearable without
+			// any lock — the same clearing rule as the dead arm.
+			if err := clearCondemnedOf(gcks, sweeper); err != nil {
+				return false, err
+			}
+			continue
+		} else if err != nil {
 			return false, err
 		}
-		rec, derr := decodeOpRecord(ov)
-		if derr != nil || rec.Owner.Dead() {
-			continue // dead sweeper binds nobody
+		// The sweeper's liveness is its claim lock — one probe,
+		// held through the clearing: a dead sweeper binds nobody,
+		// and the judge clears its debris rows before releasing
+		// (REQ-store-gc-safe) so later consults meet nothing. The
+		// release is WITHOUT unlink: the sweeper's row still exists
+		// and its file follows the row's own reclamation path
+		// (deferral shape — foreign rows defer indefinitely).
+		l, lerr := oslock.TryAcquire(s.opLockPath(sweeper))
+		if lerr != nil {
+			return true, nil // held or undecided: a live sweeper binds
 		}
-		return true, nil
+		if err := clearCondemnedOf(gcks, sweeper); err != nil {
+			l.Close()
+			return false, err
+		}
+		l.Close()
 	}
 	return false, nil
+}
+
+// sweeperVerdict is a condemned-row judge's three-valued reading.
+// The zero value is sweeperLive DELIBERATELY: an error path that
+// discards the verdict falls on the safe, binding side.
+type sweeperVerdict int
+
+const (
+	sweeperLive sweeperVerdict = iota // row present, claim held or undecided
+	sweeperDead                       // row present, claim acquirable
+	sweeperGone                       // row absent: the sweeper finished
+)
+
+// sweeperLiveness is the judge-only reading of a condemned row's
+// sweeper (gcRowHygiene): a finished sweeper (row gone) binds
+// nobody without any lock probe; otherwise the claim lock decides,
+// non-blocking (this runs inside write transactions). The consult
+// probes-and-HOLDS instead, so it does not share this.
+func (s *Store) sweeperLiveness(ops *gmdb.Keyspace, sweeper string) (sweeperVerdict, error) {
+	if _, err := ops.Get([]byte(sweeper)); errors.Is(err, gmdb.ErrNotFound) {
+		return sweeperGone, nil
+	} else if err != nil {
+		return sweeperLive, err
+	}
+	if s.opClaimHeld(sweeper) {
+		return sweeperLive, nil
+	}
+	return sweeperDead, nil
+}
+
+// clearCondemnedOf deletes every condemned row a sweeper wrote —
+// the debris a dead sweeper leaves (its final holder disposes it).
+func clearCondemnedOf(gcks *gmdb.Keyspace, sweeper string) error {
+	var drop [][]byte
+	for k, v := range gcks.All() {
+		if strings.HasPrefix(string(k), gcCondemnedPrefix) && string(v) == sweeper {
+			drop = append(drop, append([]byte(nil), k...))
+		}
+	}
+	for _, k := range drop {
+		if err := gcks.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) deleteItem(ctx context.Context, it gcItem, res *GCResult) error {
@@ -713,6 +902,19 @@ func (s *Store) gcDelete(ctx context.Context, key string) error {
 // filesystem where removal works. Never reassigned outside tests.
 var removeMountState = os.RemoveAll
 
+// removeOpTemp is removeMountState's sibling for a dead op's
+// recorded temporaries. Never reassigned outside tests.
+var removeOpTemp = os.RemoveAll
+
+// dbView is the read-transaction entry every liveness-adjacent
+// verdict read goes through — a variable only so the
+// undecided-read arms (a failed View must never become a
+// destruction verdict) are testable on a healthy database. Never
+// reassigned outside tests.
+var dbView = func(ctx context.Context, db *gmdb.DB, fn func(*gmdb.ReadTx) error) error {
+	return db.View(ctx, fn)
+}
+
 // ReclaimDeadMounts reclaims dead mounts' rows, state directories,
 // and claim files (REQ-store-mount-registry): a row whose claim
 // lock a try-acquisition takes is a dead mount — the verdict for
@@ -773,11 +975,12 @@ func (s *Store) ReclaimDeadMounts(ctx context.Context) ([]string, error) {
 // reclaimDeadOps removes dead ops rows and the temporaries they
 // own, wherever they live (REQ-store-gc-collect).
 func (s *Store) reclaimDeadOps(ctx context.Context, res *GCResult) error {
-	type deadOp struct {
-		id    string
-		temps []string
+	type opRow struct {
+		id      string
+		temps   []string
+		foreign bool
 	}
-	var dead []deadOp
+	var rows []opRow
 	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
 		ks, err := rtx.OpenKeyspaceReadOnly(ksOps)
 		if err != nil {
@@ -785,33 +988,67 @@ func (s *Store) reclaimDeadOps(ctx context.Context, res *GCResult) error {
 		}
 		for k, v := range ks.All() {
 			rec, derr := decodeOpRecord(v)
-			if derr != nil {
-				continue // foreign rows: never acted on
-			}
-			if rec.Owner.Dead() {
-				dead = append(dead, deadOp{id: string(k), temps: rec.Temps})
-			}
+			rows = append(rows, opRow{id: string(k), temps: rec.Temps, foreign: derr != nil})
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	for _, d := range dead {
-		for _, tmp := range d.temps {
-			if err := os.RemoveAll(tmp); err == nil {
-				res.CollectedPaths = append(res.CollectedPaths, tmp)
-			}
-		}
-		if err := s.EndOp(ctx, d.id); err != nil {
+	for _, d := range rows {
+		// The verdict IS the claim (held-lock liveness): held or
+		// undecided rows are live and untouched; an acquired row is
+		// dead — temporaries first (fallible), then the row, then
+		// the lock file as its final holder. Failure releases
+		// without unlink: row and file persist for retry. A dead
+		// FOREIGN row defers wholesale: its recorded temporaries
+		// are unreadable to this binary and a caller-target
+		// temporary is reachable through nothing else, so the row
+		// and file stay for a binary that can read them — reclaim
+		// what the key alone names, defer what needs the value
+		// (in-store dot-temporaries still fall to the orphan sweep
+		// as unowned debris).
+		if d.foreign {
 			continue
 		}
+		l, lerr := oslock.TryAcquire(s.opLockPath(d.id))
+		if lerr != nil {
+			continue
+		}
+		acted := true
+		for _, tmp := range d.temps {
+			if err := removeOpTemp(tmp); err != nil {
+				acted = false
+				continue
+			}
+			res.CollectedPaths = append(res.CollectedPaths, tmp)
+		}
+		if !acted {
+			l.Close()
+			continue
+		}
+		err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+			ks, err := tx.OpenKeyspace(ksOps)
+			if err != nil {
+				return err
+			}
+			err = ks.Delete([]byte(d.id))
+			if errors.Is(err, gmdb.ErrNotFound) {
+				return nil
+			}
+			return err
+		})
+		if err != nil {
+			l.Close()
+			continue
+		}
+		l.Retire()
 	}
 	return nil
 }
 
 // DebrisSweep is the initialization sweep (REQ-store-gc-collect):
-// dead mount and ops rows, dead leases, unowned export
+// dead mount and ops rows, stranded lock files, unowned export
 // temporaries, orphaned tier files — no reachability mark, no
 // grace.
 func (s *Store) DebrisSweep(ctx context.Context) (*GCResult, error) {
@@ -917,16 +1154,11 @@ func (s *Store) gcRowHygiene(ctx context.Context, candidates []gcItem) error {
 					drop = append(drop, append([]byte(nil), k...))
 				}
 			case strings.HasPrefix(key, gcCondemnedPrefix):
-				ov, err := ops.Get(v)
-				if errors.Is(err, gmdb.ErrNotFound) {
-					drop = append(drop, append([]byte(nil), k...))
-					continue
-				}
+				verdict, err := s.sweeperLiveness(ops, string(v))
 				if err != nil {
 					return err
 				}
-				rec, derr := decodeOpRecord(ov)
-				if derr != nil || rec.Owner.Dead() {
+				if verdict != sweeperLive {
 					drop = append(drop, append([]byte(nil), k...))
 				}
 			}

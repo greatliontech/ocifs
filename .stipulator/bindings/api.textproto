@@ -318,7 +318,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-gc"
-  content_hash: "4f08138ae127ff95e4560de1ad0ad647a4871dd9140b542f0f68459a8394cf32"
+  content_hash: "a1cb78ae52cee9d2f663e5c579c4b38760c6bebac1b0490268f131acf4489c11"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestGCPublicSurface"
   role: BINDING_ROLE_TESTS
@@ -327,7 +327,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-gc"
-  content_hash: "4f08138ae127ff95e4560de1ad0ad647a4871dd9140b542f0f68459a8394cf32"
+  content_hash: "a1cb78ae52cee9d2f663e5c579c4b38760c6bebac1b0490268f131acf4489c11"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.OCIFS.GC"
   role: BINDING_ROLE_IMPLEMENTS

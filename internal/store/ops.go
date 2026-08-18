@@ -4,43 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"sync"
-	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/uuid"
 	"github.com/greatliontech/gmdb"
+	"github.com/greatliontech/gmdb/oslock"
 )
 
 // The ops keyspace (docs/specs/store.md REQ-store-bookkeeping)
-// holds one row per in-flight extra-transactional operation: the
-// ingest lease, export materializations, commits. A live row's
-// pinned digests are collection roots and its recorded temporaries
-// are exempt from sweeps; a dead row is debris, its temporaries
-// swept wherever they live.
+// holds one row per in-flight extra-transactional operation: export
+// materializations, commits, sweeps. A row's claim lock (held-lock
+// liveness) is its life: while held, its pinned digests are
+// collection roots and its recorded temporaries are sweep-exempt;
+// unheld, the row is debris. The ingest lease is not a row at all —
+// it is the locks/ingest lock itself (REQ-store-single-writer).
 
 const opRecVersion = 1
 
-// Operation kinds. The ingest lease is the distinguished singleton
-// op enforcing REQ-store-single-writer.
+// Operation kinds.
 const (
-	opKindIngest = "ingest"
 	opKindExport = "export"
+	opKindSweep  = "sweep"
 )
 
-// ingestLeaseKey is the lease's fixed row key: one ingesting
-// process at a time means one row to contend on.
-const ingestLeaseKey = "ingest-lease"
-
-// OpRecord is the ops-row value.
+// OpRecord is the ops-row value. Owner is diagnostic identity only
+// (held-lock liveness): it never decides the op's liveness — the
+// claim lock does.
 type OpRecord struct {
 	Kind  string
 	Owner LivenessIdentity
-	// Nonce distinguishes acquisitions within one process: release
-	// matches identity AND nonce, so an unpaired release can never
-	// drop another acquisition's lease.
-	Nonce string
 	Pins  []v1.Hash
 	Temps []string
 }
@@ -53,7 +45,6 @@ func encodeOpRecord(rec OpRecord) []byte {
 	w.u64(rec.Owner.StartTime)
 	w.str(rec.Owner.PidNS)
 	w.str(rec.Owner.BootID)
-	w.str(rec.Nonce)
 	w.u64(uint64(len(rec.Pins)))
 	for _, p := range rec.Pins {
 		w.str(p.Algorithm)
@@ -65,6 +56,12 @@ func encodeOpRecord(rec OpRecord) []byte {
 	}
 	return w.buf
 }
+
+// errForeignOpVersion marks an ops row written by a different ocifs
+// version: handled as the absent-row case for the record's CONTENT
+// (pins and temps unreadable), while the row's liveness stays
+// judgeable through its claim lock (REQ-store-bookkeeping).
+var errForeignOpVersion = errors.New("foreign op record version")
 
 func decodeOpRecord(data []byte) (OpRecord, error) {
 	var rec OpRecord
@@ -89,9 +86,6 @@ func decodeOpRecord(data []byte) (OpRecord, error) {
 		return rec, err
 	}
 	if rec.Owner.BootID, err = r.str(); err != nil {
-		return rec, err
-	}
-	if rec.Nonce, err = r.str(); err != nil {
 		return rec, err
 	}
 	n, err := r.u64()
@@ -133,161 +127,55 @@ func decodeOpRecord(data []byte) (OpRecord, error) {
 }
 
 // AcquireIngestLease takes the cross-process ingest lease
-// (REQ-store-single-writer): one write transaction claims the
-// fixed lease row — absent or dead-held rows claim immediately, a
-// live-held row waits and retries until the context ends. The lease
+// (REQ-store-single-writer): the held locks/ingest claim lock
+// itself — no row, no nonce, no in-process slot. Distinct open file
+// descriptions exclude each other in-process exactly as across
+// processes, a crashed holder's lease releases with its process,
+// and a waiter proceeds promptly once the kernel frees the lock,
+// cancellably and without leaving abandoned waiters. The lease
 // spans content writes through the root-row commit; the caller
 // releases with ReleaseIngestLease.
-// errForeignOpVersion marks an ops row written by a different ocifs
-// version. For the LEASE it means wait, never claim: an older
-// binary treating a newer one's live lease as absent would put two
-// writers on the content tiers (REQ-store-single-writer overrides
-// the general foreign-version-as-absent rule here —
-// REQ-store-bookkeeping).
-var errForeignOpVersion = errors.New("foreign op record version")
-
-// processLease is the in-process half of the ingest lease: a
-// per-store-root slot serializing this process's acquisitions
-// (ctx-aware, unlike a bare mutex), so a self-owned lease ROW seen
-// while holding the slot is unambiguous residue of a failed
-// release — reclaimable — never a sibling goroutine's live hold.
-type processLease struct {
-	sem    chan struct{}
-	mu     sync.Mutex
-	holder string
-}
-
-var leaseSlots sync.Map // cleaned store root -> *processLease
-
-func leaseSlotFor(root string) *processLease {
-	v, _ := leaseSlots.LoadOrStore(filepath.Clean(root), &processLease{sem: make(chan struct{}, 1)})
-	return v.(*processLease)
-}
-
-func (s *Store) AcquireIngestLease(ctx context.Context) (string, error) {
-	nonce := fmt.Sprintf("%d-%s", selfIdentity().Pid, uuid.NewString())
-	slot := leaseSlotFor(s.path)
-	select {
-	case slot.sem <- struct{}{}:
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-	release := func() { <-slot.sem }
-	backoff := 10 * time.Millisecond
-	for {
-		claimed := false
-		err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
-			ks, err := tx.OpenKeyspace(ksOps)
-			if err != nil {
-				return err
-			}
-			v, err := ks.Get([]byte(ingestLeaseKey))
-			if err == nil {
-				rec, derr := decodeOpRecord(v)
-				switch {
-				case errors.Is(derr, errForeignOpVersion):
-					return nil // unknown holder: wait, never claim
-				case derr == nil && rec.Owner == selfIdentity():
-					// This process's own residue (a failed release):
-					// reclaimable — in-process content safety rests
-					// on the shared ingest mutex, not the lease.
-				case derr == nil && !rec.Owner.Dead():
-					return nil // live foreign holder: wait
-				default:
-					// Dead holder, or a torn current-version row
-					// (transactionally impossible; debris either
-					// way): claimable.
-				}
-			} else if !errors.Is(err, gmdb.ErrNotFound) {
-				return err
-			}
-			if err := ks.Put([]byte(ingestLeaseKey), encodeOpRecord(OpRecord{
-				Kind:  opKindIngest,
-				Owner: selfIdentity(),
-				Nonce: nonce,
-			})); err != nil {
-				return err
-			}
-			claimed = true
-			return nil
-		})
-		if err != nil {
-			release()
-			return "", err
-		}
-		if claimed {
-			slot.mu.Lock()
-			slot.holder = nonce
-			slot.mu.Unlock()
-			return nonce, nil
-		}
-		select {
-		case <-ctx.Done():
-			release()
-			return "", ctx.Err()
-		case <-time.After(backoff):
-		}
-		// Bounded exponential backoff; sustained contention is
-		// ingest-vs-ingest, where fairness matters less than
-		// progress (the holder's span is one image's ingest).
-		if backoff < 500*time.Millisecond {
-			backoff *= 2
-		}
-	}
-}
-
-// ReleaseIngestLease drops the lease after the root row committed.
-// Only this acquisition's own row — identity AND nonce — is
-// deleted; a successor's or sibling acquisition's lease is never
-// clobbered. A failed release is retried once; residue beyond that
-// is reclaimed by this process's next acquisition (never by the
-// clock).
-func (s *Store) ReleaseIngestLease(ctx context.Context, nonce string) error {
-	self := selfIdentity()
-	release := func() error {
-		return s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
-			ks, err := tx.OpenKeyspace(ksOps)
-			if err != nil {
-				return err
-			}
-			v, err := ks.Get([]byte(ingestLeaseKey))
-			if errors.Is(err, gmdb.ErrNotFound) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			rec, derr := decodeOpRecord(v)
-			if derr != nil || rec.Owner != self || rec.Nonce != nonce {
-				return nil
-			}
-			return ks.Delete([]byte(ingestLeaseKey))
-		})
-	}
-	err := release()
+func (s *Store) AcquireIngestLease(ctx context.Context) (*oslock.Lock, error) {
+	l, err := oslock.Acquire(ctx, s.ingestLockPath())
 	if err != nil {
-		err = release()
+		return nil, fmt.Errorf("ingest lease: %w", err)
 	}
-	slot := leaseSlotFor(s.path)
-	slot.mu.Lock()
-	if slot.holder == nonce {
-		slot.holder = ""
-		slot.mu.Unlock()
-		<-slot.sem
-	} else {
-		slot.mu.Unlock()
-	}
-	return err
+	return l, nil
 }
 
-// BeginOp registers an in-flight operation: its pins are collection
-// roots and its temporaries sweep-exempt while this process lives
-// (REQ-store-gc-roots). Returns the op id for EndOp.
-func (s *Store) BeginOp(ctx context.Context, kind string, pins []v1.Hash, temps []string) (string, error) {
+// ReleaseIngestLease drops the lease after the root row committed:
+// release without unlink — the lease's claim name is the permanent
+// singleton the next acquirer reuses (the lock-tier sweep retires
+// an unheld leftover, and acquisition recreates the file).
+func (s *Store) ReleaseIngestLease(ctx context.Context, l *oslock.Lock) error {
+	if l == nil {
+		return nil
+	}
+	return l.Close()
+}
+
+// OpClaim is an in-flight operation's held claim: its id names the
+// row and the lock file, and the held lock is the op's liveness
+// (held-lock liveness).
+type OpClaim struct {
+	ID   string
+	lock *oslock.Lock
+}
+
+// BeginOp registers an in-flight operation: claim lock first
+// (lock-before-row — the id is freshly generated, so the
+// acquisition cannot meet a live holder), then the row, whose pins
+// become collection roots and whose temporaries are sweep-exempt
+// while the lock is held (REQ-store-gc-roots). The write
+// transaction consults the condemned set — op registration runs
+// unleased (REQ-store-gc-safe).
+func (s *Store) BeginOp(ctx context.Context, kind string, pins []v1.Hash, temps []string) (*OpClaim, error) {
 	id := kind + "-" + uuid.NewString()
-	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
-		// Pins become roots: consult the condemned set — op
-		// registration runs unleased (REQ-store-gc-safe).
+	l, err := oslock.TryAcquire(s.opLockPath(id))
+	if err != nil {
+		return nil, fmt.Errorf("op %s claim: %w", id, err)
+	}
+	err = s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
 		for _, p := range pins {
 			if cond, cerr := s.condemnedByLiveSweep(ctx, tx, p); cerr != nil {
 				return cerr
@@ -307,22 +195,44 @@ func (s *Store) BeginOp(ctx context.Context, kind string, pins []v1.Hash, temps 
 		}))
 	})
 	if err != nil {
-		return "", err
+		// The claim never vouched for a row: release without
+		// unlink — the leftover is an acquirable dead entry for the
+		// lock-tier sweep.
+		l.Close()
+		return nil, err
 	}
-	return id, nil
+	return &OpClaim{ID: id, lock: l}, nil
 }
 
-// EndOp removes a completed operation's row.
-func (s *Store) EndOp(ctx context.Context, id string) error {
-	return s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+// EndOp removes a completed operation's row and retires its claim,
+// in that order (row removed, lock file unlinked while held, then
+// released).
+func (s *Store) EndOp(ctx context.Context, claim *OpClaim) error {
+	if claim == nil {
+		return nil
+	}
+	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
 		ks, err := tx.OpenKeyspace(ksOps)
 		if err != nil {
 			return err
 		}
-		err = ks.Delete([]byte(id))
+		err = ks.Delete([]byte(claim.ID))
 		if errors.Is(err, gmdb.ErrNotFound) {
 			return nil
 		}
 		return err
 	})
+	if err != nil {
+		// The row survives: the claim must stay its witness —
+		// release without unlink, exactly the deferral shape.
+		claim.lock.Close()
+		return err
+	}
+	return claim.lock.Retire()
+}
+
+// opClaimHeld is the judge-only three-valued verdict on an op id's
+// claim (see claimHeld).
+func (s *Store) opClaimHeld(id string) bool {
+	return claimHeld(s.opLockPath(id))
 }

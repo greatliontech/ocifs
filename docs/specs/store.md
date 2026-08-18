@@ -105,6 +105,15 @@ sweep) — the owner's diagnostic identity, the digests the operation pins
 temporary paths it owns (exempt from sweeps while the lock is held,
 swept as debris once it is not, wherever they live — including a
 caller-target export's temporary in the caller's own parent directory).
+A foreign-version `ops` row's liveness is judgeable like any claim;
+live, its pins are digests this binary cannot read, and image-tier
+collection halts visibly exactly as for a live foreign `mounts` row
+— the same irreducible conservatism; dead, its reclamation defers
+wholesale to a binary that can read it — the recorded temporaries
+are unreadable here and a caller-target temporary is reachable
+through nothing else, so row and lock file stay (reclaim what the
+key alone names, defer what needs the value; in-store
+dot-temporaries still fall to the orphan sweep as unowned debris).
 The ingest lease is not a row at all: it is the `locks/ingest` lock
 itself (REQ-store-single-writer).
 `uppers` — key: the upper name; value: the base binding — the digest of
@@ -443,30 +452,29 @@ Deletion is two-phase through the condemned set: the sweep is
 itself an `ops` operation; it re-checks reachability against a
 fresh transactional root snapshot and records the digests it will
 delete in `gc` in one write transaction, each condemned row
-carrying the sweeping op's id. What makes the re-check sound is
-not its timing but the fences: the sweep holds the ingest lease
-for its whole span, excluding every leased writer; the condemned
-consult covers the window after the condemned rows exist; and an
-unleased root publish names a digest already rooted at its
-ACQUISITION — its content was published under the lease, row-last.
-One window is open between those fences: an acquisition whose last
-root is severed between resolution and its unleased row write — a
-mount registration, an upper binding, an export pin, or the
-reference-cache row of a digest-form acquisition over fully
-materialized content, the one acquisition path that takes no lease
-at all — can publish a root for a digest a concurrently
-re-checking sweep is condemning — closed by pinning the
-acquisition-to-row span under an op claim, which no acquisition
-path holds.
+carrying the sweeping op's id. The re-mark runs while the
+condemning transaction holds the database's write grant, so the
+writer's own serialization orders every root publish — leased or
+unleased, whatever its acquisition history — either before the
+re-mark, where a fresh read snapshot under the grant sees it and
+the item is dropped, or after the condemned rows exist, where the
+publisher's consult refuses; path candidates are re-checked under
+the same grant against fresh ownership (a claimed mount id, a live
+op's temporary). The cost is deliberate: writers queue behind the
+sweep's re-mark for its duration, proportional to the reachable
+graph — correctness bought with bounded writer latency. The ingest
+lease additionally excludes
+every leased writer for the sweep's whole span.
 A condemned row whose sweeper's claim lock is
 acquirable binds nobody and is debris (a crashed sweeper must not
 wedge publication forever; the try-lock verdict is held-lock
 liveness like any other), and the judge that acquires it clears
-those debris rows and unlinks the dead sweeper's lock file before
-releasing (its final holder — held-lock liveness) — while the
-probe is held, a concurrent consult reads the dead sweeper as live
-and backs out needlessly, so the first judge leaves nothing for
-later consults to meet.
+those debris rows before releasing — while the probe is held, a
+concurrent consult reads the dead sweeper as live and backs out
+needlessly, so the first judge leaves no rows for later consults
+to meet; the sweeper's own row and lock file follow the ordinary
+reclamation path (a foreign-version sweeper's defer indefinitely,
+inert: they pin nothing and halt nothing).
 Every root-publishing write (a `refs`, `localimages`, `mounts`,
 `uppers`, or digest-pinning `ops` row) consults the live-sweeper
 condemned set in its own write transaction and backs out when its

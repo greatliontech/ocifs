@@ -83,11 +83,11 @@ func (s *Store) materializeAt(ctx context.Context, view *layer.View, final strin
 	// directory exists, so no window shows an unowned temporary to
 	// a concurrent debris sweep (REQ-store-gc-collect: every window
 	// sits inside a fence or a live ops row).
-	opID, err := s.BeginOp(ctx, opKindExport, []v1.Hash{pin}, []string{tmp})
+	opClaim, err := s.BeginOp(ctx, opKindExport, []v1.Hash{pin}, []string{tmp})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = s.EndOp(context.WithoutCancel(ctx), opID) }()
+	defer func() { _ = s.EndOp(context.WithoutCancel(ctx), opClaim) }()
 	if err := os.Mkdir(tmp, 0o755); err != nil {
 		return err
 	}

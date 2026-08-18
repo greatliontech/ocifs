@@ -17,5 +17,16 @@ stale-namespace reaping, or an flock serializing suite runs per
 package — the machine-sharing `mlock` wrapper already serializes
 heavy work but shared holders coexist and collide today).
 
-Lands: when concurrent same-package test runs on one machine are
-first needed as a supported flow, or the next collision incident.
+Second incident: a coordinator's targeted `go test -run` raced its
+own backgrounded full-suite run of the same package and failed the
+suite's store tests (transient, solo re-run green). The fix now has
+a natural mechanism that did not exist at filing: gmdb's oslock
+package gives per-run liveness witnesses, so a per-run scratch
+namespace (deterministic WITHIN the run) can be reaped exactly when
+its run's lock is acquirable — the same held-lock-liveness shape
+the store itself adopted, with none of the old staleness
+heuristics.
+
+Lands: user decision (the redesign spans the test fixtures of
+every package; scheduling is the owner's call — the interim
+discipline is one test invocation per package at a time).

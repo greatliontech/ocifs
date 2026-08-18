@@ -154,7 +154,7 @@ func TestCondemnedConsultRefusesUnleasedPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.condemn(context.Background(), sweepOp, []gcItem{{tier: "oci", digest: h}}); err != nil {
+	if _, _, err := s.condemn(context.Background(), sweepOp.ID, []gcItem{{tier: "oci", digest: h}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -334,7 +334,7 @@ func TestOwnedTempExemptFromCollection(t *testing.T) {
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	id, err := s.BeginOp(context.Background(), opKindExport, nil, []string{tmp})
+	claim, err := s.BeginOp(context.Background(), opKindExport, nil, []string{tmp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestOwnedTempExemptFromCollection(t *testing.T) {
 	if _, err := os.Stat(tmp); err != nil {
 		t.Fatalf("live op's temporary collected: %v", err)
 	}
-	if err := s.EndOp(context.Background(), id); err != nil {
+	if err := s.EndOp(context.Background(), claim); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Collect(context.Background(), CollectOpts{Grace: -1}); err != nil {
@@ -436,7 +436,7 @@ func TestCondemnReVerifiesRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.EndOp(context.Background(), op)
-	out, err := s.condemn(context.Background(), op, []gcItem{{tier: "oci", digest: img.Hash()}})
+	out, _, err := s.condemn(context.Background(), op.ID, []gcItem{{tier: "oci", digest: img.Hash()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,6 +666,198 @@ func TestReclaimDeferralKeepsRowAndFile(t *testing.T) {
 	}
 }
 
+// TestReclaimDeadOpDeferral pins the op reclamation deferral
+// (held-lock liveness): a dead op whose temporary removal fails
+// keeps BOTH its row and its lock file for a later sweep; healed,
+// the retry reclaims all three.
+func TestReclaimDeadOpDeferral(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	tmp := filepath.Join(dir, "exports", "sha256", ".export-dead-deferred")
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeOpRow(t, dir, "export-deferred", OpRecord{Kind: opKindExport, Owner: deadIdentity(), Temps: []string{tmp}}); err != nil {
+		t.Fatal(err)
+	}
+	orig := removeOpTemp
+	removeOpTemp = func(string) error { return errors.New("injected removal failure") }
+	defer func() { removeOpTemp = orig }()
+
+	res := &GCResult{}
+	if err := s.reclaimDeadOps(context.Background(), res); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := opsRows(t, dir)["export-deferred"]; !ok {
+		t.Fatal("deferral lost the op row")
+	}
+	if _, err := os.Stat(s.opLockPath("export-deferred")); err != nil {
+		t.Fatalf("deferral lost the lock file: %v", err)
+	}
+
+	removeOpTemp = orig
+	if err := s.reclaimDeadOps(context.Background(), res); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := opsRows(t, dir)["export-deferred"]; ok {
+		t.Fatal("retry left the op row")
+	}
+	if _, err := os.Stat(s.opLockPath("export-deferred")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left the lock file: %v", err)
+	}
+	if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left the temporary: %v", err)
+	}
+}
+
+// TestCondemnMarksUnderWriteGrant pins the amended
+// REQ-store-gc-safe structurally: the re-mark runs while the
+// condemning transaction holds the database's write grant — the
+// hook, firing just before the mark, attempts a second write
+// transaction under a short deadline and must FAIL, because the
+// grant is held. A mark moved back outside the transaction would
+// let the hook's write succeed.
+func TestCondemnMarksUnderWriteGrant(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("77", 32)}
+	op, err := s.BeginOp(context.Background(), opKindSweep, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.EndOp(context.Background(), op) })
+
+	var hookErr error
+	fired := false
+	markHook = func() {
+		fired = true
+		// The deadline is LOAD-BEARING: a no-deadline write here
+		// self-deadlocks on the grant this goroutine's own stack
+		// holds (gmdb's documented reentrancy rule). Never remove.
+		short, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		hookErr = s.bk.db.Update(short, func(tx *gmdb.Tx) error { return nil })
+	}
+	defer func() { markHook = nil }()
+
+	if _, _, err := s.condemn(context.Background(), op.ID, []gcItem{{tier: "oci", digest: h}}); err != nil {
+		t.Fatal(err)
+	}
+	if !fired {
+		t.Fatal("hook never fired")
+	}
+	if !errors.Is(hookErr, context.DeadlineExceeded) {
+		t.Fatalf("probe write during the re-mark: %v, want DeadlineExceeded (the held grant) — nil means the mark is not under the write grant", hookErr)
+	}
+}
+
+// TestForeignDeadOpDefers pins the foreign-dead deferral: a dead
+// foreign-version ops row keeps its row and lock file — its
+// recorded temporaries are unreadable to this binary, so
+// reclamation defers to one that can read them (reclaim what the
+// key alone names, defer what needs the value).
+func TestForeignDeadOpDefers(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	foreign := encodeOpRecord(OpRecord{Kind: opKindExport, Owner: deadIdentity()})
+	foreign[0] = opRecVersion + 1
+	if err := writeRawOpRow(t, dir, "future-dead", foreign); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := oslock.TryAcquire(s.opLockPath("future-dead")); err != nil {
+		t.Fatal(err)
+	} else {
+		l.Close()
+	}
+	res := &GCResult{}
+	if err := s.reclaimDeadOps(context.Background(), res); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(s.opLockPath("future-dead")); err != nil {
+		t.Fatalf("foreign-dead op's lock file gone: %v", err)
+	}
+	rows := opsRowsRaw(t, dir)
+	if _, ok := rows["future-dead"]; !ok {
+		t.Fatal("foreign-dead op's row reclaimed")
+	}
+	s.sweepLockTier(context.Background())
+	if _, err := os.Stat(s.opLockPath("future-dead")); err != nil {
+		t.Fatalf("lock-tier sweep ate a deferred foreign op's file: %v", err)
+	}
+}
+
+// TestUndecidedReadsNeverDestroy pins the destruction-relevant
+// undecided arms through the read seam: with every verdict View
+// failing, a live op's temporary still reads owned, a mount row
+// still reads existing (its lock file survives the tier sweep),
+// and a grace-ignoring Collect defers path candidates VISIBLY
+// instead of eating them.
+func TestUndecidedReadsNeverDestroy(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	// A live op with an in-store temporary, and a stray rowless
+	// path candidate.
+	tmp := filepath.Join(dir, "exports", "sha256", ".export-undecided")
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.BeginOp(context.Background(), opKindExport, nil, []string{tmp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.EndOp(context.Background(), claim) })
+	stray := filepath.Join(dir, "mounts", "strayreg")
+	if err := os.MkdirAll(stray, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := dbView
+	dbView = func(ctx context.Context, db *gmdb.DB, fn func(*gmdb.ReadTx) error) error {
+		return errors.New("injected read failure")
+	}
+	defer func() { dbView = orig }()
+
+	if !s.tempOwnedByLiveOp(context.Background(), tmp) {
+		t.Fatal("undecided read judged a live op's temporary unowned")
+	}
+	if !s.rowExists(context.Background(), ksMounts, "anything") {
+		t.Fatal("undecided read judged a row absent")
+	}
+	res, err := s.Collect(context.Background(), CollectOpts{Grace: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("live op's temporary destroyed under undecided reads: %v", err)
+	}
+	found := false
+	for _, d := range res.Deferred {
+		found = found || d == "path\x00"+stray
+	}
+	if !found {
+		t.Fatalf("undecided path skip not visible in Deferred (keyed form): %+v", res.Deferred)
+	}
+	if _, err := os.Stat(stray); err != nil {
+		t.Fatalf("path candidate destroyed under undecided reads: %v", err)
+	}
+}
+
 // TestMidRegistrationStateSurvivesSweep pins the lock-before-row
 // window (REQ-store-mount-registry): a registrant holds its claim
 // before its row exists, and its freshly created state directory —
@@ -734,12 +926,10 @@ func TestDeadSweeperCondemnedRowBindsNobody(t *testing.T) {
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("99", 32)}
 
-	// The dead sweeper's lease, op row, and condemned row — exactly
-	// as a kill between condemn and delete leaves them (Collect
-	// acquires the lease before its sweep op).
-	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: deadIdentity(), Nonce: "corpse"}); err != nil {
-		t.Fatal(err)
-	}
+	// The dead sweeper's op row and condemned row, with NO held
+	// claim lock — exactly as a kill between condemn and delete
+	// leaves them (the crashed lease released with the process; the
+	// lease is not a row at all).
 	if err := writeOpRow(t, dir, "sweep-corpse", OpRecord{Kind: "sweep", Owner: deadIdentity()}); err != nil {
 		t.Fatal(err)
 	}
@@ -747,16 +937,46 @@ func TestDeadSweeperCondemnedRowBindsNobody(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Publication proceeds: the dead sweeper binds nobody.
+	// Publication proceeds: the try-lock verdict reads the sweeper
+	// dead, and the judging consult clears the debris rows before
+	// releasing — later consults meet nothing. The lock FILE stays
+	// with the surviving row (the deferral shape; the row's own
+	// reclamation disposes both).
 	if err := s.bk.RefPut(context.Background(), mustRef(t, "r.io/xx:zz"), h); err != nil {
 		t.Fatalf("dead sweeper's condemned row refused publication: %v", err)
 	}
-	// The next pass drops the stale row as debris.
-	if _, err := s.Collect(context.Background(), CollectOpts{Grace: time.Hour}); err != nil {
+	if gcRowExists(t, dir, gcCondemnedPrefix+"oci\x00"+h.Algorithm+"\x00"+h.Hex) {
+		t.Fatal("judging consult left the dead sweeper's condemned row")
+	}
+	if _, err := os.Stat(s.opLockPath("sweep-corpse")); err != nil {
+		t.Fatalf("judging consult unlinked a file whose row survives: %v", err)
+	}
+	// The row-driven reclamation disposes row and file together.
+	res := &GCResult{}
+	if err := s.reclaimDeadOps(context.Background(), res); err != nil {
 		t.Fatal(err)
 	}
-	if gcRowExists(t, dir, gcCondemnedPrefix+"oci\x00"+h.Algorithm+"\x00"+h.Hex) {
-		t.Fatal("dead sweeper's condemned row survived the next pass")
+	if _, ok := opsRows(t, dir)["sweep-corpse"]; ok {
+		t.Fatal("dead sweeper's row survived reclamation")
+	}
+	if _, err := os.Stat(s.opLockPath("sweep-corpse")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dead sweeper's lock file survived reclamation: %v", err)
+	}
+
+	// A FINISHED sweeper — condemned rows outliving a deleted op
+	// row (a cancelled ctx failing the row clears while the
+	// deferred EndOp still ran) — binds nobody and the consult
+	// clears its stale rows without any lock: a crashed or finished
+	// sweeper must not wedge publication (REQ-store-gc-safe).
+	h2 := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("88", 32)}
+	if err := writeGCRow(t, dir, gcCondemnedPrefix+"oci\x00"+h2.Algorithm+"\x00"+h2.Hex, []byte("sweep-finished")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bk.RefPut(context.Background(), mustRef(t, "r.io/xx:done"), h2); err != nil {
+		t.Fatalf("finished sweeper's condemned row refused publication: %v", err)
+	}
+	if gcRowExists(t, dir, gcCondemnedPrefix+"oci\x00"+h2.Algorithm+"\x00"+h2.Hex) {
+		t.Fatal("finished sweeper's stale condemned row survived the consult")
 	}
 }
 

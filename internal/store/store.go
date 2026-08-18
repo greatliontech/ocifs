@@ -49,6 +49,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/google/uuid"
+	"github.com/greatliontech/gmdb/oslock"
 
 	"github.com/greatliontech/ocifs/internal/atomicfile"
 	"github.com/greatliontech/ocifs/internal/cas"
@@ -119,26 +120,26 @@ var ingestLocks sync.Map
 // mutex, on paths known to write), so the lock order is always
 // lease then mutex — the commit path's order.
 type leaseGuard struct {
-	s     *Store
-	token string
+	s    *Store
+	held *oslock.Lock
 }
 
 func (lg *leaseGuard) ensure(ctx context.Context) error {
-	if lg.token != "" {
+	if lg.held != nil {
 		return nil
 	}
-	tok, err := lg.s.AcquireIngestLease(ctx)
+	l, err := lg.s.AcquireIngestLease(ctx)
 	if err != nil {
 		return err
 	}
-	lg.token = tok
+	lg.held = l
 	return nil
 }
 
 func (lg *leaseGuard) release(ctx context.Context) {
-	if lg.token != "" {
-		_ = lg.s.ReleaseIngestLease(ctx, lg.token)
-		lg.token = ""
+	if lg.held != nil {
+		_ = lg.s.ReleaseIngestLease(ctx, lg.held)
+		lg.held = nil
 	}
 }
 

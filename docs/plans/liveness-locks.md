@@ -31,7 +31,7 @@ report publication marker.
       claims by acquisition, RemoveUpper takes the upper lock; the
       identity Dead() verdicts, guard rows, and claim-rewrite
       machinery delete; identity fields become diagnostic only.
-- [ ] 6. Lease and ops on locks: locks/ingest replaces the ops-row
+- [x] 6. Lease and ops on locks: locks/ingest replaces the ops-row
       lease (nonce, in-process slot, self-reclaim delete);
       op-<id> locks replace op-owner verdicts; sweep's dead-sweeper
       rule becomes a try-lock; condemned-set fencing unchanged.

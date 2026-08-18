@@ -27,9 +27,7 @@ const mountRecVersion = 1
 
 // LivenessIdentity is a recorded process's DIAGNOSTIC identity
 // (REQ-store-bookkeeping): it rides rows for inspection and never
-// decides a mount's liveness — the claim lock does. The Dead()
-// verdict survives only for ops rows, which still judge liveness
-// by identity.
+// decides liveness — every claim's claim lock does.
 type LivenessIdentity struct {
 	Pid       int64
 	StartTime uint64 // kernel start-time ticks; zero where unavailable

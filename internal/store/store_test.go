@@ -1612,6 +1612,19 @@ func TestRootSetJudgesByLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ops rows, same treatment: a live op's pins root, a dead op
+	// row (no held lock) pins nothing, a LIVE foreign op row halts.
+	deadPin := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0c", 32)}
+	livePin := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0d", 32)}
+	if err := writeOpRow(t, dir, "export-deadop", OpRecord{Kind: opKindExport, Owner: deadIdentity(), Pins: []v1.Hash{deadPin}}); err != nil {
+		t.Fatal(err)
+	}
+	opClaim, err := s.BeginOp(context.Background(), opKindExport, []v1.Hash{livePin}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.EndOp(context.Background(), opClaim) })
+
 	roots, foreignRows, err := s.rootSet(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -1629,9 +1642,64 @@ func TestRootSetJudgesByLock(t *testing.T) {
 	if !seen[liveImg] {
 		t.Fatal("live claim's image not rooted")
 	}
+	if seen[deadPin] {
+		t.Fatal("dead op's pin rooted")
+	}
+	if !seen[livePin] {
+		t.Fatal("live op claim's pin not rooted")
+	}
+
+	// A LIVE foreign op row halts image-tier collection.
+	foreignOp := encodeOpRecord(OpRecord{Kind: opKindExport, Owner: deadIdentity()})
+	foreignOp[0] = opRecVersion + 1
+	if err := writeRawOpRow(t, dir, "future-op", foreignOp); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := oslock.TryAcquire(s.opLockPath("future-op"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	_, foreignRows, err = s.rootSet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, id := range foreignRows {
+		found = found || id == "future-op"
+	}
+	if !found {
+		t.Fatalf("live foreign op row did not halt: %v", foreignRows)
+	}
 }
 
 // opsRows snapshots the ops keyspace through a second handle.
+// opsRowsRaw snapshots the ops keyspace without decoding — for
+// foreign-version rows.
+func opsRowsRaw(t testing.TB, storeDir string) map[string][]byte {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows := map[string][]byte{}
+	err = db.View(context.Background(), func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksOps)
+		if err != nil {
+			return err
+		}
+		for k, v := range ks.All() {
+			rows[string(k)] = append([]byte(nil), v...)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
 func opsRows(t testing.TB, storeDir string) map[string]OpRecord {
 	t.Helper()
 	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{ReadOnly: true})
@@ -1660,10 +1728,12 @@ func opsRows(t testing.TB, storeDir string) map[string]OpRecord {
 	return rows
 }
 
-// TestIngestLease pins REQ-store-single-writer's lease: a live
-// holder excludes a second acquirer until release; a dead holder's
-// lease claims immediately; release touches only the caller's own
-// lease.
+// TestIngestLease pins REQ-store-single-writer's lease as the held
+// locks/ingest lock: a live holder excludes a second acquirer —
+// distinct open file descriptions exclude in-process exactly as
+// across processes — until release frees the next; the lease is
+// not a row at all; a stranded unheld lock file never wedges the
+// next acquisition (it is recreated-in-place by the acquire).
 func TestIngestLease(t *testing.T) {
 	dir := scratchDir(t)
 	s1, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
@@ -1677,91 +1747,49 @@ func TestIngestLease(t *testing.T) {
 	}
 	t.Cleanup(func() { s2.Close() })
 
-	tok1, err := s1.AcquireIngestLease(context.Background())
+	l1, err := s1.AcquireIngestLease(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A live FOREIGN holder excludes; a same-process holder is
-	// reclaimable (in-process content safety is the shared ingest
-	// mutex), so the exclusion arm uses a planted foreign owner.
-	foreign := OpRecord{Kind: opKindIngest, Owner: LivenessIdentity{Pid: 1, StartTime: 12345, PidNS: selfIdentity().PidNS, BootID: selfIdentity().BootID}, Nonce: "f"}
-	if err := writeOpRow(t, dir, ingestLeaseKey, foreign); err != nil {
-		t.Fatal(err)
+	// The lease is the lock, not a row.
+	if n := len(opsRows(t, dir)); n != 0 {
+		t.Fatalf("lease acquisition wrote %d ops rows", n)
 	}
+	// A live holder excludes — the second handle is a distinct open
+	// file description in the SAME process, the arm the old
+	// slot-based design needed extra machinery for.
 	short, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 	if _, err := s2.AcquireIngestLease(short); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("second acquire under a live foreign lease: %v", err)
+		t.Fatalf("second acquire under a live lease: %v", err)
 	}
-	// A foreign owner's lease is never released by this process —
-	// nor is a same-owner row with a foreign NONCE.
-	if err := s2.ReleaseIngestLease(context.Background(), "not-mine"); err != nil {
+	if err := s1.ReleaseIngestLease(context.Background(), l1); err != nil {
 		t.Fatal(err)
 	}
-	if len(opsRows(t, dir)) != 1 {
-		t.Fatal("release dropped a lease it does not own")
-	}
-	// Releasing tok1 is a no-op now (the row is the foreign plant),
-	// harmless.
-	if err := s1.ReleaseIngestLease(context.Background(), tok1); err != nil {
-		t.Fatal(err)
-	}
-
-	// A dead holder's lease claims immediately.
-	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: deadIdentity(), Nonce: "d"}); err != nil {
-		t.Fatal(err)
-	}
-	ctx3, cancel3 := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel3()
-	tok3, err := s1.AcquireIngestLease(ctx3)
-	if err != nil {
-		t.Fatalf("claim of a dead lease: %v", err)
-	}
-	// A sibling acquisition in the same process waits on the slot,
-	// context-aware — never steals the live hold.
-	short3, cancel5 := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx5, cancel5 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel5()
-	if _, err := s2.AcquireIngestLease(short3); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("sibling acquisition under a live in-process hold: %v", err)
-	}
-	if err := s1.ReleaseIngestLease(context.Background(), tok3); err != nil {
-		t.Fatal(err)
-	}
-
-	// Self-reclaim: residue of a failed release (row present, slot
-	// free) never wedges this process's next acquisition.
-	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: selfIdentity(), Nonce: "stale-residue"}); err != nil {
-		t.Fatal(err)
-	}
-	tok4, err := s2.AcquireIngestLease(ctx3)
+	l2, err := s2.AcquireIngestLease(ctx5)
 	if err != nil {
-		t.Fatalf("self-owned residue not reclaimed: %v", err)
+		t.Fatalf("acquire after release: %v", err)
 	}
-	// A stale same-owner nonce releases NOTHING.
-	if err := s1.ReleaseIngestLease(context.Background(), "stale-residue"); err != nil {
+	if err := s2.ReleaseIngestLease(context.Background(), l2); err != nil {
 		t.Fatal(err)
-	}
-	if n := len(opsRows(t, dir)); n != 1 {
-		t.Fatalf("stale-nonce release dropped the live lease (%d rows)", n)
-	}
-	if err := s2.ReleaseIngestLease(context.Background(), tok4); err != nil {
-		t.Fatal(err)
-	}
-	if n := len(opsRows(t, dir)); n != 0 {
-		t.Fatalf("%d ops rows after release", n)
 	}
 
-	// A foreign-VERSION lease row means an unknown holder: wait,
-	// never claim (REQ-store-single-writer over foreign-as-absent).
-	foreignVer := encodeOpRecord(OpRecord{Kind: opKindIngest, Owner: deadIdentity()})
-	foreignVer[0] = opRecVersion + 1
-	if err := writeRawOpRow(t, dir, ingestLeaseKey, foreignVer); err != nil {
+	// A stranded unheld lock file (a crashed holder's leftover —
+	// the kernel released with the process) never wedges the next
+	// acquisition.
+	if l, err := oslock.TryAcquire(s1.ingestLockPath()); err != nil {
 		t.Fatal(err)
+	} else {
+		l.Close()
 	}
-	short2, cancel4 := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel4()
-	if _, err := s1.AcquireIngestLease(short2); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("foreign-version lease claimed: %v", err)
+	l3, err := s1.AcquireIngestLease(ctx5)
+	if err != nil {
+		t.Fatalf("acquire over a stranded lock file: %v", err)
+	}
+	if err := s1.ReleaseIngestLease(context.Background(), l3); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1828,23 +1856,28 @@ func TestOpRowLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	id, err := s.BeginOp(context.Background(), opKindExport, in.Pins, in.Temps)
+	claim, err := s.BeginOp(context.Background(), opKindExport, in.Pins, in.Temps)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rows := opsRows(t, dir)
-	rec, ok := rows[id]
+	rec, ok := rows[claim.ID]
 	if !ok || len(rec.Pins) != 1 || rec.Pins[0] != in.Pins[0] || len(rec.Temps) != 2 {
 		t.Fatalf("begun op row: %+v", rows)
 	}
-	if rec.Owner.Dead() {
-		t.Fatal("own op row judged dead")
+	// The op's liveness is its held claim lock (lock-before-row).
+	if _, err := oslock.TryAcquire(s.opLockPath(claim.ID)); !errors.Is(err, oslock.ErrHeld) {
+		t.Fatalf("begun op's claim not held: %v", err)
 	}
-	if err := s.EndOp(context.Background(), id); err != nil {
+	if err := s.EndOp(context.Background(), claim); err != nil {
 		t.Fatal(err)
 	}
 	if len(opsRows(t, dir)) != 0 {
 		t.Fatalf("ops rows after EndOp: %+v", opsRows(t, dir))
+	}
+	// EndOp retired the claim file (row, unlink-while-held, release).
+	if _, err := os.Stat(s.opLockPath(claim.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("op claim file survived EndOp: %v", err)
 	}
 }
 

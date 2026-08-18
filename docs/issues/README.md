@@ -1,10 +1,5 @@
 # Issues
 
-- `docs/issues/acquisition-span-unrooted.md` — unleased publishes
-  (mount registration, upper binding, export pin, digest-form
-  RefPut) hold no pin over the resolution-to-row span; a concurrent
-  sever + grace-ignoring sweep can condemn the digest inside it.
-  Fix: per-acquisition op claims. Lands: 6 (liveness-locks plan).
 - `docs/issues/fskit-darwin-validation.md` — the FSKit backend's
   portable core is linux-pinned; the platform half (signed appex,
   bridge dispatch, orchestrated mount) awaits a darwin Tier-2 run.
@@ -22,5 +17,5 @@
 - `docs/issues/concurrent-test-runs-collide-on-scratch-paths.md` —
   deterministic scratch paths make concurrent same-package test runs
   mutually destructive (tree removal and stale-mount reaping hit the
-  other run's live state). Lands: when concurrent same-package runs
-  become a supported flow, or the next collision incident.
+  other run's live state); two incidents recorded, oslock now offers
+  the fix mechanism. Lands: user decision.
