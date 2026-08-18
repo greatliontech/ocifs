@@ -130,7 +130,9 @@ FUSE view — has its own inodes and is a different filesystem, out of
 contract exactly like the network split below — can pass verdict by
 try-lock: blocked means live — a frozen process still holds and is still
 live; acquired means dead, and the acquisition IS the claim, one atomic
-act, so no verdict can go stale between judging and acting. A store
+act, so no verdict can go stale between judging and acting; any other
+outcome of the try (an open failure, a permission problem) is
+UNDECIDED — retried later, never read as death. A store
 shared beyond one locking domain (a network filesystem whose locks are
 client-local) is out of contract: two domains never see each other's
 locks, and each would judge the other's live claims dead. Process
@@ -348,8 +350,9 @@ like a pull). The span matters: a root published outside the lease
 would leave a window where the just-written content is unrooted
 and a fenceless sweep could collect it. A crashed holder's lease
 releases with its process (held-lock liveness); a second
-acquisition waits, cancellably, and proceeds the moment the kernel
-frees the lock — distinct open file descriptions exclude each
+acquisition waits, cancellably and without leaving abandoned
+waiters, and proceeds promptly once the kernel frees the lock —
+distinct open file descriptions exclude each
 other in-process exactly as across processes. Any number of
 processes read every tier and keyspace
 concurrently (projection servers are ordinary readers —

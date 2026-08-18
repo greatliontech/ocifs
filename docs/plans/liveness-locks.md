@@ -21,7 +21,7 @@ report publication marker.
 - [x] 2. Publication marker: mounts-record published flag, set by
       report publication, exposed to readers; closes
       docs/issues/mount-report-publication-marker.md.
-- [ ] 3. gmdb: export the portable lock layer as a public package
+- [x] 3. gmdb: export the portable lock layer as a public package
       (try/exclusive/unlock with inode-verified acquire), adopted
       internally; tag; ocifs go.mod bump. Committed in gmdb.
 - [ ] 4. ocifs lock plumbing: the locks tier, the init probe, and
