@@ -544,3 +544,79 @@ func TestMountIDRejectsControlBytes(t *testing.T) {
 		t.Fatal("ordinary id rejected")
 	}
 }
+
+// TestDeadSweeperCondemnedRowBindsNobody pins REQ-store-gc-safe's
+// crash clause deterministically: a condemned row whose sweeper
+// died mid-sweep refuses nothing, and the next pass drops it as
+// debris.
+func TestDeadSweeperCondemnedRowBindsNobody(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("99", 32)}
+
+	// The dead sweeper's lease, op row, and condemned row — exactly
+	// as a kill between condemn and delete leaves them (Collect
+	// acquires the lease before its sweep op).
+	if err := writeOpRow(t, dir, ingestLeaseKey, OpRecord{Kind: opKindIngest, Owner: deadIdentity(), Nonce: "corpse"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeOpRow(t, dir, "sweep-corpse", OpRecord{Kind: "sweep", Owner: deadIdentity()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeGCRow(t, dir, gcCondemnedPrefix+"oci\x00"+h.Algorithm+"\x00"+h.Hex, []byte("sweep-corpse")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Publication proceeds: the dead sweeper binds nobody.
+	if err := s.bk.RefPut(context.Background(), mustRef(t, "r.io/xx:zz"), h); err != nil {
+		t.Fatalf("dead sweeper's condemned row refused publication: %v", err)
+	}
+	// The next pass drops the stale row as debris.
+	if _, err := s.Collect(context.Background(), CollectOpts{Grace: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if gcRowExists(t, dir, gcCondemnedPrefix+"oci\x00"+h.Algorithm+"\x00"+h.Hex) {
+		t.Fatal("dead sweeper's condemned row survived the next pass")
+	}
+}
+
+func writeGCRow(t testing.TB, storeDir, key string, val []byte) error {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksGC)
+		if err != nil {
+			return err
+		}
+		return ks.Put([]byte(key), val)
+	})
+}
+
+func gcRowExists(t testing.TB, storeDir, key string) bool {
+	t.Helper()
+	db, err := gmdb.Open(context.Background(), filepath.Join(storeDir, "bookkeeping", "db"), gmdb.Options{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	exists := false
+	_ = db.View(context.Background(), func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksGC)
+		if err != nil {
+			return err
+		}
+		if _, err := ks.Get([]byte(key)); err == nil {
+			exists = true
+		}
+		return nil
+	})
+	return exists
+}

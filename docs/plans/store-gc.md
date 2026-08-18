@@ -46,7 +46,7 @@ files, binding siblings) are refused by adoption, not migrated.
       caller-target export litter included); explicit GC API + CLI
       verb with grace override. Folds
       docs/issues/export-temp-cleanup.md.
-- [ ] 7. Churn soak and crash harness: pull/mount/commit/remove/
+- [x] 7. Churn soak and crash harness: pull/mount/commit/remove/
       collect cycles with automatic collection on, kill storms
       mid-sweep and mid-ingest, cross-process readers during
       collection; the crash model pinned end-to-end.

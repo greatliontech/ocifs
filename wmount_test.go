@@ -30,7 +30,7 @@ var wfixMtime = time.Date(2022, 5, 6, 7, 8, 9, 0, time.UTC)
 // owns — default_permissions enforces PRESENTED attributes, so an
 // unprivileged caller can only write beneath entries it could own
 // (the uid-0 image case is the user-namespace deployment).
-func writableFixtureEnv(t *testing.T, scratchName string) (*OCIFS, string) {
+func writableFixtureEnv(t *testing.T, scratchName string, extra ...Option) (*OCIFS, string) {
 	t.Helper()
 	skipUnderMutationCampaign(t)
 	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
@@ -82,7 +82,8 @@ func writableFixtureEnv(t *testing.T, scratchName string) (*OCIFS, string) {
 		t.Fatal(err)
 	}
 	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-"+scratchName))
-	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
+	opts := append([]Option{WithWorkDir(filepath.Join(scratch, "work"))}, extra...)
+	ofs, err := New(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
