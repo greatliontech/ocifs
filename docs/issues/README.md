@@ -19,3 +19,7 @@
   mutually destructive (tree removal and stale-mount reaping hit the
   other run's live state). Lands: when concurrent same-package runs
   become a supported flow, or the next collision incident.
+- `docs/issues/mount-report-publication-marker.md` — mounts rows
+  cannot distinguish a not-yet-published report from a published
+  clean one; a publication marker is a wire-contract change awaiting
+  the owner's call. Lands: when inspection must distinguish them.

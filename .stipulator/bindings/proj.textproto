@@ -104,27 +104,9 @@ bindings {
   requirement_id: "REQ-proj-report"
   content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
   backend: "go"
-  symbol: "github.com/greatliontech/ocifs/internal/projection.Report.WriteFile"
-  role: BINDING_ROLE_IMPLEMENTS
-  shape_hash: "06803f62a2e96b2a6af3e0cfbc93ccab8b6800910f986c6e15bfb001e600cec7"
-}
-
-bindings {
-  requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
-  backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.New"
   role: BINDING_ROLE_IMPLEMENTS
   shape_hash: "48651389eefeb2bea6bfa8dc78fee12ca3809d42bcbe32f28cfc3ea9f38334d9"
-}
-
-bindings {
-  requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
-  backend: "go"
-  symbol: "github.com/greatliontech/ocifs/internal/projection.TestReportRoundtrip"
-  role: BINDING_ROLE_TESTS
-  shape_hash: "c8112b41e253e99138b4fb8ea0cf6d63cca465e84f9b95fe64a068ab5353813b"
 }
 
 bindings {

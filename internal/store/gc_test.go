@@ -3,6 +3,8 @@
 package store
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/greatliontech/gmdb"
+	"github.com/greatliontech/ocifs/internal/layer"
+	"pgregory.net/rapid"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
@@ -619,4 +623,106 @@ func gcRowExists(t testing.TB, storeDir, key string) bool {
 		return nil
 	})
 	return exists
+}
+
+// TestPropertyCollectNeverEatsRooted is REQ-store-gc-safe's for-all
+// witness: over random sequences of pull, remove, and collect (any
+// grace, ignore included), every currently-rooted reference always
+// serves offline — collection never takes what a root reaches,
+// whatever the interleaving of transitions.
+func TestPropertyCollectNeverEatsRooted(t *testing.T) {
+	reg := newTestRegistry()
+	tags := make([]string, 4)
+	contents := make([]string, 4)
+	for i := range tags {
+		tags[i] = fmt.Sprintf("%s/gcprop/img%d:v1", testHost, i)
+		contents[i] = fmt.Sprintf("gcprop-payload-%d", i)
+		push(t, reg, tags[i], makeImage(t, newRawLayer(t, tarBytes(t, tfile("f", contents[i])))))
+	}
+	rapid.Check(t, func(rt *rapid.T) {
+		dir := scratchDir(t)
+		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+		if err != nil {
+			rt.Fatal(err)
+		}
+		defer s.Close()
+		s.transport = reg
+		reader := newStoreAt(t, dir, PullNever, v1.Platform{}, cutTransport(t))
+
+		rooted := map[int]bool{}
+		nOps := rapid.IntRange(3, 10).Draw(rt, "ops")
+		for op := 0; op < nOps; op++ {
+			i := rapid.IntRange(0, 3).Draw(rt, "tag")
+			switch rapid.IntRange(0, 2).Draw(rt, "kind") {
+			case 0:
+				if _, err := s.Image(context.Background(), tags[i], nil); err != nil {
+					rt.Fatalf("pull %d: %v", i, err)
+				}
+				rooted[i] = true
+			case 1:
+				if err := s.RemoveRef(context.Background(), tags[i]); err != nil {
+					rt.Fatalf("remove %d: %v", i, err)
+				}
+				delete(rooted, i)
+			case 2:
+				grace := rapid.SampledFrom([]time.Duration{-1, 0, time.Hour}).Draw(rt, "grace")
+				if _, err := s.Collect(context.Background(), CollectOpts{Grace: grace}); err != nil {
+					rt.Fatalf("collect: %v", err)
+				}
+			}
+			// The invariant, after every operation: rooted content
+			// serves offline — no heal-by-refetch can mask a wrong
+			// deletion.
+			for j := range rooted {
+				img, err := reader.Image(context.Background(), tags[j], nil)
+				if err != nil {
+					rt.Fatalf("op %d: rooted tag %d lost: %v", op, j, err)
+				}
+				if got := string(readEntry(t, reader, img, "f")); got != contents[j] {
+					rt.Fatalf("op %d: rooted tag %d content %q", op, j, got)
+				}
+			}
+		}
+	})
+}
+
+// TestPropertyTierKeyspacesDisjoint is REQ-store-ns's for-all
+// witness under the bookkeeping layout: whatever the digest, a
+// layer-index row and a content-CAS entry under the SAME key
+// coexist byte-intact — the structural split holds over the whole
+// keyspace, not just one collision fixture.
+func TestPropertyTierKeyspacesDisjoint(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	hexRunes := rapid.RuneFrom([]rune("0123456789abcdef"))
+	rapid.Check(t, func(rt *rapid.T) {
+		h := v1.Hash{Algorithm: "sha256", Hex: rapid.StringOfN(hexRunes, 64, 64, -1).Draw(rt, "hex")}
+		idxName := rapid.StringOfN(rapid.RuneFrom([]rune("abc\x00\xff/")), 1, 12, -1).Draw(rt, "name")
+		blobBytes := rapid.SliceOfN(rapid.Byte(), 0, 64).Draw(rt, "blob")
+
+		idx := layer.Layer{{Header: tar.Header{Name: idxName, Typeflag: tar.TypeReg}}}
+		if err := s.bk.LayerIdxPut(context.Background(), h, idx); err != nil {
+			rt.Fatal(err)
+		}
+		blobPath := s.cas.Path(h)
+		if err := os.MkdirAll(filepath.Dir(blobPath), 0o755); err != nil {
+			rt.Fatal(err)
+		}
+		if err := os.WriteFile(blobPath, blobBytes, 0o644); err != nil {
+			rt.Fatal(err)
+		}
+
+		got, err := s.bk.LayerIdxGet(context.Background(), h)
+		if err != nil || len(got) != 1 || got[0].Header.Name != idxName {
+			rt.Fatalf("index under colliding key: %v %v", got, err)
+		}
+		b, err := os.ReadFile(blobPath)
+		if err != nil || !bytes.Equal(b, blobBytes) {
+			rt.Fatalf("blob under colliding key: %v", err)
+		}
+	})
 }
