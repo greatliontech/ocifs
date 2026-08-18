@@ -62,7 +62,10 @@ name a single path element under the mount-id rule
 (REQ-api-mount-id), nothing beside the dialect tree (the base
 binding lives in the bookkeeping database); `locks/` — the claim
 lock files of held-lock liveness, one per claim, empty files whose
-advisory locks are the store's only liveness authority; and
+advisory locks are the store's only liveness authority, plus the
+transient soundness-probe file of a store open (REQ-store-adopt) —
+crash-orphaned probe files are ordinary unheld entries for the
+sweep; and
 `bookkeeping/` — the bookkeeping database file and its
 coordination artifacts, owned entirely by gmdb. A tier earns
 filesystem residence only by
@@ -178,11 +181,16 @@ layout — including stores written by ocifs versions predating the
 bookkeeping database — with an error directing deletion, and
 refusing a filesystem whose advisory locking is unsound (probed at
 open: a second open file description's try-lock against a held
-lock conflicts, or the store is refused) — held-lock liveness is
+lock conflicts, or the store is refused — and a probe that can
+neither hold nor observe contention surfaces its own error,
+refused as undecided, never judged in either direction) —
+held-lock liveness is
 the store's only liveness authority, and a filesystem that grants
 two holders would let a sweeper judge every live claim dead. The
-probe establishes local soundness only; it cannot see other hosts,
-so it never certifies a multi-host locking domain — single-domain
+probe establishes local soundness only; it sees only openers
+sharing this process's view of the filesystem — neither other
+hosts nor same-host stacked views — so it never certifies the
+locking domain itself: single-domain
 sharing is the stated precondition, not a probed one.
 Unrecognized state is never adopted, migrated, or deleted, because
 the store destroys nothing it cannot prove is its own cache
@@ -379,9 +387,12 @@ removing the row, then unlinking the claim's lock file while held and
 releasing, as the claim's final holder. Where detach or removal fails (a
 foreign-user FUSE mount, a busy mountpoint) the sweep releases without
 unlink — row and lock file stay intact — and reclamation retries later:
-deferral, never a half-reclaimed id. A racing remount of the id blocks
-on the very lock the sweep holds, so nothing can serve paths
-mid-reclamation. On clean unmount the row and report go; the
+deferral, never a half-reclaimed id. A racing remount of the id
+meets the very lock the sweep holds and refuses as in-use — a
+try-lock cannot tell a live mount from a mid-reclamation sweep,
+and refusal is the settled same-id contract either way — so
+nothing can serve paths mid-reclamation. On clean unmount the row
+and report go; the
 store-managed mountpoint directory remains for the consumer that just
 held it (`api.md` REQ-api-mountpoint) and is thereafter store
 scaffolding owned by no row — collectible like any orphaned tier file

@@ -24,7 +24,7 @@ report publication marker.
 - [x] 3. gmdb: export the portable lock layer as a public package
       (try/exclusive/unlock with inode-verified acquire), adopted
       internally; tag; ocifs go.mod bump. Committed in gmdb.
-- [ ] 4. ocifs lock plumbing: the locks tier, the init probe, and
+- [x] 4. ocifs lock plumbing: the locks tier, the init probe, and
       the claim helpers over the gmdb lock package.
 - [ ] 5. Mounts and uppers on locks: registration acquires
       mount-<id>, writable serve holds upper-<name>, reclamation

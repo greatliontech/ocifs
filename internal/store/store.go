@@ -183,7 +183,19 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 			return nil, err
 		}
 	}
-	for _, dir := range []string{"blobs", "oci", "mounts", "exports"} {
+	// Locking soundness is a stated precondition, not an assumption
+	// (REQ-store-adopt): the locks tier goes first and the probe
+	// runs before any other tier is minted or any coordination
+	// state opens — a refused filesystem gets no store skeleton,
+	// and the bookkeeping database's own cross-process safety rests
+	// on the same filesystem's locks.
+	if err := os.MkdirAll(locksDirOf(path), 0o755); err != nil {
+		return nil, err
+	}
+	if err := newStoreProbe(locksDirOf(path)); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	for _, dir := range []string{"blobs", "oci", "mounts", "exports", "uppers"} {
 		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return nil, err
 		}
