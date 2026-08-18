@@ -153,11 +153,12 @@ mount serves, is refused.
 **REQ-api-gc** (behavior): The library MUST offer explicit
 collection: honoring the retention grace by default, ignoring it on
 demand (the wipe-now operator intent automatic collection
-deliberately does not serve), returning what was collected — and
-what could not be judged: rows whose liveness is unjudgeable from
-this namespace (`store.md` REQ-store-bookkeeping) are reported, so
-a foreign-namespace root leak is visible and the reboot-or-wipe
-remedy is an informed one. The CLI exposes the same verb.
+deliberately does not serve), returning what was collected, what
+was deferred, and any live foreign-version mount rows that halted
+image-tier collection (`store.md` REQ-store-bookkeeping) — every
+verdict is a held-lock verdict, judgeable from any namespace that
+can open the store, so no unjudgeable class exists to report. The
+CLI exposes the same verb.
 
 ## CLI
 

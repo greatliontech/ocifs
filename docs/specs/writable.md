@@ -305,11 +305,14 @@ binding and validates against it; later writable mounts and commits
 against a different base are refused — a whiteout set produced over
 one base silently applied to another materializes a tree nobody
 wrote. A named upper admits one writable mount at a time, arbitrated
-through the mount registry: a writable mount over a store-managed
-upper records the upper name in its `mounts` row (`store.md`
-REQ-store-bookkeeping), and a second writable mount is refused
-while a live row holds the name — cross-process, by the same
-liveness rules as any registry row. A caller-supplied upper directory carries no binding and no
+by its claim lock: a writable mount over a store-managed upper
+holds `locks/upper-<name>` for the duration of its serve
+(`store.md` held-lock liveness), so a second writable mount — and
+a removal — blocks or refuses on the kernel's own arbitration,
+cross-process and crash-released, the lock acquired before any
+bookkeeping write per the claim-lock ordering (`store.md`
+held-lock liveness); the `mounts` row still records the upper name
+as data. A caller-supplied upper directory carries no binding and no
 mount arbitration; the caller names the base explicitly and owns
 both the pairing and the exclusivity.
 

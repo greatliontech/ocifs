@@ -37,21 +37,22 @@ defect, not a platform quirk.
 
 **REQ-proj-report** (behavior): Every omission or alteration a
 projection makes relative to the unified view (unsupported symlinks,
-devices, FIFOs, case collisions, read-only residual foreign files)
-MUST be recorded in the projection report,
-enumerable by the consumer — never only logged, never silent. The
-report persists in the mount's bookkeeping record (`store.md`
-REQ-store-bookkeeping, `mounts` keyspace), so any process — the
-in-process consumer, the orchestrator of an out-of-process backend
-(REQ-proj-server), or an inspecting CLI — reads the same record
-through the store. The record carries an `entries` list (always
-present — an empty report is an empty list, distinguishable from an
-absent record) with, per entry, the view path as its exact bytes, a
-disposition (`omitted` or `altered` for view entries; `residual`
-for the read-only residuals REQ-proj-ro declares, whose path is
-then the foreign path), a symbolic reason, and optional free-text
-detail; publication is transactional, and a projection that
-observes residuals republishes with the accumulated rows.
+devices, FIFOs, case collisions, read-only residual foreign files) MUST
+be recorded in the projection report, enumerable by the consumer — never
+only logged, never silent. The report persists in the mount's
+bookkeeping record (`store.md` REQ-store-bookkeeping, `mounts`
+keyspace), so any process — the in-process consumer, the orchestrator of
+an out-of-process backend (REQ-proj-server), or an inspecting CLI —
+reads the same record through the store. The record carries an `entries`
+list (always present — an empty report is an empty list, distinguishable
+from an absent record, and the record's publication flag distinguishes a
+published clean report from one not yet published — `store.md`
+REQ-store-bookkeeping) with, per entry, the view path as its exact
+bytes, a disposition (`omitted` or `altered` for view entries;
+`residual` for the read-only residuals REQ-proj-ro declares, whose path
+is then the foreign path), a symbolic reason, and optional free-text
+detail; publication is transactional, and a projection that observes
+residuals republishes with the accumulated rows.
 
 ## Out-of-process serving
 

@@ -102,7 +102,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
+  content_hash: "ec1ad7f2d69c8c5fe20e29526837abc3d145ba04081476d098c52120ab7912a1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.New"
   role: BINDING_ROLE_IMPLEMENTS
@@ -111,7 +111,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
+  content_hash: "ec1ad7f2d69c8c5fe20e29526837abc3d145ba04081476d098c52120ab7912a1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestKindOmissionsReported"
   role: BINDING_ROLE_TESTS
@@ -120,7 +120,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
+  content_hash: "ec1ad7f2d69c8c5fe20e29526837abc3d145ba04081476d098c52120ab7912a1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/projection.TestPropertyPresentedOrReported"
   role: BINDING_ROLE_TESTS
@@ -237,7 +237,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
+  content_hash: "ec1ad7f2d69c8c5fe20e29526837abc3d145ba04081476d098c52120ab7912a1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.OCIFS.Mount"
   role: BINDING_ROLE_IMPLEMENTS
@@ -246,7 +246,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-proj-report"
-  content_hash: "ca4c1096c6bc03f579138ea742a35634916918e7f497fe09b9e40ca215f059ef"
+  content_hash: "ec1ad7f2d69c8c5fe20e29526837abc3d145ba04081476d098c52120ab7912a1"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestMountReportPersisted"
   role: BINDING_ROLE_TESTS

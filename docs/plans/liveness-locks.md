@@ -8,7 +8,7 @@ acquisition IS the claim). Spans ocifs and gmdb (gmdb commits
 authorized as part of this change set). Includes the agreed mount-
 report publication marker.
 
-- [ ] 1. Spec work: rewrite store.md's liveness clauses — the
+- [x] 1. Spec work: rewrite store.md's liveness clauses — the
       `locks/` tier, one lock file per claim (mount, upper, op,
       ingest lease), acquire-before-row ordering, the CLOEXEC and
       inode-verify disciplines, the init locking-soundness probe

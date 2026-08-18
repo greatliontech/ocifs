@@ -147,7 +147,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
+  content_hash: "ada1adb5209ce6922a0974edae6fa9dec9ee5e2a5a675dd11678acbf98e86a8f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.NewUpper"
   role: BINDING_ROLE_IMPLEMENTS
@@ -156,7 +156,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
+  content_hash: "ada1adb5209ce6922a0974edae6fa9dec9ee5e2a5a675dd11678acbf98e86a8f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestBaseBinding"
   role: BINDING_ROLE_TESTS
@@ -453,7 +453,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
+  content_hash: "ada1adb5209ce6922a0974edae6fa9dec9ee5e2a5a675dd11678acbf98e86a8f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.bookkeeping.UpperBind"
   role: BINDING_ROLE_IMPLEMENTS
@@ -462,7 +462,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-writable-base-binding"
-  content_hash: "3df7bd2b5393d6659847244aad62dc96ac0938f89a489adabad672576c17464f"
+  content_hash: "ada1adb5209ce6922a0974edae6fa9dec9ee5e2a5a675dd11678acbf98e86a8f"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestUpperArbitrationIgnoresDeadHolder"
   role: BINDING_ROLE_TESTS

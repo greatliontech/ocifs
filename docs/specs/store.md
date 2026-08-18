@@ -60,82 +60,129 @@ contract in `export.md`); `uppers/<name>/upper` — store-managed
 writable uppers in the POSIX upper dialect (`writable.md`), the
 name a single path element under the mount-id rule
 (REQ-api-mount-id), nothing beside the dialect tree (the base
-binding lives in the bookkeeping database); and `bookkeeping/` —
-the bookkeeping database file and its coordination artifacts,
-owned entirely by gmdb. A tier earns filesystem residence only by
+binding lives in the bookkeeping database); `locks/` — the claim
+lock files of held-lock liveness, one per claim, empty files whose
+advisory locks are the store's only liveness authority; and
+`bookkeeping/` — the bookkeeping database file and its
+coordination artifacts, owned entirely by gmdb. A tier earns
+filesystem residence only by
 direct kernel/foreign-tool consumption or a wire contract; every
 record only ocifs interprets lives in the bookkeeping database,
 whose keys and values carry arbitrary bytes exactly.
 
-**REQ-store-bookkeeping** (wire): The bookkeeping database MUST
-hold exactly these keyspaces, keys and values byte-exact:
-`refs` — key: registry (lowercased — DNS names are
-case-insensitive), repository, and identifier (tag or digest),
-joined by `0x00` (a byte no reference component can carry); value:
-the digest string of the resolved top-level artifact.
-`layeridx` — key: the layer digest the manifest lists, as
-`<algorithm> 0x00 <hex>`; value: the layer index, a versioned
-binary record round-tripping every header string byte-exactly; a
-value whose version is foreign to the reader is unparseable state
-healing as an absent index (REQ-store-self-heal).
-`mounts` — key: the mount id; value: a versioned record of the
-serving process's liveness identity, the image digest served, the
-upper name when the mount is writable over a store-managed upper
-(the arbitration and removal-refusal witness — `writable.md`
-REQ-writable-base-binding, `api.md` REQ-api-remove), the
-mountpoint path, and the projection report (`projection.md`
-REQ-proj-report).
-`ops` — key: an operation id; value: a versioned record of an
-in-flight extra-transactional operation — the ingest lease
-(REQ-store-single-writer), an export materialization, a commit —
-carrying the owner's liveness identity, the digests the operation
-pins (roots while the row is live — REQ-store-gc-roots), and the
-temporary paths it owns (exempt from sweeps while live, swept as
-debris when dead, wherever they live — including a caller-target
-export's temporary in the caller's own parent directory).
-`uppers` — key: the upper name; value: the base binding — the
-digest of the image the upper was first mounted over
-(`writable.md` REQ-writable-base-binding).
-`localimages` — key: `<algorithm> 0x00 <hex>` of a committed
-manifest; value: a versioned creation record. Commit writes the
-row; it is the root that keeps a committed image reachable
-(REQ-store-gc-roots) until explicitly removed (`api.md`
-REQ-api-remove).
-`gc` — collection bookkeeping: first-seen times grounding the
-retention grace, and the condemned set (REQ-store-gc-safe).
-Losing this keyspace is safe in one direction only: a re-mark
-re-derives first-seen conservatively later (extending retention,
-never shrinking safety), and a lost condemned set merely aborts an
-in-progress sweep.
-**Liveness identity** (used by `mounts` and `ops` rows): pid,
-process start time, PID-namespace identity, and the boot id. A row
-is dead iff its boot id differs from the current boot, or — same
-boot, same PID namespace — its pid is gone or its start time
-differs (PID reuse). A same-boot row from a foreign PID namespace
-is treated as live: its liveness is unjudgeable from here
-(`kill(pid,0)` is meaningless across namespaces), and a false-dead
-verdict deletes content a live process serves — the unrecoverable
-direction. No clock, no heartbeat, ever decides death.
-Version discipline: every value whose shape can evolve carries a
-version discriminator, and a foreign version is handled exactly as
-that keyspace's absent-row case — never a hard failure for
-regenerable records — with one exception: a foreign-version INGEST
-LEASE row is an unknown holder and means wait, never claim. An
-older binary treating a newer one's live lease as absent would put
-two writers on the content tiers, the exact state
-REQ-store-single-writer exists to forbid. The mounts keyspace's
-foreign rows are likewise never acted on destructively
-(REQ-store-mount-registry reclaims only rows it can decode and
-judge dead). Lease rows additionally carry a per-acquisition
-nonce: release matches identity and nonce, so no release can drop
-another acquisition's hold.
+**REQ-store-bookkeeping** (wire): The bookkeeping database MUST hold
+exactly these keyspaces, keys and values byte-exact: `refs` — key:
+registry (lowercased — DNS names are case-insensitive), repository, and
+identifier (tag or digest), joined by `0x00` (a byte no reference
+component can carry); value: the digest string of the resolved top-level
+artifact.
+`layeridx` — key: the layer digest the manifest lists, as `<algorithm>
+0x00 <hex>`; value: the layer index, a versioned binary record
+round-tripping every header string byte-exactly; a value whose version
+is foreign to the reader is unparseable state healing as an absent index
+(REQ-store-self-heal).
+`mounts` — key: the mount id; value: a versioned record of the serving
+process's diagnostic identity, the image digest served, the upper name
+when the mount is writable over a store-managed upper (the arbitration
+and removal-refusal witness — `writable.md` REQ-writable-base-binding,
+`api.md` REQ-api-remove), the mountpoint path, the projection report
+(`projection.md` REQ-proj-report), and a publication flag distinguishing
+a registered-but-not-yet-published report from a published clean one —
+without it an inspector reading the row mid-mount takes "no omissions"
+from a report that does not exist yet, the silent-wrong answer
+REQ-proj-report forbids. Every fresh registration starts unpublished (a
+remount is a fresh registration and publishes anew); publication sets
+the flag atomically with the report it marks and is idempotent.
+`ops` — key: an operation id; value: a versioned record of an in-flight
+extra-transactional operation (an export materialization, a commit, a
+sweep) — the owner's diagnostic identity, the digests the operation pins
+(roots while the op's claim lock is held — REQ-store-gc-roots), and the
+temporary paths it owns (exempt from sweeps while the lock is held,
+swept as debris once it is not, wherever they live — including a
+caller-target export's temporary in the caller's own parent directory).
+The ingest lease is not a row at all: it is the `locks/ingest` lock
+itself (REQ-store-single-writer).
+`uppers` — key: the upper name; value: the base binding — the digest of
+the image the upper was first mounted over (`writable.md`
+REQ-writable-base-binding).
+`localimages` — key: `<algorithm> 0x00 <hex>` of a committed manifest;
+value: a versioned creation record. Commit writes the row; it is the
+root that keeps a committed image reachable (REQ-store-gc-roots) until
+explicitly removed (`api.md` REQ-api-remove).
+`gc` — collection bookkeeping: first-seen times grounding the retention
+grace, and the condemned set (REQ-store-gc-safe). Losing this keyspace
+is safe in one direction only: a re-mark re-derives first-seen
+conservatively later (extending retention, never shrinking safety), and
+a lost condemned set merely aborts an in-progress sweep.
+**Held-lock liveness** (every claim: `mounts` and `ops` rows, the ingest
+lease, a named upper's writable serve): a claim is alive exactly while
+its holder keeps an advisory file lock on the claim's lock file under
+`locks/` — `mount-<id>`, `upper-<name>`, `op-<id>`, `ingest`. The kernel
+releases the lock at process death (SIGKILL included), and any
+participant in the store's locking domain — the set of openers among
+whom the filesystem makes advisory locks conflict; one host's processes
+opening the same filesystem are one domain whatever their namespaces
+(locks are inode-scoped, so bind mounts and container volumes share
+them), but a stacked view of the store — an overlay upper, a passthrough
+FUSE view — has its own inodes and is a different filesystem, out of
+contract exactly like the network split below — can pass verdict by
+try-lock: blocked means live — a frozen process still holds and is still
+live; acquired means dead, and the acquisition IS the claim, one atomic
+act, so no verdict can go stale between judging and acting. A store
+shared beyond one locking domain (a network filesystem whose locks are
+client-local) is out of contract: two domains never see each other's
+locks, and each would judge the other's live claims dead. Process
+identity (pid and friends) may ride rows as diagnostic data but never
+decides. No clock, no heartbeat, no name ever decides death: names are
+namespace-scoped and clocks misjudge frozen processes — both yield the
+false-dead verdict that deletes content a live process serves, the
+unrecoverable direction; a held lock yields neither. Lock-file
+discipline: claim fds are close-on-exec and never placed on a child's
+inheritance list, so no exec'd child ever carries a claim past its
+parent (a fork that never execs shares the open description until it
+exits — a bounded false-live, the safe direction); acquisition verifies
+identity after locking (the locked descriptor's file identity compared
+against the path's — a mismatch means the file was unlinked and
+recreated underfoot: close and retry); and a lock file is unlinked only
+while its lock is still held, by a holder whose claim has semantically
+ended, and always BEFORE release — an unlink after release races a fresh
+acquirer of the old inode into a second-holder state the identity verify
+cannot catch, and an unheld file is never unlinked by anyone. A dead
+claim's acquirer is that claim's final holder: it disposes the claim's
+residue and unlinks the lock file before releasing (deferring a
+reclamation instead releases without unlink — its file and row persist
+for retry; a platform that refuses unlinking open files merely defers
+the unlink step — the lock, not the file's absence, is the authority).
+Rows are written only AFTER their vouching lock is held, and blocking
+claim acquisition happens only outside bookkeeping write transactions —
+inside a write transaction a claim is consulted by non-blocking try-lock
+only, because a holder may be waiting on that very transaction's write
+grant to record its row, and a blocking wait under the grant would cycle
+with it.
+Version discipline: every value whose shape can evolve carries a version
+discriminator, and a foreign version is handled exactly as that
+keyspace's absent-row case — never a hard failure for regenerable
+records. A foreign-version `mounts` row's LIVENESS is still judgeable
+(the lock has no format): dead, it reclaims like any dead row; live, it
+is a live mount whose image this binary cannot read, and image-tier
+collection halts visibly (REQ-store-gc-collect) — the one irreducible
+foreign-version conservatism.
 
 **REQ-store-adopt** (behavior): Store initialization MUST refuse a
 work directory holding store state it does not recognize as this
 layout — including stores written by ocifs versions predating the
-bookkeeping database — with an error directing deletion; unrecognized state is
-never adopted, migrated, or deleted, because the store destroys
-nothing it cannot prove is its own cache (wiping is the user's
+bookkeeping database — with an error directing deletion, and
+refusing a filesystem whose advisory locking is unsound (probed at
+open: a second open file description's try-lock against a held
+lock conflicts, or the store is refused) — held-lock liveness is
+the store's only liveness authority, and a filesystem that grants
+two holders would let a sweeper judge every live claim dead. The
+probe establishes local soundness only; it cannot see other hosts,
+so it never certifies a multi-host locking domain — single-domain
+sharing is the stated precondition, not a probed one.
+Unrecognized state is never adopted, migrated, or deleted, because
+the store destroys nothing it cannot prove is its own cache
+(wiping is the user's
 documented remedy). Recognition is by layout signature and therefore
 best-effort: state that carries the signature is trusted, consistent
 with the local-filesystem integrity boundary
@@ -291,15 +338,18 @@ platform whose child is materialized.
 
 **REQ-store-single-writer** (behavior): One ingesting process
 mutates the content tiers (`oci/`, `blobs/`) at a time, enforced
-through an ingest lease — a live `ops` row — held from the first
-content-tier write through the commit of the root row (the `refs`
-row for a pull, the `localimages` row for a commit: a commit is an
-ingest under the lease, row-last, exactly like a pull). The span
-matters: a root published outside the lease would leave a window
-where the just-written content is unrooted and a fenceless sweep
-could collect it. A crashed holder's lease dies with its liveness
-identity; a second process's ingest waits or proceeds on lease
-death. Any number of processes read every tier and keyspace
+through the ingest lease — the held `locks/ingest` claim lock —
+held from the first content-tier write through the commit of the
+root row (the `refs` row for a pull, the `localimages` row for a
+commit: a commit is an ingest under the lease, row-last, exactly
+like a pull). The span matters: a root published outside the lease
+would leave a window where the just-written content is unrooted
+and a fenceless sweep could collect it. A crashed holder's lease
+releases with its process (held-lock liveness); a second
+acquisition waits, cancellably, and proceeds the moment the kernel
+frees the lock — distinct open file descriptions exclude each
+other in-process exactly as across processes. Any number of
+processes read every tier and keyspace
 concurrently (projection servers are ordinary readers —
 `projection.md` REQ-proj-server), each through per-operation read
 transactions — a held long-lived snapshot obstructs database
@@ -312,50 +362,64 @@ per the database's own single-writer coordination.
 
 ## Mount registry and reclamation
 
-**REQ-store-mount-registry** (behavior): Every mount MUST register
-in the `mounts` keyspace before serving and deregister on unmount:
-registration carries the serving process's liveness identity
-(REQ-store-bookkeeping), and a dead row is a dead mount,
-reclaimable by any sweep — reclamation removes the row and, for a
-store-managed mountpoint, best-effort detaches any stale kernel
-mount and removes the `mounts/<id>` directory; where detach or
-removal fails (a foreign-user FUSE mount, a busy mountpoint) the
-row stays and reclamation retries on a later sweep — deferral,
-never a half-reclaimed id. On clean unmount the row and
-report go; the store-managed mountpoint directory remains for the
-consumer that just held it (`api.md` REQ-api-mountpoint) and is
-thereafter store scaffolding owned by no row — collectible like
-any orphaned tier file once the retention grace passes. A
-caller-supplied mountpoint is the caller's property; no sweep
-touches it. A mount id is reusable once its row is gone: a rowless
-state directory is store scaffolding the next mount of that id
-adopts (its mountpoint verified empty), never a refusal — waiting
-for collection to remove an empty directory would block remounting
-an id its own unmount just released. A dead row's id becomes
-reusable through reclamation; a caller-supplied id whose mount
-attempt failed before serving leaves no row and is immediately
-reusable.
+**REQ-store-mount-registry** (behavior): Every mount MUST acquire its
+claim lock and register in the `mounts` keyspace before serving, and
+deregister on unmount — row removed, lock file unlinked while the lock
+is still held, then the lock released, in that order per the lock-file
+discipline. A row whose claim lock a sweep can acquire is a dead mount,
+and holding that acquisition the sweep reclaims — fallible steps first:
+for a store-managed mountpoint, best-effort detaching any stale kernel
+mount and removing the `mounts/<id>` directory; only on full success
+removing the row, then unlinking the claim's lock file while held and
+releasing, as the claim's final holder. Where detach or removal fails (a
+foreign-user FUSE mount, a busy mountpoint) the sweep releases without
+unlink — row and lock file stay intact — and reclamation retries later:
+deferral, never a half-reclaimed id. A racing remount of the id blocks
+on the very lock the sweep holds, so nothing can serve paths
+mid-reclamation. On clean unmount the row and report go; the
+store-managed mountpoint directory remains for the consumer that just
+held it (`api.md` REQ-api-mountpoint) and is thereafter store
+scaffolding owned by no row — collectible like any orphaned tier file
+once the retention grace passes. A caller-supplied mountpoint is the
+caller's property; no sweep touches it. A mount id is reusable once its
+row is gone: a rowless state directory is store scaffolding the next
+mount of that id adopts (its mountpoint verified empty), never a refusal
+— waiting for collection to remove an empty directory would block
+remounting an id its own unmount just released. A dead row's id becomes
+reusable through reclamation; a caller-supplied id whose mount attempt
+failed before serving leaves no row and is immediately reusable.
 
 ## Garbage collection
 
-**REQ-store-gc-roots** (behavior): The reachable set MUST be
-computed from exactly these roots: every `refs` row's top-level
-digest — digest-addressed acquisition records a `refs` row
-(identifier = the digest) like any acquisition, so every acquired
-image is rooted; every `localimages` row's manifest digest; every
-live `mounts` row's image digest; every `uppers` row's
-base-binding digest; and every live `ops` row's pinned digests
-(an in-flight export or commit roots the content it reads). From a
-root, reachability follows the OCI graph: index → child manifests
-→ config and layers → layer indexes → content-CAS entries.
+**REQ-store-gc-roots** (behavior): The reachable set MUST be computed
+from exactly these roots: every `refs` row's top-level digest —
+digest-addressed acquisition records a `refs` row (identifier = the
+digest) like any acquisition, so every acquired image is rooted; every
+`localimages` row's manifest digest; every live `mounts` row's image
+digest; every `uppers` row's base-binding digest; and every live `ops`
+row's pinned digests (an in-flight export or commit roots the content it
+reads). From a root, reachability follows the OCI graph: index → child
+manifests → config and layers → layer indexes → content-CAS entries.
 Everything else is garbage: unreferenced `oci/` blobs, content-CAS
-entries, `layeridx` rows, dead `mounts` and `ops` rows (a dead
-op's row and its owned temporaries go together), stale condemned
-rows of dead sweepers, exports tier entries whose manifest digest
-is unreachable, temporaries and `mnt` directories owned by no live
-row, and orphaned tier files no bookkeeping row names. A temporary owned by a live `ops` row is
-never garbage — REQ-export-atomic's "stale temporaries are inert"
-holds only for temporaries whose owner is dead.
+entries, `layeridx` rows, dead `mounts` and `ops` rows (a dead op's row
+and its owned temporaries go together), stale condemned rows of dead
+sweepers, exports tier entries whose manifest digest is unreachable,
+temporaries and `mnt` directories owned by no live row, and orphaned
+tier files no bookkeeping row names — except files under `locks/`, which
+are never unlinked unheld: a lock file is legitimately rowless while
+held (the ingest lease has no row at all, and lock-before-row means
+every claim is rowless mid-acquire), and unlinking does not release a
+held lock — a recreated path would grant a second holder over a live
+claim. Lock files leave the store only through the holder-unlink
+discipline (held-lock liveness): a sweep disposes of a dead claim's lock
+file exactly by acquiring it first — for each `locks/` file, try-lock;
+acquired means the claim is dead, and once its residue is disposed the
+sweep, as final holder, unlinks before releasing (the ingest file
+included — the next acquirer recreates it; a dead claim whose
+reclamation defers keeps its file with its surviving row); blocked means
+live, untouched. A temporary owned by a live `ops` row is never garbage
+— REQ-export-atomic's "stale temporaries are inert" holds only for
+temporaries whose owner is dead.
 
 **REQ-store-gc-safe** (invariant): Collection MUST be safe at any
 moment, whoever triggers it. The mark reads roots transactionally.
@@ -363,8 +427,15 @@ Deletion is two-phase through the condemned set: the sweep is
 itself an `ops` operation, and inside one write transaction it
 re-checks reachability against fresh roots and records the digests
 it will delete in `gc`, each condemned row carrying the sweeping
-op's id — a condemned row whose sweeper is dead binds nobody and
-is debris (a crashed sweeper must not wedge publication forever).
+op's id — a condemned row whose sweeper's claim lock is
+acquirable binds nobody and is debris (a crashed sweeper must not
+wedge publication forever; the try-lock verdict is held-lock
+liveness like any other), and the judge that acquires it clears
+those debris rows and unlinks the dead sweeper's lock file before
+releasing (its final holder — held-lock liveness) — while the
+probe is held, a concurrent consult reads the dead sweeper as live
+and backs out needlessly, so the first judge leaves nothing for
+later consults to meet.
 Every root-publishing write (a `refs`, `localimages`, `mounts`,
 `uppers`, or digest-pinning `ops` row) consults the live-sweeper
 condemned set in its own write transaction and backs out when its
@@ -385,8 +456,9 @@ live mount reading vanished content.
 automatically at the transitions that create garbage — a `refs` row
 overwritten by re-resolution, a reference or local image removed
 (`api.md` REQ-api-remove), an unmount, and store initialization
-(crash debris: dead mount and ops rows, dead leases, `.export-*`
-temporaries owned by no live row, orphaned tier files) — and on explicit demand
+(crash debris: dead mount and ops rows, `.export-*` temporaries
+owned by no live row, orphaned tier files per
+REQ-store-gc-roots) — and on explicit demand
 (`api.md` REQ-api-gc). Automatic collection is on by default and
 disableable at construction. Unreachable content younger than the
 configured retention grace (default 24h) is retained — blobs are
@@ -395,14 +467,15 @@ deduplicates a future pull; the grace is pure retention policy and
 never load-bearing for safety (REQ-store-gc-safe's fences and the
 `ops` roots are — every window in which content is legitimately
 unrooted sits inside a fence or a live `ops` row, with or without
-grace). Explicit collection may ignore the grace on demand. A transition's
-collection runs after the transition's own lease span has ended —
+grace). Explicit collection may ignore the grace on demand. A
+transition's collection runs after the transition's own lease span
+has ended —
 the sweep acquires the lease itself, and a collection started while
 its trigger still holds the lease would deadlock on it. The
 debris sweep reclaims what dead rows own wherever it lives: a dead
 `ops` row's recorded temporaries (including a caller-target
 export's temporary outside the store), dead `mounts` rows and
-their directories, expired leases. Collection removes bookkeeping
+their directories. Collection removes bookkeeping
 rows and their files together; a crash between leaves either an
 orphaned file (swept as such next collection) or a rowless state
 self-heal already treats as absent — never served corruption.
