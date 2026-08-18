@@ -95,9 +95,9 @@ func TestMountWindowsEndToEnd(t *testing.T) {
 		t.Fatalf("extra dir: %v %v", fi, err)
 	}
 
-	rep, err := ofs.MountReport("win-e2e")
-	if err != nil || rep.Entries == nil {
-		t.Fatalf("report: %+v %v", rep, err)
+	rep, published, err := ofs.MountReport("win-e2e")
+	if err != nil || rep.Entries == nil || !published {
+		t.Fatalf("report: %+v published=%v %v", rep, published, err)
 	}
 
 	if err := im.Unmount(); err != nil {

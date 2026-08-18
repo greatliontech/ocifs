@@ -92,7 +92,9 @@ without it an inspector reading the row mid-mount takes "no omissions"
 from a report that does not exist yet, the silent-wrong answer
 REQ-proj-report forbids. Every fresh registration starts unpublished (a
 remount is a fresh registration and publishes anew); publication sets
-the flag atomically with the report it marks and is idempotent.
+the flag atomically with the report it marks and is idempotent, and
+within one registration the flag is monotone — only a fresh
+registration of the id clears it.
 `ops` — key: an operation id; value: a versioned record of an in-flight
 extra-transactional operation (an export materialization, a commit, a
 sweep) — the owner's diagnostic identity, the digests the operation pins

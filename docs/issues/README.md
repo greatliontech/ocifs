@@ -1,5 +1,9 @@
 # Issues
 
+- `docs/issues/mountrec-altitude-split.md` — mountrec.go mixes the
+  row codec, registry surface, and reclamation sweep; re-home when
+  the liveness-locks rework rewrites reclamation. Lands: 5
+  (liveness-locks plan).
 - `docs/issues/fskit-darwin-validation.md` — the FSKit backend's
   portable core is linux-pinned; the platform half (signed appex,
   bridge dispatch, orchestrated mount) awaits a darwin Tier-2 run.
@@ -19,7 +23,3 @@
   mutually destructive (tree removal and stale-mount reaping hit the
   other run's live state). Lands: when concurrent same-package runs
   become a supported flow, or the next collision incident.
-- `docs/issues/mount-report-publication-marker.md` — mounts rows
-  cannot distinguish a not-yet-published report from a published
-  clean one; a publication marker is a wire-contract change awaiting
-  the owner's call. Lands: when inspection must distinguish them.

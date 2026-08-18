@@ -396,12 +396,18 @@ func TestMountReportPersisted(t *testing.T) {
 	}
 	t.Cleanup(func() { im.Unmount() })
 
-	r, err := ofs.MountReport("withreport")
+	r, published, err := ofs.MountReport("withreport")
 	if err != nil {
 		t.Fatalf("report not persisted: %v", err)
 	}
 	if r.Entries == nil || len(r.Entries) != 0 {
 		t.Fatalf("full-envelope mount report = %+v, want present empty entries", r)
+	}
+	// A served mount's empty report is a published clean report —
+	// distinguishable from the registered-not-yet-published state
+	// (store.md REQ-store-bookkeeping).
+	if !published {
+		t.Fatal("served mount's report not marked published")
 	}
 	if im.MountPoint() != mustAbs(t, filepath.Join(work, "mounts", "withreport", "mnt")) {
 		t.Fatalf("mountpoint = %q, want the state dir's mnt/ sibling", im.MountPoint())

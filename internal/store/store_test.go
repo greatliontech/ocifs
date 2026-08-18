@@ -32,7 +32,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
-	"golang.org/x/sys/unix"
 
 	"github.com/greatliontech/gmdb"
 
@@ -1149,6 +1148,7 @@ func TestMountRecordRoundTrip(t *testing.T) {
 			Reason:      projection.ReasonNameUnrepresentable,
 			Detail:      "detail with \x00 nul",
 		}}},
+		Published: true,
 	}
 	out, err := decodeMountRecord(encodeMountRecord(in))
 	if err != nil {
@@ -1156,6 +1156,7 @@ func TestMountRecordRoundTrip(t *testing.T) {
 	}
 	if out.Owner != in.Owner || out.Image != in.Image ||
 		out.UpperName != in.UpperName || out.Mountpoint != in.Mountpoint ||
+		out.Published != in.Published ||
 		len(out.Report.Entries) != 1 || out.Report.Entries[0] != in.Report.Entries[0] {
 		t.Fatalf("round trip mangled:\n got  %+v\n want %+v", out, in)
 	}
@@ -1168,6 +1169,9 @@ func TestMountRecordRoundTrip(t *testing.T) {
 	if out2.Report.Entries == nil || len(out2.Report.Entries) != 0 {
 		t.Fatalf("empty report decoded as %+v, want present empty entries", out2.Report)
 	}
+	if out2.Published {
+		t.Fatal("zero-value record decoded as published")
+	}
 
 	foreign := append([]byte{mountRecVersion + 1}, encodeMountRecord(in)[1:]...)
 	if _, err := decodeMountRecord(foreign); !errors.Is(err, os.ErrNotExist) {
@@ -1178,37 +1182,151 @@ func TestMountRecordRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCommitRecordsLocalImageRoot pins the localimages row
-// (REQ-store-gc-roots): commit records the root that keeps the
-// committed image reachable.
-func TestCommitRecordsLocalImageRoot(t *testing.T) {
-	reg := newTestRegistry()
-	refStr := testHost + "/commit/root:v1"
-	l := newRawLayer(t, tarBytes(t, tfile("f", "base")))
-	push(t, reg, refStr, makeImage(t, l))
-	s, _ := newTestStore(t, PullIfNotPresent, reg)
-	img, err := s.Image(context.Background(), refStr, nil)
+// TestMountReportPublicationLifecycle pins the publication flag
+// (REQ-store-bookkeeping): a fresh registration starts unpublished
+// — a reader mid-mount must not take "no omissions" from a report
+// that does not exist yet — publication marks it atomically with
+// the report, republication is an idempotent set, and a fresh
+// re-registration of the id starts unpublished again.
+func TestMountReportPublicationLifecycle(t *testing.T) {
+	s, _ := newTestStore(t, PullNever, nil)
+	ctx := context.Background()
+	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}
+	if err := s.RegisterMountRecord(ctx, "pub", img, "", "/mp"); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.MountRecord(ctx, "pub")
 	if err != nil {
 		t.Fatal(err)
 	}
-	up := filepath.Join(scratchDir(t), "up")
-	if err := os.MkdirAll(up, 0o755); err != nil {
+	if rec.Published {
+		t.Fatal("fresh registration marked published")
+	}
+	rep := projection.Report{Entries: []projection.ReportEntry{}}
+	if err := s.PublishMountReport(ctx, "pub", rep); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(up, "new"), []byte("delta"), 0o644); err != nil {
+	if rec, err = s.MountRecord(ctx, "pub"); err != nil || !rec.Published {
+		t.Fatalf("published: rec=%+v err=%v", rec, err)
+	}
+	// Republication (accumulated residuals) keeps the flag set.
+	if err := s.PublishMountReport(ctx, "pub", rep); err != nil {
 		t.Fatal(err)
 	}
-	digest, err := s.CommitUpper(context.Background(), img, up)
+	if rec, err = s.MountRecord(ctx, "pub"); err != nil || !rec.Published {
+		t.Fatalf("republished: rec=%+v err=%v", rec, err)
+	}
+	// A remount is a fresh registration and publishes anew.
+	if err := s.RegisterMountRecord(ctx, "pub", img, "", "/mp"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, err = s.MountRecord(ctx, "pub"); err != nil || rec.Published {
+		t.Fatalf("re-registration kept published: rec=%+v err=%v", rec, err)
+	}
+}
+
+// TestArbitratedRegistrationOverDeadRowStartsUnpublished pins the
+// fresh-registration arm on the production registration path
+// (store.md REQ-store-bookkeeping): a remount of an id over a DEAD
+// published row must not inherit the dead mount's report or its
+// publication — the window between registration and publication
+// would otherwise serve the previous mount's report as this
+// mount's published clean one.
+func TestArbitratedRegistrationOverDeadRowStartsUnpublished(t *testing.T) {
+	s, _ := newTestStore(t, PullNever, nil)
+	ctx := context.Background()
+	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cd", 32)}
+	stale := MountRecord{
+		Owner: deadIdentity(),
+		Image: img,
+		Report: projection.Report{Entries: []projection.ReportEntry{{
+			Path:        "old/path",
+			Disposition: projection.DispositionOmitted,
+			Reason:      projection.ReasonNameUnrepresentable,
+		}}},
+		Published: true,
+	}
+	if err := s.bk.MountPut(ctx, "reuse", stale); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterMountRecordArbitrated(ctx, "reuse", img, "", "/mp"); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.MountRecord(ctx, "reuse")
 	if err != nil {
 		t.Fatal(err)
 	}
-	present, err := s.bk.LocalImagePresent(context.Background(), digest)
-	if err != nil || !present {
-		t.Fatalf("localimages root after commit: present=%v err=%v", present, err)
+	if rec.Published || len(rec.Report.Entries) != 0 {
+		t.Fatalf("registration over dead row inherited report state: %+v", rec)
 	}
-	absent, err := s.bk.LocalImagePresent(context.Background(), img.Hash())
-	if err != nil || absent {
-		t.Fatalf("uncommitted digest has a root row: %v %v", absent, err)
+}
+
+// TestPublicationSurvivesReclamationDeferral pins the flag across
+// the sweep's claim/restore pair: a dead published row that defers
+// reclamation still reads published — the record's report state is
+// the dead mount's truth and owner rewrites must not erase it.
+func TestPublicationSurvivesReclamationDeferral(t *testing.T) {
+	s, _ := newTestStore(t, PullNever, nil)
+	ctx := context.Background()
+	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ee", 32)}
+	dead := MountRecord{Owner: deadIdentity(), Image: img, Published: true}
+	if err := s.bk.MountPut(ctx, "defer", dead); err != nil {
+		t.Fatal(err)
+	}
+	orig, claimed, err := s.claimDeadMount(ctx, "defer")
+	if err != nil || !claimed {
+		t.Fatalf("claim: %v claimed=%v", err, claimed)
+	}
+	rec, err := s.MountRecord(ctx, "defer")
+	if err != nil || !rec.Published {
+		t.Fatalf("claimed row lost publication: %+v %v", rec, err)
+	}
+	if err := s.restoreMountOwner(ctx, "defer", orig); err != nil {
+		t.Fatal(err)
+	}
+	if rec, err = s.MountRecord(ctx, "defer"); err != nil || !rec.Published {
+		t.Fatalf("restored row lost publication: %+v %v", rec, err)
+	}
+	if rec.Owner != orig {
+		t.Fatalf("owner not restored: %+v", rec.Owner)
+	}
+}
+
+// TestOldLayoutMountRowRejected pins the clean break's failure
+// mode: mounts rows in the pre-publication-flag layout (same
+// version byte, no flag byte) decode as errors in both common
+// shapes — the empty report every registration writes and an
+// entry-bearing published one. The decoder carries no layout
+// discriminator, so rejection is per-shape misparse, not
+// structural; wiping is the documented remedy for a pre-change
+// store.
+func TestOldLayoutMountRowRejected(t *testing.T) {
+	oldPrefix := func() *binWriter {
+		w := &binWriter{}
+		w.byteVal(mountRecVersion)
+		w.i64(42)
+		w.u64(987654)
+		w.str("pid:[4026531836]")
+		w.str("boot-uuid")
+		w.str("sha256")
+		w.str(strings.Repeat("ab", 32))
+		w.str("")
+		w.str("/mnt/old")
+		return w
+	}
+	empty := oldPrefix()
+	empty.u64(0) // old layout: entry count directly after mountpoint
+	if _, err := decodeMountRecord(empty.buf); err == nil {
+		t.Fatal("old-layout empty-report row decoded as a valid record")
+	}
+	entry := oldPrefix()
+	entry.u64(1)
+	entry.str("old/path")
+	entry.str(string(projection.DispositionOmitted))
+	entry.str(string(projection.ReasonNameUnrepresentable))
+	entry.str("")
+	if _, err := decodeMountRecord(entry.buf); err == nil {
+		t.Fatal("old-layout entry-bearing row decoded as a valid record")
 	}
 }
 
@@ -1380,53 +1498,6 @@ func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
 	// And a LIVE holder refuses.
 	if err := s.RegisterMountRecordArbitrated(context.Background(), "third", h, "shared-upper", "/z"); err == nil {
 		t.Fatal("live holder did not refuse a second writable mount")
-	}
-}
-
-// TestLivenessVerdicts pins each arm of the Dead() rule
-// (REQ-store-bookkeeping): live self; PID reuse (same pid, foreign
-// start time) dead; absent pid dead; foreign boot dead; same-boot
-// foreign namespace conservatively live.
-func TestLivenessVerdicts(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("full discriminators are linux-only")
-	}
-	self := selfIdentity()
-	if self.Dead() {
-		t.Fatal("own identity judged dead")
-	}
-	reused := self
-	reused.StartTime = self.StartTime + 1
-	if !reused.Dead() {
-		t.Fatal("PID reuse (start-time mismatch) judged live")
-	}
-	absent := self
-	absent.Pid = 1<<30 - 3
-	if !absent.Dead() {
-		t.Fatal("absent pid judged live")
-	}
-	otherBoot := self
-	otherBoot.BootID = "not-this-boot"
-	if !otherBoot.Dead() {
-		t.Fatal("foreign boot judged live")
-	}
-	foreignNS := absent
-	foreignNS.PidNS = "pid:[1]"
-	if foreignNS.Dead() {
-		t.Fatal("same-boot foreign-namespace row judged dead")
-	}
-	// A live foreign-user pid answers the signal probe with EPERM —
-	// exists, unjudgeable further, conservative live. pid 1 is the
-	// canonical foreign-user process for an unprivileged run.
-	if err := unix.Kill(1, 0); err == unix.EPERM {
-		init := self
-		init.Pid = 1
-		init.StartTime = 0
-		if init.Dead() {
-			t.Fatal("EPERM (live foreign-user pid) judged dead")
-		}
-	} else {
-		t.Log("EPERM arm skipped: kill(1,0) did not return EPERM here")
 	}
 }
 

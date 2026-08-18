@@ -397,13 +397,17 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 
 // MountReport reads a mount's projection report from its
 // bookkeeping record (projection.md REQ-proj-report: enumerable by
-// the consumer through the store).
-func (o *OCIFS) MountReport(id string) (projection.Report, error) {
+// the consumer through the store). The second return reports
+// whether the report has been published (store.md
+// REQ-store-bookkeeping): false means the mount is registered but
+// its projection has not yet published — an empty report then
+// promises nothing about omissions.
+func (o *OCIFS) MountReport(id string) (projection.Report, bool, error) {
 	rec, err := o.store.MountRecord(context.Background(), id)
 	if err != nil {
-		return projection.Report{}, err
+		return projection.Report{}, false, err
 	}
-	return rec.Report, nil
+	return rec.Report, rec.Published, nil
 }
 
 // Close releases the store's coordination resources — the

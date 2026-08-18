@@ -17,8 +17,9 @@ import (
 // holds one record per mount, keyed by the mount id: the serving
 // process's liveness identity, the image digest served, the upper
 // name for a writable mount over a store-managed upper, the
-// mountpoint path, and the projection report (`projection.md`
-// REQ-proj-report) — paths as exact bytes.
+// mountpoint path, the projection report (`projection.md`
+// REQ-proj-report) — paths as exact bytes — and the report's
+// publication flag.
 
 const mountRecVersion = 1
 
@@ -41,6 +42,13 @@ type MountRecord struct {
 	UpperName  string // empty for read-only and caller-upper mounts
 	Mountpoint string
 	Report     projection.Report
+	// Published distinguishes a registered-but-not-yet-published
+	// report from a published clean one (docs/specs/store.md
+	// REQ-store-bookkeeping):
+	// without it a reader mid-mount takes "no omissions" from a
+	// report that does not exist yet. Fresh registrations start
+	// unpublished; publication sets it atomically with the report.
+	Published bool
 }
 
 func encodeMountRecord(rec MountRecord) []byte {
@@ -54,6 +62,11 @@ func encodeMountRecord(rec MountRecord) []byte {
 	w.str(rec.Image.Hex)
 	w.str(rec.UpperName)
 	w.str(rec.Mountpoint)
+	pub := byte(0)
+	if rec.Published {
+		pub = 1
+	}
+	w.byteVal(pub)
 	w.u64(uint64(len(rec.Report.Entries)))
 	for _, e := range rec.Report.Entries {
 		w.str(e.Path)
@@ -98,6 +111,11 @@ func decodeMountRecord(data []byte) (MountRecord, error) {
 	if rec.Mountpoint, err = r.str(); err != nil {
 		return rec, err
 	}
+	pub, err := r.byteVal()
+	if err != nil {
+		return rec, err
+	}
+	rec.Published = pub != 0
 	n, err := r.u64()
 	if err != nil {
 		return rec, err
@@ -173,9 +191,12 @@ func (b *bookkeeping) MountGet(ctx context.Context, id string) (MountRecord, err
 	return rec, err
 }
 
-// MountUpdateReport replaces the report inside the mount's record —
-// read-modify-write in one write transaction, so a backend
-// republishing accumulated residuals never races another field.
+// MountUpdateReport replaces the report inside the mount's record
+// and marks it published — read-modify-write in one write
+// transaction, so the flag is atomic with the report it marks
+// (REQ-store-bookkeeping) and a backend republishing accumulated
+// residuals never races another field; republication is an
+// idempotent set.
 func (b *bookkeeping) MountUpdateReport(ctx context.Context, id string, rep projection.Report) error {
 	return b.db.Update(ctx, func(tx *gmdb.Tx) error {
 		ks, err := tx.OpenKeyspace(ksMounts)
@@ -194,20 +215,31 @@ func (b *bookkeeping) MountUpdateReport(ctx context.Context, id string, rep proj
 			return fmt.Errorf("mount record %q: %w", id, err)
 		}
 		rec.Report = rep
+		rec.Published = true
 		return ks.Put([]byte(id), encodeMountRecord(rec))
 	})
+}
+
+// newMountRecord is the single source of every fresh registration's
+// row: this process's liveness identity, an empty report, and —
+// structurally, by zero value — unpublished (store.md
+// REQ-store-bookkeeping: every fresh registration starts
+// unpublished; a remount over a dead row must never inherit the
+// dead mount's published report as its own).
+func newMountRecord(image v1.Hash, upperName, mountpoint string) MountRecord {
+	return MountRecord{
+		Owner:      selfIdentity(),
+		Image:      image,
+		UpperName:  upperName,
+		Mountpoint: mountpoint,
+	}
 }
 
 // RegisterMountRecord writes the mount's record with this process's
 // liveness identity and an empty report; the projection's report
 // arrives through PublishMountReport once built.
 func (s *Store) RegisterMountRecord(ctx context.Context, id string, image v1.Hash, upperName, mountpoint string) error {
-	return s.bk.MountPut(ctx, id, MountRecord{
-		Owner:      selfIdentity(),
-		Image:      image,
-		UpperName:  upperName,
-		Mountpoint: mountpoint,
-	})
+	return s.bk.MountPut(ctx, id, newMountRecord(image, upperName, mountpoint))
 }
 
 // DeleteMountRecord removes the mount's record — a failed mount
@@ -227,8 +259,8 @@ func (s *Store) DeleteMountRecord(ctx context.Context, id string) error {
 }
 
 // MountRecord loads a mount's record — the read surface for
-// consumers, orchestrators, and inspection (REQ-proj-report reads
-// through the store).
+// consumers, orchestrators, and inspection (projection.md
+// REQ-proj-report reads through the store).
 func (s *Store) MountRecord(ctx context.Context, id string) (MountRecord, error) {
 	return s.bk.MountGet(ctx, id)
 }
@@ -281,12 +313,7 @@ func (s *Store) RegisterMountRecordArbitrated(ctx context.Context, id string, im
 				}
 			}
 		}
-		return ks.Put([]byte(id), encodeMountRecord(MountRecord{
-			Owner:      selfIdentity(),
-			Image:      image,
-			UpperName:  upperName,
-			Mountpoint: mountpoint,
-		}))
+		return ks.Put([]byte(id), encodeMountRecord(newMountRecord(image, upperName, mountpoint)))
 	})
 }
 

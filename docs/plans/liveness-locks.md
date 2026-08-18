@@ -18,7 +18,7 @@ report publication marker.
       arbitration wording; api.md GC-report fields (unjudgeable
       deletes); the publication-marker sentences; compile, gaps,
       pins; this plan.
-- [ ] 2. Publication marker: mounts-record published flag, set by
+- [x] 2. Publication marker: mounts-record published flag, set by
       report publication, exposed to readers; closes
       docs/issues/mount-report-publication-marker.md.
 - [ ] 3. gmdb: export the portable lock layer as a public package

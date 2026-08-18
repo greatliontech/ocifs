@@ -205,3 +205,37 @@ func TestLocalNamespaceNeverDials(t *testing.T) {
 		t.Fatal("damaged local image materialized")
 	}
 }
+
+// TestCommitRecordsLocalImageRoot pins the localimages row
+// (REQ-store-gc-roots): commit records the root that keeps the
+// committed image reachable.
+func TestCommitRecordsLocalImageRoot(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/commit/root:v1"
+	l := newRawLayer(t, tarBytes(t, tfile("f", "base")))
+	push(t, reg, refStr, makeImage(t, l))
+	s, _ := newTestStore(t, PullIfNotPresent, reg)
+	img, err := s.Image(context.Background(), refStr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := filepath.Join(scratchDir(t), "up")
+	if err := os.MkdirAll(up, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(up, "new"), []byte("delta"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := s.CommitUpper(context.Background(), img, up)
+	if err != nil {
+		t.Fatal(err)
+	}
+	present, err := s.bk.LocalImagePresent(context.Background(), digest)
+	if err != nil || !present {
+		t.Fatalf("localimages root after commit: present=%v err=%v", present, err)
+	}
+	absent, err := s.bk.LocalImagePresent(context.Background(), img.Hash())
+	if err != nil || absent {
+		t.Fatalf("uncommitted digest has a root row: %v %v", absent, err)
+	}
+}

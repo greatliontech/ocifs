@@ -237,7 +237,7 @@ func TestMountIDReusableAfterUnmount(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The row is gone with the unmount (deregistration).
-	if _, err := ofs.MountReport("reused-id"); err == nil {
+	if _, _, err := ofs.MountReport("reused-id"); err == nil {
 		t.Fatal("mount row survived clean unmount")
 	}
 	im2, err := ofs.Mount(refStr, MountWithID("reused-id"))
