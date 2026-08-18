@@ -12,6 +12,7 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/greatliontech/gmdb"
+	"github.com/greatliontech/gmdb/oslock"
 
 	"github.com/greatliontech/ocifs/internal/atomicfile"
 )
@@ -42,13 +43,13 @@ type GCResult struct {
 	CollectedPaths []string
 	// ReclaimedMounts lists dead mount ids reclaimed.
 	ReclaimedMounts []string
-	// UnjudgeableMounts lists live-treated rows whose owner cannot
-	// be judged from this namespace — a visible root leak, remedied
-	// by a sweep from that namespace or a reboot.
-	UnjudgeableMounts []string
-	// ForeignVersionRows lists mounts rows written by a different
-	// ocifs version: the mark is unjudgeable and image-tier
-	// collection stopped — a newer binary's sweep resolves it.
+	// ForeignVersionRows lists LIVE mounts rows written by a
+	// different ocifs version: their liveness is judged by lock
+	// like any row, but a live one's image cannot be read by this
+	// binary, so image-tier collection halts visibly — the one
+	// irreducible foreign-version conservatism
+	// (REQ-store-bookkeeping). Dead foreign rows reclaim normally
+	// and are never listed.
 	ForeignVersionRows []string
 	// Deferred lists items whose deletion failed this pass; they
 	// stay condemnation-eligible and retry next pass.
@@ -92,13 +93,13 @@ func (s *Store) Collect(ctx context.Context, opts CollectOpts) (*GCResult, error
 	if err := s.reclaimDeadOps(ctx, res); err != nil {
 		return nil, err
 	}
+	s.sweepLockTier(ctx)
 
 	// Mark: the transactional root snapshot and the reachable set.
-	roots, unjudgeable, foreignRows, err := s.rootSet(ctx)
+	roots, foreignRows, err := s.rootSet(ctx)
 	if err != nil {
 		return nil, err
 	}
-	res.UnjudgeableMounts = unjudgeable
 	if len(foreignRows) > 0 {
 		// A foreign-version mounts row makes the mark unjudgeable:
 		// its mount may be live and its image unreadable to this
@@ -178,10 +179,20 @@ func (it gcItem) key() string {
 
 // rootSet snapshots every root transactionally
 // (REQ-store-gc-roots).
-func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, []string, error) {
+// markedMount is one mounts row awaiting its liveness verdict —
+// snapshotted transactionally, judged by lock OUTSIDE the read
+// transaction (a reader slot is a finite coordination resource,
+// and a read transaction should not create lock files).
+type markedMount struct {
+	id      string
+	image   v1.Hash
+	foreign bool
+}
+
+func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
 	var roots []v1.Hash
-	var unjudgeable []string
 	var foreignRows []string
+	var mountRows []markedMount
 	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
 		refs, err := rtx.OpenKeyspaceReadOnly(ksRefs)
 		if err != nil {
@@ -208,22 +219,9 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, []string, err
 		}
 		for k, v := range mounts.All() {
 			rec, derr := decodeMountRecord(v)
-			if derr != nil {
-				// A foreign-version row may be a LIVE future-version
-				// mount whose image this reader cannot even name:
-				// the mark is unjudgeable and image-tier collection
-				// must not proceed (store.md: mounts foreign rows
-				// are never acted on destructively).
-				foreignRows = append(foreignRows, string(k))
-				continue
-			}
-			if rec.Owner.Dead() {
-				continue
-			}
-			if rec.Owner.PidNS != "" && rec.Owner.PidNS != selfIdentity().PidNS {
-				unjudgeable = append(unjudgeable, string(k))
-			}
-			roots = append(roots, rec.Image)
+			mountRows = append(mountRows, markedMount{
+				id: string(k), image: rec.Image, foreign: derr != nil,
+			})
 		}
 		uppers, err := rtx.OpenKeyspaceReadOnly(ksUppers)
 		if err != nil {
@@ -248,7 +246,28 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, []string, err
 		}
 		return nil
 	})
-	return roots, unjudgeable, foreignRows, err
+	if err != nil {
+		return nil, nil, err
+	}
+	// Liveness by held lock, judgeable for every row —
+	// foreign-version rows included (the lock has no format). A
+	// dead row is no root (the judge releases without unlink,
+	// leaving disposal to the sweep); held and UNDECIDED both read
+	// live — for a readable row its image roots, for a foreign row
+	// it halts image-tier collection visibly
+	// (REQ-store-bookkeeping's one irreducible foreign-version
+	// conservatism).
+	for _, m := range mountRows {
+		if !s.mountClaimHeld(m.id) {
+			continue
+		}
+		if m.foreign {
+			foreignRows = append(foreignRows, m.id)
+			continue
+		}
+		roots = append(roots, m.image)
+	}
+	return roots, foreignRows, nil
 }
 
 func digestFromKey(k []byte) (v1.Hash, bool) {
@@ -418,9 +437,16 @@ func (s *Store) unreachableItems(ctx context.Context, reachable map[string]bool)
 			}
 		}
 	}
-	// Rowless mount scaffolding.
+	// Rowless mount scaffolding — skipping any id whose claim is
+	// held: registration acquires the lock BEFORE its row exists
+	// (lock-before-row), so a mid-registration state directory is
+	// rowless yet claimed, and a grace-ignoring sweep must not eat
+	// it from under the registrant.
 	if entries, err := os.ReadDir(filepath.Join(s.path, "mounts")); err == nil {
 		for _, e := range entries {
+			if s.mountClaimHeld(e.Name()) {
+				continue
+			}
 			if _, err := s.bk.MountGet(ctx, e.Name()); errors.Is(err, os.ErrNotExist) {
 				items = append(items, gcItem{tier: "path", path: filepath.Join(s.path, "mounts", e.Name())})
 			}
@@ -536,7 +562,7 @@ func (s *Store) applyGrace(ctx context.Context, candidates []gcItem, grace time.
 // write transaction (REQ-store-gc-safe). Items reachable under the
 // fresh snapshot are dropped.
 func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gcItem, error) {
-	roots, _, foreignRows, err := s.rootSet(ctx)
+	roots, foreignRows, err := s.rootSet(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -681,6 +707,69 @@ func (s *Store) gcDelete(ctx context.Context, key string) error {
 	})
 }
 
+// removeMountState removes a dead mount's state directory — a
+// variable only so the reclamation deferral branch (removal
+// failure ⇒ row and lock file both survive) is testable on a
+// filesystem where removal works. Never reassigned outside tests.
+var removeMountState = os.RemoveAll
+
+// ReclaimDeadMounts reclaims dead mounts' rows, state directories,
+// and claim files (REQ-store-mount-registry): a row whose claim
+// lock a try-acquisition takes is a dead mount — the verdict for
+// every row, foreign-version rows included (the lock has no
+// format) — and holding that acquisition the sweep runs the
+// fallible steps first (detach, state-directory removal); only on
+// full success the row goes and the lock file is retired as the
+// claim's final holder. Failure releases without unlink — row and
+// file persist for retry, never a half-reclaimed id. A racing
+// remount of the id meets the held lock and refuses as in-use.
+// Returns the reclaimed ids.
+func (s *Store) ReclaimDeadMounts(ctx context.Context) ([]string, error) {
+	var candidates []string
+	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksMounts)
+		if err != nil {
+			return err
+		}
+		for k := range ks.All() {
+			candidates = append(candidates, string(k))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var reclaimed []string
+	for _, id := range candidates {
+		l, err := oslock.TryAcquire(s.mountLockPath(id))
+		if err != nil {
+			// Held (live) or undecided: nothing to reclaim now.
+			continue
+		}
+		stateDir := filepath.Join(s.path, "mounts", id)
+		acted := true
+		if _, err := os.Stat(stateDir); err == nil {
+			detachStaleMount(filepath.Join(stateDir, "mnt"))
+			if err := removeMountState(stateDir); err != nil {
+				acted = false
+			}
+		}
+		if !acted {
+			// Deferral: release without unlink — row and lock file
+			// stay for a later sweep (REQ-store-mount-registry).
+			l.Close()
+			continue
+		}
+		if err := s.DeleteMountRecord(ctx, id); err != nil {
+			l.Close()
+			continue
+		}
+		l.Retire()
+		reclaimed = append(reclaimed, id)
+	}
+	return reclaimed, nil
+}
+
 // reclaimDeadOps removes dead ops rows and the temporaries they
 // own, wherever they live (REQ-store-gc-collect).
 func (s *Store) reclaimDeadOps(ctx context.Context, res *GCResult) error {
@@ -735,6 +824,7 @@ func (s *Store) DebrisSweep(ctx context.Context) (*GCResult, error) {
 	if err := s.reclaimDeadOps(ctx, res); err != nil {
 		return nil, err
 	}
+	s.sweepLockTier(ctx)
 	// Unowned export temporaries inside the store.
 	exportsRoot := filepath.Join(s.path, "exports")
 	if algos, err := os.ReadDir(exportsRoot); err == nil {

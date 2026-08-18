@@ -440,10 +440,25 @@ temporaries whose owner is dead.
 **REQ-store-gc-safe** (invariant): Collection MUST be safe at any
 moment, whoever triggers it. The mark reads roots transactionally.
 Deletion is two-phase through the condemned set: the sweep is
-itself an `ops` operation, and inside one write transaction it
-re-checks reachability against fresh roots and records the digests
-it will delete in `gc`, each condemned row carrying the sweeping
-op's id — a condemned row whose sweeper's claim lock is
+itself an `ops` operation; it re-checks reachability against a
+fresh transactional root snapshot and records the digests it will
+delete in `gc` in one write transaction, each condemned row
+carrying the sweeping op's id. What makes the re-check sound is
+not its timing but the fences: the sweep holds the ingest lease
+for its whole span, excluding every leased writer; the condemned
+consult covers the window after the condemned rows exist; and an
+unleased root publish names a digest already rooted at its
+ACQUISITION — its content was published under the lease, row-last.
+One window is open between those fences: an acquisition whose last
+root is severed between resolution and its unleased row write — a
+mount registration, an upper binding, an export pin, or the
+reference-cache row of a digest-form acquisition over fully
+materialized content, the one acquisition path that takes no lease
+at all — can publish a root for a digest a concurrently
+re-checking sweep is condemning — closed by pinning the
+acquisition-to-row span under an op claim, which no acquisition
+path holds.
+A condemned row whose sweeper's claim lock is
 acquirable binds nobody and is debris (a crashed sweeper must not
 wedge publication forever; the try-lock verdict is held-lock
 liveness like any other), and the judge that acquires it clears

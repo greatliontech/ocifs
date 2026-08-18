@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/gmdb"
 	"github.com/greatliontech/gmdb/oslock"
 )
 
@@ -195,6 +197,83 @@ func TestProbePathsUnique(t *testing.T) {
 		if !strings.HasPrefix(filepath.Base(p), "probe-") {
 			t.Fatalf("probe path %q lacks the probe- prefix", p)
 		}
+	}
+}
+
+// TestLockTierSweep pins the locks/ disposal rule
+// (REQ-store-gc-roots): unheld files with no surviving residue — a
+// crashed registration's claim, a crashed opener's probe, a
+// retired serve's upper file — retire at the sweep; a held file is
+// untouched; a mount file whose row survives keeps its file (the
+// reclamation deferral shape).
+func TestLockTierSweep(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	ctx := context.Background()
+
+	// Stranded, residue-free files: acquire-then-close leaves the
+	// unheld file a crash or refused registration would.
+	for _, p := range []string{s.mountLockPath("gone"), s.upperLockPath("gone"), filepath.Join(s.locksDir(), "probe-stranded")} {
+		l, err := oslock.TryAcquire(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.Close()
+	}
+	// A mount file whose ROW survives: the deferral shape — kept.
+	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("f0", 32)}
+	if err := s.bk.MountPut(ctx, "deferred", newMountRecord(img, "", "/d")); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := oslock.TryAcquire(s.mountLockPath("deferred")); err != nil {
+		t.Fatal(err)
+	} else {
+		l.Close()
+	}
+	// A FOREIGN-version row's deferred file: the row exists but is
+	// undecodable to this binary — existence, not decodability,
+	// keeps the file.
+	foreign := append([]byte{mountRecVersion + 1}, encodeMountRecord(MountRecord{})[1:]...)
+	if err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksMounts)
+		if err != nil {
+			return err
+		}
+		return ks.Put([]byte("foreigndefer"), foreign)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := oslock.TryAcquire(s.mountLockPath("foreigndefer")); err != nil {
+		t.Fatal(err)
+	} else {
+		l.Close()
+	}
+	// A held file: live, untouched.
+	held, err := oslock.TryAcquire(s.mountLockPath("livehold"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+
+	s.sweepLockTier(ctx)
+
+	for _, gone := range []string{s.mountLockPath("gone"), s.upperLockPath("gone"), filepath.Join(s.locksDir(), "probe-stranded")} {
+		if _, err := os.Stat(gone); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stranded lock file %s survived the sweep: %v", gone, err)
+		}
+	}
+	if _, err := os.Stat(s.mountLockPath("deferred")); err != nil {
+		t.Fatalf("deferred mount's lock file swept despite surviving row: %v", err)
+	}
+	if _, err := os.Stat(s.mountLockPath("foreigndefer")); err != nil {
+		t.Fatalf("foreign row's lock file swept despite surviving row: %v", err)
+	}
+	if _, err := os.Stat(s.mountLockPath("livehold")); err != nil {
+		t.Fatalf("held lock file swept: %v", err)
 	}
 }
 

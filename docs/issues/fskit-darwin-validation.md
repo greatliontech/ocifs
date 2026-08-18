@@ -41,5 +41,15 @@ To validate, on macOS 15.4+ with a paid Apple Developer team:
    misread the kernel's recorded mountpoint and report an early
    unmount — confirm or clear this on real APFS.
 
+Held-lock liveness adds a decision this arc must make before
+landing: the mount's claim lock is held by the REGISTRANT (the
+ocifs.Mount caller), while on darwin the SERVING process is the
+FSKit appex — registrant death releases the claim and a sweeper
+would reclaim state under a live appex serve. The identity scheme
+this replaced judged the same registrant, so nothing regressed,
+but the spec's held-lock model assumes claim holder = serving
+process; darwin needs the claim held by (or handed to) the appex,
+or a spec-stated exception.
+
 Lands: when the darwin mount validation reports back and its
 findings are dispositioned.

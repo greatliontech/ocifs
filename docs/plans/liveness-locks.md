@@ -26,7 +26,7 @@ report publication marker.
       internally; tag; ocifs go.mod bump. Committed in gmdb.
 - [x] 4. ocifs lock plumbing: the locks tier, the init probe, and
       the claim helpers over the gmdb lock package.
-- [ ] 5. Mounts and uppers on locks: registration acquires
+- [x] 5. Mounts and uppers on locks: registration acquires
       mount-<id>, writable serve holds upper-<name>, reclamation
       claims by acquisition, RemoveUpper takes the upper lock; the
       identity Dead() verdicts, guard rows, and claim-rewrite

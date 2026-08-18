@@ -29,7 +29,7 @@ func (s *Store) NewUpper(name string, base v1.Hash) (string, error) {
 	if !validMountID(name) {
 		return "", fmt.Errorf("upper name %q is not a single path element", name)
 	}
-	root := filepath.Join(s.path, "uppers", name)
+	root := upperDirOf(s.path, name)
 	dir := filepath.Join(root, "upper")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err

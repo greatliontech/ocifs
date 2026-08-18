@@ -723,7 +723,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-gc-safe"
-  content_hash: "4cb170a4ebeb939606b21abd32277c289a1bc6c49b44c6dfc8b251c6a78fa9d5"
+  content_hash: "08899bbb56010eaa5645bdab6bc113bfa985900a5ae1838fbfe3598d3fdacdab"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestCondemnedConsultRefusesUnleasedPublish"
   role: BINDING_ROLE_TESTS
@@ -732,7 +732,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-gc-safe"
-  content_hash: "4cb170a4ebeb939606b21abd32277c289a1bc6c49b44c6dfc8b251c6a78fa9d5"
+  content_hash: "08899bbb56010eaa5645bdab6bc113bfa985900a5ae1838fbfe3598d3fdacdab"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestCondemnReVerifiesRoots"
   role: BINDING_ROLE_TESTS
@@ -741,7 +741,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-gc-safe"
-  content_hash: "4cb170a4ebeb939606b21abd32277c289a1bc6c49b44c6dfc8b251c6a78fa9d5"
+  content_hash: "08899bbb56010eaa5645bdab6bc113bfa985900a5ae1838fbfe3598d3fdacdab"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.condemn"
   role: BINDING_ROLE_IMPLEMENTS
@@ -786,7 +786,7 @@ bindings {
 
 bindings {
   requirement_id: "REQ-store-gc-safe"
-  content_hash: "4cb170a4ebeb939606b21abd32277c289a1bc6c49b44c6dfc8b251c6a78fa9d5"
+  content_hash: "08899bbb56010eaa5645bdab6bc113bfa985900a5ae1838fbfe3598d3fdacdab"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyCollectNeverEatsRooted"
   role: BINDING_ROLE_TESTS
@@ -818,15 +818,6 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.TestArbitratedRegistrationOverDeadRowStartsUnpublished"
   role: BINDING_ROLE_TESTS
   shape_hash: "d2a289e78225b1794a76d55bcb696a27c3da7c42c67498c4a3b625d181e62a0d"
-}
-
-bindings {
-  requirement_id: "REQ-store-bookkeeping"
-  content_hash: "4f1dd47c09aec179a10cdfb643a028e3d3b9237b65795161b27f8ccfef0a43a3"
-  backend: "go"
-  symbol: "github.com/greatliontech/ocifs/internal/store.TestPublicationSurvivesReclamationDeferral"
-  role: BINDING_ROLE_TESTS
-  shape_hash: "26858fe4abfa10dde6e3eedd0b4a04e7bc1446a64a2b4ae73c8166a1575d19e1"
 }
 
 bindings {
@@ -908,4 +899,67 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.TestProbePathsUnique"
   role: BINDING_ROLE_TESTS
   shape_hash: "1c7fe04ecc0b63f28d3ec57b9aa6db0b48cec7bbf1fde2dbbd9996d5a257102f"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestReclaimNeverTouchesHeldClaims"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "a4a2f29c687933bd539a8ec510ad4a11d641f07046def40a614a8d839d927938"
+}
+
+bindings {
+  requirement_id: "REQ-store-gc-roots"
+  content_hash: "681dd26dda6e4109e5cd5f2cff2c16d08043622e429d7e6188a817365ef81af0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRootSetJudgesByLock"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "771cb3032afa8e301af68bab7e40fc19689882b87d5c4c81ace21d565dc4145d"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestSameIDLiveRowRefusedAtRegistration"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "26e94bdc09fbbcf7fd30567dd799a9bc364b8eb4420130a5d7dd018c9ade9f5c"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.RegisterMountRecordArbitrated"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "59316a228efcddafe0f2c412f00d5a816fbe0ce1f4b7462eb3866c5ce4fa664d"
+}
+
+bindings {
+  requirement_id: "REQ-store-gc-roots"
+  content_hash: "681dd26dda6e4109e5cd5f2cff2c16d08043622e429d7e6188a817365ef81af0"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestLockTierSweep"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "8eb5526eca037caf412815fce4936f725f670d1ff1ffd7077227eabed2bb39ec"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestMidRegistrationStateSurvivesSweep"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "787184b489cfe4211560c0c386c8e85e5d2bb7b3146f32ef4dd06127071b2f07"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestReclaimDeferralKeepsRowAndFile"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "7ebff4f2a5a6d98d5171e829b135670ef7d4793bbe2d63a23db232cb34a8877b"
 }

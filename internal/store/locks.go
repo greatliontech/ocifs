@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/greatliontech/gmdb"
 	"github.com/greatliontech/gmdb/oslock"
 )
 
@@ -63,6 +66,83 @@ func (s *Store) opLockPath(id string) string {
 // (REQ-store-single-writer).
 func (s *Store) ingestLockPath() string {
 	return filepath.Join(s.locksDir(), "ingest")
+}
+
+// upperDirOf is the uppers tier's one name site for a named upper's
+// dialect-tree root.
+func upperDirOf(path, name string) string {
+	return filepath.Join(path, "uppers", name)
+}
+
+// mountClaimHeld is the judge-only three-valued verdict on a mount
+// id's claim (held-lock liveness): acquired means dead — released
+// immediately without unlink, the deferral shape, leaving disposal
+// to the sweep — and both held and UNDECIDED read as alive, because
+// undecided is never death. Callers that must KEEP the acquisition
+// (reclamation) take the lock themselves.
+func (s *Store) mountClaimHeld(id string) bool {
+	l, err := oslock.TryAcquire(s.mountLockPath(id))
+	if err == nil {
+		l.Close()
+		return false
+	}
+	return true
+}
+
+// mountRowExists reports whether ANY mounts row occupies the id —
+// decodable or foreign — with an undecided read counting as
+// existing (never a destruction verdict).
+func (s *Store) mountRowExists(ctx context.Context, id string) bool {
+	exists := true
+	err := s.bk.db.View(ctx, func(rtx *gmdb.ReadTx) error {
+		ks, err := rtx.OpenKeyspaceReadOnly(ksMounts)
+		if err != nil {
+			return err
+		}
+		_, err = ks.Get([]byte(id))
+		if errors.Is(err, gmdb.ErrNotFound) {
+			exists = false
+			return nil
+		}
+		return err
+	})
+	return exists || err != nil
+}
+
+// sweepLockTier disposes of dead claims' lock files
+// (REQ-store-gc-roots): for each locks/ file, try-lock — blocked
+// means live, untouched; acquired means the claim is dead, and the
+// sweep unlinks as its final holder once no residue survives. A
+// mount claim whose row still exists keeps its file with the row
+// (the reclamation deferral shape — the row-driven sweep owns that
+// disposal); every other unheld file (a crashed registration's
+// claim, a crashed opener's probe, a retired serve's upper file)
+// has no residue and retires here.
+func (s *Store) sweepLockTier(ctx context.Context) {
+	ents, err := os.ReadDir(s.locksDir())
+	if err != nil {
+		return
+	}
+	for _, e := range ents {
+		name := e.Name()
+		l, err := oslock.TryAcquire(filepath.Join(s.locksDir(), name))
+		if err != nil {
+			continue // held (live) or undecided: untouched
+		}
+		if id, ok := strings.CutPrefix(name, "mount-"); ok {
+			// RAW row existence, never decodability: a
+			// foreign-version row deliberately reads as absent
+			// through MountGet (heal-as-absent), but its FILE must
+			// stay with the row (the deferral shape). Only a
+			// proven-absent row makes the file residue-free; an
+			// undecided read keeps it too.
+			if s.mountRowExists(ctx, id) {
+				l.Close()
+				continue
+			}
+		}
+		l.Retire()
+	}
 }
 
 // probeAcquireTimeout bounds the probe's first acquisition: on a

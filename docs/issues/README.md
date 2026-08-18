@@ -1,9 +1,10 @@
 # Issues
 
-- `docs/issues/mountrec-altitude-split.md` — mountrec.go mixes the
-  row codec, registry surface, and reclamation sweep; re-home when
-  the liveness-locks rework rewrites reclamation. Lands: 5
-  (liveness-locks plan).
+- `docs/issues/acquisition-span-unrooted.md` — unleased publishes
+  (mount registration, upper binding, export pin, digest-form
+  RefPut) hold no pin over the resolution-to-row span; a concurrent
+  sever + grace-ignoring sweep can condemn the digest inside it.
+  Fix: per-acquisition op claims. Lands: 6 (liveness-locks plan).
 - `docs/issues/fskit-darwin-validation.md` — the FSKit backend's
   portable core is linux-pinned; the platform half (signed appex,
   bridge dispatch, orchestrated mount) awaits a darwin Tier-2 run.

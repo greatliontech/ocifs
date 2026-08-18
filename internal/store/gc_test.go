@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/greatliontech/gmdb"
+	"github.com/greatliontech/gmdb/oslock"
 	"github.com/greatliontech/ocifs/internal/layer"
 	"pgregory.net/rapid"
 
@@ -157,8 +158,24 @@ func TestCondemnedConsultRefusesUnleasedPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "m1", h, "", "/x"); !errors.Is(err, ErrCondemned) {
+	upClaim, err := s.ClaimUpper("u-cond")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RegisterMountRecordArbitrated(context.Background(), "m1", h, "u-cond", "/x", upClaim); !errors.Is(err, ErrCondemned) {
 		t.Fatalf("registration over a condemned digest: %v", err)
+	}
+	// The refused registration released BOTH claims (a leaked upper
+	// would refuse every later writable mount of the name forever).
+	if reup, err := s.ClaimUpper("u-cond"); err != nil {
+		t.Fatalf("upper claim leaked by refused registration: %v", err)
+	} else {
+		reup.Close()
+	}
+	if ml, err := oslock.TryAcquire(s.mountLockPath("m1")); err != nil {
+		t.Fatalf("mount claim leaked by refused registration: %v", err)
+	} else {
+		ml.Close()
 	}
 	if err := s.bk.RefPut(context.Background(), mustRef(t, "r.io/xx:yy"), h); !errors.Is(err, ErrCondemned) {
 		t.Fatalf("ref row over a condemned digest: %v", err)
@@ -174,8 +191,10 @@ func TestCondemnedConsultRefusesUnleasedPublish(t *testing.T) {
 	if err := s.EndOp(context.Background(), sweepOp); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "m1", h, "", "/x"); err != nil {
+	if claim, err := s.RegisterMountRecordArbitrated(context.Background(), "m1", h, "", "/x", nil); err != nil {
 		t.Fatalf("finished sweeper still binds: %v", err)
+	} else {
+		claim.release()
 	}
 }
 
@@ -188,7 +207,12 @@ func TestRemovalRefusedWhileServed(t *testing.T) {
 	}
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("dd", 32)}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "served", h, "up1", "/m"); err != nil {
+	upClaim, err := s.ClaimUpper("up1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "served", h, "up1", "/m", upClaim)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RemoveImage(context.Background(), h); err == nil {
@@ -197,14 +221,25 @@ func TestRemovalRefusedWhileServed(t *testing.T) {
 	if err := s.RemoveUpper(context.Background(), "up1"); err == nil {
 		t.Fatal("served upper removed")
 	}
-	if err := s.DeregisterMount(context.Background(), "served"); err != nil {
+	if err := s.DeregisterMount(context.Background(), "served", claim); err != nil {
 		t.Fatal(err)
+	}
+	// Deregistration retired both claim files (row removed, unlink
+	// while held, then released — REQ-store-mount-registry).
+	if _, err := os.Stat(s.mountLockPath("served")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("mount claim file survived deregistration: %v", err)
+	}
+	if _, err := os.Stat(s.upperLockPath("up1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("upper claim file survived deregistration: %v", err)
 	}
 	if err := s.RemoveImage(context.Background(), h); err != nil {
 		t.Fatalf("unserved image removal: %v", err)
 	}
 	if err := s.RemoveUpper(context.Background(), "up1"); err != nil {
 		t.Fatalf("unserved upper removal: %v", err)
+	}
+	if _, err := s.bk.UpperBinding(context.Background(), "up1"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("upper binding survived removal: %v", err)
 	}
 }
 
@@ -256,6 +291,13 @@ func TestDebrisSweepAtInit(t *testing.T) {
 	if err := os.MkdirAll(storeTemp, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// A stranded residue-free lock file: the init debris sweep's own
+	// lock-tier pass must dispose of it.
+	if l, err := oslock.TryAcquire(s.mountLockPath("init-stranded")); err != nil {
+		t.Fatal(err)
+	} else {
+		l.Close()
+	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +315,9 @@ func TestDebrisSweepAtInit(t *testing.T) {
 	}
 	if n := len(opsRows(t, dir)); n != 0 {
 		t.Fatalf("%d dead ops rows survived init", n)
+	}
+	if _, err := os.Stat(s2.mountLockPath("init-stranded")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stranded lock file survived the init sweep: %v", err)
 	}
 }
 
@@ -341,9 +386,11 @@ func TestRootArms(t *testing.T) {
 			top := img.Hash()
 			switch arm {
 			case "mount":
-				if err := s.RegisterMountRecordArbitrated(context.Background(), "root-m", top, "", "/m"); err != nil {
+				claim, err := s.RegisterMountRecordArbitrated(context.Background(), "root-m", top, "", "/m", nil)
+				if err != nil {
 					t.Fatal(err)
 				}
+				t.Cleanup(claim.release)
 			case "upper":
 				if _, err := s.bk.UpperBind(context.Background(), "root-u", top); err != nil {
 					t.Fatal(err)
@@ -423,9 +470,12 @@ func TestAutoCollectDisabled(t *testing.T) {
 	}
 }
 
-// TestForeignMountRowHaltsImageCollection pins the M-class rule: an
-// unreadable mounts row stops image-tier collection visibly and
-// refuses removals.
+// TestForeignMountRowHaltsImageCollection pins the one
+// irreducible foreign-version conservatism
+// (REQ-store-bookkeeping): a LIVE foreign-version mounts row — its
+// claim lock held, its image unreadable — halts image-tier
+// collection visibly and refuses image removal; dead, the same row
+// is ordinary debris: reclaimed, halting nothing.
 func TestForeignMountRowHaltsImageCollection(t *testing.T) {
 	reg := newTestRegistry()
 	ref := testHost + "/gc/foreignrow:v1"
@@ -439,6 +489,11 @@ func TestForeignMountRowHaltsImageCollection(t *testing.T) {
 	if err := writeRawMountRow(t, dir, "future", foreign); err != nil {
 		t.Fatal(err)
 	}
+	// The future-version mount is ALIVE: its claim lock is held.
+	holder, err := oslock.TryAcquire(s.mountLockPath("future"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.RemoveRef(context.Background(), ref); err != nil {
 		t.Fatal(err)
 	}
@@ -447,16 +502,38 @@ func TestForeignMountRowHaltsImageCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(res.ForeignVersionRows) == 0 {
-		t.Fatal("foreign row not reported")
+		t.Fatal("live foreign row not reported")
 	}
 	if len(res.CollectedBlobs) != 0 {
-		t.Fatalf("image-tier collection proceeded under a foreign row: %+v", res.CollectedBlobs)
+		t.Fatalf("image-tier collection proceeded under a live foreign row: %+v", res.CollectedBlobs)
 	}
 	if err := s.RemoveImage(context.Background(), img.Hash()); err == nil {
-		t.Fatal("removal proceeded under an unreadable mount row")
+		t.Fatal("removal proceeded under a live unreadable mount row")
 	}
-	if err := s.RemoveUpper(context.Background(), "any"); err == nil {
-		t.Fatal("upper removal proceeded under an unreadable mount row")
+
+	// Dead — the lock released — the same row halts nothing: image
+	// removal proceeds past it (the narrowing to LIVE foreign rows
+	// only), and the sweep reclaims it while collection proceeds.
+	holder.Close()
+	if err := s.RemoveImage(context.Background(), img.Hash()); err != nil {
+		t.Fatalf("dead foreign row refused image removal: %v", err)
+	}
+	res, err = s.Collect(context.Background(), CollectOpts{Grace: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.ForeignVersionRows) != 0 {
+		t.Fatalf("dead foreign row still reported live: %v", res.ForeignVersionRows)
+	}
+	found := false
+	for _, id := range res.ReclaimedMounts {
+		found = found || id == "future"
+	}
+	if !found {
+		t.Fatalf("dead foreign row not reclaimed: %v", res.ReclaimedMounts)
+	}
+	if len(res.CollectedBlobs) == 0 {
+		t.Fatal("collection did not proceed after the foreign mount died")
 	}
 }
 
@@ -535,11 +612,106 @@ func TestCASRootTempCollected(t *testing.T) {
 	}
 }
 
-// TestMountIDRejectsControlBytes pins the guard-namespace
-// reservation: API ids never carry control bytes, so internal
-// registry ids are unrepresentable (api.md REQ-api-mount-id).
+// TestReclaimDeferralKeepsRowAndFile pins the deferral branch
+// (REQ-store-mount-registry): a dead mount whose state-directory
+// removal fails keeps BOTH its row and its lock file for a later
+// sweep — released without unlink, never a half-reclaimed id — and
+// the retry reclaims once removal works again. The failure is
+// injected at the removal seam; nothing on a healthy filesystem
+// reaches this branch.
+func TestReclaimDeferralKeepsRowAndFile(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("d4", 32)}
+	if _, _, err := s.NewMountState("deferred"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bk.MountPut(context.Background(), "deferred", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
+		t.Fatal(err)
+	}
+	orig := removeMountState
+	removeMountState = func(string) error { return errors.New("injected removal failure") }
+	defer func() { removeMountState = orig }()
+
+	reclaimed, err := s.ReclaimDeadMounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range reclaimed {
+		if id == "deferred" {
+			t.Fatal("deferral reported as reclaimed")
+		}
+	}
+	if _, err := s.MountRecord(context.Background(), "deferred"); err != nil {
+		t.Fatalf("deferral lost the row: %v", err)
+	}
+	if _, err := os.Stat(s.mountLockPath("deferred")); err != nil {
+		t.Fatalf("deferral lost the lock file: %v", err)
+	}
+
+	// Removal healed: the retry reclaims row, state, and lock file.
+	removeMountState = orig
+	if _, err := s.ReclaimDeadMounts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MountRecord(context.Background(), "deferred"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left the row: %v", err)
+	}
+	if _, err := os.Stat(s.mountLockPath("deferred")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left the lock file: %v", err)
+	}
+}
+
+// TestMidRegistrationStateSurvivesSweep pins the lock-before-row
+// window (REQ-store-mount-registry): a registrant holds its claim
+// before its row exists, and its freshly created state directory —
+// rowless but claimed — must survive even a grace-ignoring sweep.
+func TestMidRegistrationStateSurvivesSweep(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	// The mid-registration state: claim held, directory minted, row
+	// not yet written.
+	held, err := oslock.TryAcquire(s.mountLockPath("midreg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	stateDir := filepath.Join(dir, "mounts", "midreg", "mnt")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A stranded residue-free lock file rides along: Collect's own
+	// lock-tier sweep — not just a direct sweepLockTier call — must
+	// dispose of it (the delivery path of the disposer).
+	if l, err := oslock.TryAcquire(s.mountLockPath("stranded")); err != nil {
+		t.Fatal(err)
+	} else {
+		l.Close()
+	}
+	if _, err := s.Collect(context.Background(), CollectOpts{Grace: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stateDir); err != nil {
+		t.Fatalf("claimed mid-registration state collected: %v", err)
+	}
+	if _, err := os.Stat(s.mountLockPath("stranded")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stranded lock file survived Collect: %v", err)
+	}
+}
+
+// TestMountIDRejectsControlBytes pins the id hygiene rule: API ids
+// never carry control bytes — they name registry rows, state
+// directories, and claim lock files (api.md REQ-api-mount-id).
 func TestMountIDRejectsControlBytes(t *testing.T) {
-	for _, bad := range []string{"\x00upper-removal\x00x", "a\x00b", "a\tb", "a\nb"} {
+	for _, bad := range []string{"\x00x", "a\x00b", "a\tb", "a\nb"} {
 		if validMountID(bad) {
 			t.Fatalf("control-byte id %q accepted", bad)
 		}

@@ -291,16 +291,12 @@ func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) 
 		// killed predecessor would wedge the ReadDir below, and
 		// detach is idempotent on a bare directory.
 		detachStaleMount(mountDir)
-		rec, rerr := s.bk.MountGet(context.Background(), id)
-		switch {
-		case rerr == nil && !rec.Owner.Dead():
+		// Fail fast on a live id: the claim lock is the verdict
+		// (held-lock liveness; held and undecided both read live);
+		// registration re-arbitrates by acquiring it for real. A
+		// dead row is left for the registration to overwrite.
+		if s.mountClaimHeld(id) {
 			return "", "", fmt.Errorf("mount id %q is in use by a live mount", id)
-		case rerr == nil:
-			// Dead row: left for the registration transaction to
-			// overwrite — deleting it here would race the sweep's
-			// claim.
-		case !errors.Is(rerr, os.ErrNotExist):
-			return "", "", rerr
 		}
 		entries, err := os.ReadDir(mountDir)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -321,9 +317,10 @@ func validMountID(id string) bool {
 	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
 		return false
 	}
-	// Control bytes are rejected so internal registry ids (the
-	// NUL-prefixed upper-removal guard) are unrepresentable through
-	// the API (api.md REQ-api-mount-id).
+	// Control bytes are rejected as id hygiene: ids name registry
+	// rows, state directories, and claim lock files, none of which
+	// should carry unprintable path elements
+	// (api.md REQ-api-mount-id).
 	for i := 0; i < len(id); i++ {
 		if id[i] < 0x20 {
 			return false

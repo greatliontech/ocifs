@@ -85,8 +85,8 @@ var gcCmd = &cobra.Command{
 		for _, id := range res.ReclaimedMounts {
 			cmd.Printf("reclaimed dead mount %s\n", id)
 		}
-		for _, id := range res.UnjudgeableMounts {
-			cmd.Printf("unjudgeable mount row %s (foreign PID namespace; sweep from that namespace or reboot to resolve)\n", id)
+		for _, id := range res.ForeignVersionRows {
+			cmd.Printf("live foreign-version mount row %s halted image-tier collection (a matching ocifs version's sweep resolves it)\n", id)
 		}
 		return nil
 	},

@@ -468,3 +468,12 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "bf82d0e9a6ae20571811d5ad0eb919c07f42fce525dd93739224570584446abd"
 }
+
+bindings {
+  requirement_id: "REQ-writable-base-binding"
+  content_hash: "ada1adb5209ce6922a0974edae6fa9dec9ee5e2a5a675dd11678acbf98e86a8f"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestNamedUpperClaimPrecedesUpperCreation"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e351c7a74a12c2f4d0c2cec0969f6345267476c6b0e8e7e7568329a34f8d2069"
+}

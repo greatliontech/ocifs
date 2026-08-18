@@ -16,7 +16,9 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/gmdb/oslock"
 	"github.com/greatliontech/ocifs/internal/projection"
+
 	"github.com/greatliontech/ocifs/internal/store"
 )
 
@@ -226,8 +228,12 @@ type ImageMount struct {
 	upperName  string
 	// upperRoot is the resolved upper the mount serves ("" for a
 	// read-only mount); the named upper's one-writable-mount
-	// arbitration lives in the mount registry row.
+	// arbitration is the upper claim lock inside claim.
 	upperRoot string
+	// claim is the mount's held claim (store.md held-lock
+	// liveness): acquired before the registry row, held for the
+	// serve, retired at deregistration.
+	claim *store.MountClaim
 }
 
 func (im *ImageMount) ConfigFile() *v1.ConfigFile {
@@ -241,11 +247,11 @@ func (im *ImageMount) Wait() {
 func (im *ImageMount) Unmount() error {
 	err := im.server.Unmount()
 	// Deregistration only when the mount actually stopped serving —
-	// a failed unmount keeps the row, and with it the named upper's
-	// one-writable-mount refusal, in force
+	// a failed unmount keeps the row and the held claim, and with
+	// them the named upper's one-writable-mount refusal, in force
 	// (REQ-store-mount-registry).
 	if err == nil {
-		if derr := im.ofs.store.DeregisterMount(context.Background(), im.id); derr != nil {
+		if derr := im.ofs.store.DeregisterMount(context.Background(), im.id, im.claim); derr != nil {
 			return derr
 		}
 		// Unmount is a garbage-creating transition
@@ -332,10 +338,32 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 	}
 	im.img = img
 
+	// A named upper's serve claim comes FIRST — before the upper's
+	// tree or base binding is touched (writable.md
+	// REQ-writable-base-binding: the lock is acquired before any
+	// bookkeeping write) — so a concurrent RemoveUpper can never
+	// interleave with an upper being brought up. Ownership passes
+	// to the registration below, which releases it on any failure.
+	var upperClaim *oslock.Lock
+	if im.upperName != "" {
+		upperClaim, err = o.store.ClaimUpper(im.upperName)
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer func() {
+		// Released here only if the claim never reached the
+		// registration (an error between claim and register).
+		if im.claim == nil && upperClaim != nil {
+			upperClaim.Close()
+		}
+	}()
+
 	// Resolve the upper: the caller's directory as given, or the
-	// store-managed named upper — created on first use, its base
-	// binding validated against this image (REQ-api-mount-writable).
-	// Platform-split: the writable stage serves FUSE.
+	// store-managed named upper — created on first use under the
+	// held claim, its base binding validated against this image
+	// (REQ-api-mount-writable). Platform-split: the writable stage
+	// serves FUSE.
 	if err := platformResolveUpper(o, im, img); err != nil {
 		return nil, err
 	}
@@ -372,17 +400,21 @@ func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
 		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
 	}
 
-	// The mount's bookkeeping record (store.md REQ-store-bookkeeping
-	// mounts keyspace): liveness identity, image, upper name,
-	// mountpoint; the projection report joins it once built. A
-	// failed attempt leaves no row (REQ-store-mount-registry).
+	// The mount's claim and bookkeeping record (store.md held-lock
+	// liveness, REQ-store-bookkeeping mounts keyspace): lock before
+	// row, held for the serve; the projection report joins the row
+	// once built. A failed attempt leaves no row and no held claim
+	// (REQ-store-mount-registry).
 	im.id = filepath.Base(stateDir)
-	if err := o.store.RegisterMountRecordArbitrated(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint); err != nil {
+	claim, err := o.store.RegisterMountRecordArbitrated(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint, upperClaim)
+	upperClaim = nil // ownership transferred, success or failure
+	if err != nil {
 		return nil, err
 	}
+	im.claim = claim
 	defer func() {
 		if im.server == nil {
-			o.store.DeleteMountRecord(context.Background(), im.id)
+			o.store.DeregisterMount(context.Background(), im.id, im.claim)
 		}
 	}()
 

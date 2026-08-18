@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/gmdb/oslock"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
@@ -221,6 +222,16 @@ func TestWritableNamedUpper(t *testing.T) {
 		!strings.Contains(err.Error(), "bound to base") {
 		t.Fatalf("foreign base accepted: %v", err)
 	}
+	// The refusal released the upper claim it took before the
+	// binding check — a leaked claim would refuse this remount (and
+	// RemoveUpper) forever in this process.
+	im3, err := ofs.Mount(refStr, MountWithNamedUpper("scratchpad"))
+	if err != nil {
+		t.Fatalf("upper claim leaked by refused mount: %v", err)
+	}
+	if err := im3.Unmount(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestMountIDReusableAfterUnmount pins the reuse clause of
@@ -246,5 +257,44 @@ func TestMountIDReusableAfterUnmount(t *testing.T) {
 	}
 	if err := im2.Unmount(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestNamedUpperClaimPrecedesUpperCreation pins writable.md
+// REQ-writable-base-binding's ordering: the upper's serve claim is
+// acquired BEFORE any bookkeeping write for the upper, so a mount
+// refused by a held claim leaves no upper tree and no binding —
+// nothing a concurrent RemoveUpper holding that same claim could
+// race against. The holder is simulated directly on the claim file
+// the spec names (locks/upper-<name>).
+func TestNamedUpperClaimPrecedesUpperCreation(t *testing.T) {
+	ofs, refStr := writableFixtureEnv(t, "wupperclaim")
+	work := filepath.Join(".scratch", "ocifs-wupperclaim", "work")
+	holder, err := oslock.TryAcquire(filepath.Join(work, "locks", "upper-ux"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ofs.Mount(refStr, MountWithNamedUpper("ux")); err == nil ||
+		!strings.Contains(err.Error(), "already serves") {
+		// The substring binds the refusal to the upper-claim
+		// mechanism: a mis-derived work path would fail some other
+		// way and pass vacuously.
+		t.Fatalf("mount against a held upper claim: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(work, "uppers", "ux")); !os.IsNotExist(err) {
+		t.Fatalf("refused mount created the upper tree: %v", err)
+	}
+	holder.Close()
+	im, err := ofs.Mount(refStr, MountWithNamedUpper("ux"))
+	if err != nil {
+		t.Fatalf("mount after release: %v", err)
+	}
+	if err := im.Unmount(); err != nil {
+		t.Fatal(err)
+	}
+	// The claim retired with the unmount: the file is gone and the
+	// name is immediately claimable.
+	if _, err := os.Stat(filepath.Join(work, "locks", "upper-ux")); !os.IsNotExist(err) {
+		t.Fatalf("upper claim file survived unmount: %v", err)
 	}
 }

@@ -134,7 +134,13 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecord(context.Background(), "fskit-e2e", simg.Hash(), "", filepath.Join(stateDir, "mnt")); err != nil {
+	// The registrant holds the claim across the store handle's
+	// close — the darwin orchestrator's exact arrangement — and the
+	// HELD claim is load-bearing: it is what stops the appex-side
+	// open's debris sweep from reclaiming the row this test reads
+	// later. No cleanup disposes it: the claim releases at process
+	// exit, held-lock liveness's own crash shape.
+	if _, err := s.RegisterMountRecordArbitrated(context.Background(), "fskit-e2e", simg.Hash(), "", filepath.Join(stateDir, "mnt"), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

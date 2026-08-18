@@ -34,6 +34,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/greatliontech/gmdb"
+	"github.com/greatliontech/gmdb/oslock"
 
 	"github.com/greatliontech/ocifs/internal/projection"
 
@@ -1192,7 +1193,7 @@ func TestMountReportPublicationLifecycle(t *testing.T) {
 	s, _ := newTestStore(t, PullNever, nil)
 	ctx := context.Background()
 	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}
-	if err := s.RegisterMountRecord(ctx, "pub", img, "", "/mp"); err != nil {
+	if err := s.bk.MountPut(ctx, "pub", newMountRecord(img, "", "/mp")); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := s.MountRecord(ctx, "pub")
@@ -1217,7 +1218,7 @@ func TestMountReportPublicationLifecycle(t *testing.T) {
 		t.Fatalf("republished: rec=%+v err=%v", rec, err)
 	}
 	// A remount is a fresh registration and publishes anew.
-	if err := s.RegisterMountRecord(ctx, "pub", img, "", "/mp"); err != nil {
+	if err := s.bk.MountPut(ctx, "pub", newMountRecord(img, "", "/mp")); err != nil {
 		t.Fatal(err)
 	}
 	if rec, err = s.MountRecord(ctx, "pub"); err != nil || rec.Published {
@@ -1249,46 +1250,17 @@ func TestArbitratedRegistrationOverDeadRowStartsUnpublished(t *testing.T) {
 	if err := s.bk.MountPut(ctx, "reuse", stale); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecordArbitrated(ctx, "reuse", img, "", "/mp"); err != nil {
+	claim, err := s.RegisterMountRecordArbitrated(ctx, "reuse", img, "", "/mp", nil)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(claim.release)
 	rec, err := s.MountRecord(ctx, "reuse")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rec.Published || len(rec.Report.Entries) != 0 {
 		t.Fatalf("registration over dead row inherited report state: %+v", rec)
-	}
-}
-
-// TestPublicationSurvivesReclamationDeferral pins the flag across
-// the sweep's claim/restore pair: a dead published row that defers
-// reclamation still reads published — the record's report state is
-// the dead mount's truth and owner rewrites must not erase it.
-func TestPublicationSurvivesReclamationDeferral(t *testing.T) {
-	s, _ := newTestStore(t, PullNever, nil)
-	ctx := context.Background()
-	img := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ee", 32)}
-	dead := MountRecord{Owner: deadIdentity(), Image: img, Published: true}
-	if err := s.bk.MountPut(ctx, "defer", dead); err != nil {
-		t.Fatal(err)
-	}
-	orig, claimed, err := s.claimDeadMount(ctx, "defer")
-	if err != nil || !claimed {
-		t.Fatalf("claim: %v claimed=%v", err, claimed)
-	}
-	rec, err := s.MountRecord(ctx, "defer")
-	if err != nil || !rec.Published {
-		t.Fatalf("claimed row lost publication: %+v %v", rec, err)
-	}
-	if err := s.restoreMountOwner(ctx, "defer", orig); err != nil {
-		t.Fatal(err)
-	}
-	if rec, err = s.MountRecord(ctx, "defer"); err != nil || !rec.Published {
-		t.Fatalf("restored row lost publication: %+v %v", rec, err)
-	}
-	if rec.Owner != orig {
-		t.Fatalf("owner not restored: %+v", rec.Owner)
 	}
 }
 
@@ -1385,7 +1357,7 @@ func TestSelfIdentityCollected(t *testing.T) {
 	}
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("aa", 32)}
-	if err := s.RegisterMountRecord(context.Background(), "ident", h, "", "/mnt/x"); err != nil {
+	if err := s.bk.MountPut(context.Background(), "ident", newMountRecord(h, "", "/mnt/x")); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := s.MountRecord(context.Background(), "ident")
@@ -1422,9 +1394,11 @@ func deadIdentity() LivenessIdentity {
 	return LivenessIdentity{Pid: 1<<30 - 3, StartTime: 1, PidNS: self.PidNS, BootID: self.BootID}
 }
 
-// TestReclaimDeadMounts pins REQ-store-mount-registry's reclamation:
-// dead rows and their state directories go; live rows and same-boot
-// foreign-namespace rows stay.
+// TestReclaimDeadMounts pins REQ-store-mount-registry's
+// reclamation under held-lock liveness: rows with no held claim —
+// this binary's dead rows AND foreign-namespace or foreign-version
+// corpses, all equally judgeable by lock — reclaim with their
+// state directories; a row whose claim is held stays untouched.
 func TestReclaimDeadMounts(t *testing.T) {
 	dir := scratchDir(t)
 	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
@@ -1434,7 +1408,8 @@ func TestReclaimDeadMounts(t *testing.T) {
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("aa", 32)}
 
-	// Dead row with state directory.
+	// Dead row with state directory: a row with no held lock IS the
+	// corpse — SIGKILL leaves exactly this.
 	if _, _, err := s.NewMountState("deadmount"); err != nil {
 		t.Fatal(err)
 	}
@@ -1444,11 +1419,15 @@ func TestReclaimDeadMounts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Live row (this process).
-	if err := s.RegisterMountRecord(context.Background(), "livemount", h, "", "/x"); err != nil {
+	// Live mount: registration holds the claim.
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "livemount", h, "", "/x", nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	// Same-boot foreign-namespace row: unjudgeable, stays.
+	t.Cleanup(claim.release)
+	// The formerly unjudgeable class: a same-boot foreign-namespace
+	// corpse. Its lock is held by nobody — judged dead and
+	// reclaimed, the leak this rework exists to close.
 	foreign := deadIdentity()
 	foreign.PidNS = "pid:[999999]"
 	if err := s.bk.MountPut(context.Background(), "foreignmount", MountRecord{Owner: foreign, Image: h}); err != nil {
@@ -1459,8 +1438,12 @@ func TestReclaimDeadMounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reclaimed) != 1 || reclaimed[0] != "deadmount" {
-		t.Fatalf("reclaimed %v, want [deadmount]", reclaimed)
+	got := map[string]bool{}
+	for _, id := range reclaimed {
+		got[id] = true
+	}
+	if !got["deadmount"] || !got["foreignmount"] || got["livemount"] {
+		t.Fatalf("reclaimed %v, want deadmount and foreignmount only", reclaimed)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "mounts", "deadmount")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("dead mount's state directory survived: %v", err)
@@ -1471,14 +1454,16 @@ func TestReclaimDeadMounts(t *testing.T) {
 	if _, err := s.MountRecord(context.Background(), "livemount"); err != nil {
 		t.Fatalf("live row reclaimed: %v", err)
 	}
-	if _, err := s.MountRecord(context.Background(), "foreignmount"); err != nil {
-		t.Fatalf("foreign-namespace row reclaimed: %v", err)
+	// The claim files retired with their rows.
+	if _, err := os.Stat(s.mountLockPath("deadmount")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dead mount's lock file survived reclamation: %v", err)
 	}
 }
 
 // TestUpperArbitrationIgnoresDeadHolder pins the crash arm of the
-// registry arbitration (REQ-writable-base-binding): a dead row
-// holding the upper name never blocks a new writable mount.
+// upper arbitration (REQ-writable-base-binding): a dead row naming
+// the upper — no held upper lock — never blocks a new writable
+// mount; the live holder's lock refuses a second one.
 func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
 	dir := scratchDir(t)
 	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
@@ -1492,19 +1477,26 @@ func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "fresh", h, "shared-upper", "/y"); err != nil {
+	upClaim, err := s.ClaimUpper("shared-upper")
+	if err != nil {
+		t.Fatalf("dead holder blocked a new upper claim: %v", err)
+	}
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "fresh", h, "shared-upper", "/y", upClaim)
+	if err != nil {
 		t.Fatalf("dead holder blocked a new writable mount: %v", err)
 	}
-	// And a LIVE holder refuses.
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "third", h, "shared-upper", "/z"); err == nil {
+	t.Cleanup(claim.release)
+	// And the LIVE holder's upper lock refuses the next claim — at
+	// ClaimUpper, BEFORE any bookkeeping write for the upper.
+	if _, err := s.ClaimUpper("shared-upper"); err == nil {
 		t.Fatal("live holder did not refuse a second writable mount")
 	}
 }
 
-// TestSameIDLiveRowRefusedAtRegistration pins the registration
-// transaction as the same-id serialization point
-// (REQ-store-mount-registry): a live row under the id refuses; a
-// dead row is overwritten.
+// TestSameIDLiveRowRefusedAtRegistration pins the mount-id claim
+// lock as the same-id serialization point
+// (REQ-store-mount-registry): a held claim refuses; a dead row —
+// no held lock — is overwritten.
 func TestSameIDLiveRowRefusedAtRegistration(t *testing.T) {
 	dir := scratchDir(t)
 	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
@@ -1513,25 +1505,31 @@ func TestSameIDLiveRowRefusedAtRegistration(t *testing.T) {
 	}
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cc", 32)}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/a"); err != nil {
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/a", nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/b"); err == nil {
+	t.Cleanup(claim.release)
+	if _, err := s.RegisterMountRecordArbitrated(context.Background(), "dup", h, "", "/b", nil); err == nil {
 		t.Fatal("second registration of a live id succeeded")
 	}
 	if err := s.bk.MountPut(context.Background(), "dup2", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RegisterMountRecordArbitrated(context.Background(), "dup2", h, "", "/c"); err != nil {
+	claim2, err := s.RegisterMountRecordArbitrated(context.Background(), "dup2", h, "", "/c", nil)
+	if err != nil {
 		t.Fatalf("dead same-id row blocked registration: %v", err)
 	}
+	claim2.release()
 }
 
-// TestReclaimSkipsRevivedRow pins the claim transaction
-// (REQ-store-gc-safe's verdict/action discipline applied to
-// reclamation): a row that went live between the sweep's mark and
-// its claim is skipped, its state untouched.
-func TestReclaimSkipsRevivedRow(t *testing.T) {
+// TestReclaimNeverTouchesHeldClaims pins the verdict/action
+// atomicity reclamation inherits from held-lock liveness: the
+// try-acquisition IS both the death verdict and the claim, so a
+// mount whose lock is held — a live serve, or a racing holder that
+// revived the id — is skipped untouched, and a registration racing
+// a holder refuses as in-use (REQ-store-mount-registry).
+func TestReclaimNeverTouchesHeldClaims(t *testing.T) {
 	dir := scratchDir(t)
 	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
 	if err != nil {
@@ -1539,46 +1537,97 @@ func TestReclaimSkipsRevivedRow(t *testing.T) {
 	}
 	t.Cleanup(func() { s.Close() })
 	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("dd", 32)}
-	// The mark-then-revive interleaving, exercised at the claim
-	// boundary directly: a LIVE row presented to the claim (as a
-	// stale mark would present it) must be skipped untouched.
-	if err := s.RegisterMountRecord(context.Background(), "revived", h, "", "/r"); err != nil {
+	// A dead-looking row whose claim a concurrent actor holds — the
+	// exact state a mid-reclamation sweep or revived id presents.
+	if err := s.bk.MountPut(context.Background(), "held", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
 		t.Fatal(err)
 	}
-	_, claimed, err := s.claimDeadMount(context.Background(), "revived")
+	holder, err := oslock.TryAcquire(s.mountLockPath("held"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claimed {
-		t.Fatal("claim touched a live row")
-	}
-	if _, err := s.MountRecord(context.Background(), "revived"); err != nil {
-		t.Fatalf("revived row gone: %v", err)
-	}
-	// A genuinely dead row claims by OWNERSHIP REWRITE: the row
-	// stays, now live under the sweeper, so a racing remount
-	// refuses instead of serving paths mid-deletion.
-	if err := s.bk.MountPut(context.Background(), "corpse", MountRecord{Owner: deadIdentity(), Image: h}); err != nil {
-		t.Fatal(err)
-	}
-	orig, claimed, err := s.claimDeadMount(context.Background(), "corpse")
-	if err != nil || !claimed {
-		t.Fatalf("dead row not claimed: %v %v", claimed, err)
-	}
-	rec, err := s.MountRecord(context.Background(), "corpse")
+	reclaimed, err := s.ReclaimDeadMounts(context.Background())
 	if err != nil {
-		t.Fatalf("claimed row deleted before the paths were: %v", err)
-	}
-	if rec.Owner.Dead() {
-		t.Fatal("claimed row not owned by the live sweeper")
-	}
-	// Deferral restores the original dead owner, re-arming sweeps.
-	if err := s.restoreMountOwner(context.Background(), "corpse", orig); err != nil {
 		t.Fatal(err)
 	}
-	rec, err = s.MountRecord(context.Background(), "corpse")
-	if err != nil || !rec.Owner.Dead() {
-		t.Fatalf("restored row not dead-sweepable: %+v %v", rec.Owner, err)
+	for _, id := range reclaimed {
+		if id == "held" {
+			t.Fatal("reclamation touched a held claim")
+		}
+	}
+	if _, err := s.MountRecord(context.Background(), "held"); err != nil {
+		t.Fatalf("held row gone: %v", err)
+	}
+	// A registration racing the holder refuses as in-use — nothing
+	// can serve paths mid-reclamation.
+	if _, err := s.RegisterMountRecordArbitrated(context.Background(), "held", h, "", "/r", nil); err == nil {
+		t.Fatal("registration succeeded against a held claim")
+	}
+	// Released, the id reclaims normally.
+	holder.Close()
+	reclaimed, err = s.ReclaimDeadMounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, id := range reclaimed {
+		found = found || id == "held"
+	}
+	if !found {
+		t.Fatal("released dead claim not reclaimed")
+	}
+}
+
+// TestRootSetJudgesByLock pins the mark's own liveness reads
+// (REQ-store-gc-roots): a row with no held claim is no root — even
+// when reclamation has not run — and a dead foreign-version row
+// halts nothing; only a HELD foreign row does. The mark itself is
+// exercised directly because Collect reclaims debris first and
+// would mask a mark that trusts rows over locks.
+func TestRootSetJudgesByLock(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	deadImg := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0a", 32)}
+	liveImg := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0b", 32)}
+	if err := s.bk.MountPut(context.Background(), "deadrow", MountRecord{Owner: deadIdentity(), Image: deadImg}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "liverow", liveImg, "", "/l", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(claim.release)
+	foreign := append([]byte{mountRecVersion + 1}, encodeMountRecord(MountRecord{Owner: deadIdentity()})[1:]...)
+	if err := s.bk.db.Update(context.Background(), func(tx *gmdb.Tx) error {
+		ks, err := tx.OpenKeyspace(ksMounts)
+		if err != nil {
+			return err
+		}
+		return ks.Put([]byte("deadforeign"), foreign)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	roots, foreignRows, err := s.rootSet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(foreignRows) != 0 {
+		t.Fatalf("dead foreign row halted the mark: %v", foreignRows)
+	}
+	seen := map[v1.Hash]bool{}
+	for _, r := range roots {
+		seen[r] = true
+	}
+	if seen[deadImg] {
+		t.Fatal("dead row's image rooted")
+	}
+	if !seen[liveImg] {
+		t.Fatal("live claim's image not rooted")
 	}
 }
 
