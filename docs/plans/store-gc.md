@@ -37,7 +37,7 @@ files, binding siblings) are refused by adoption, not migrated.
       and commit ops pin their digests and record their
       temporaries; lease death by liveness identity; concurrent
       same-image pulls race benignly across processes.
-- [ ] 6. Removal and collection: RemoveRef/RemoveImage/RemoveUpper
+- [x] 6. Removal and collection: RemoveRef/RemoveImage/RemoveUpper
       severing roots; mark-and-sweep with transactional root
       snapshot, re-check before delete, ingest-lease fencing,
       retention grace and condemned-set fencing; automatic

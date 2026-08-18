@@ -286,6 +286,15 @@ func (s *Store) ReleaseIngestLease(ctx context.Context, nonce string) error {
 func (s *Store) BeginOp(ctx context.Context, kind string, pins []v1.Hash, temps []string) (string, error) {
 	id := kind + "-" + uuid.NewString()
 	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+		// Pins become roots: consult the condemned set — op
+		// registration runs unleased (REQ-store-gc-safe).
+		for _, p := range pins {
+			if cond, cerr := s.condemnedByLiveSweep(ctx, tx, p); cerr != nil {
+				return cerr
+			} else if cond {
+				return ErrCondemned
+			}
+		}
 		ks, err := tx.OpenKeyspace(ksOps)
 		if err != nil {
 			return err

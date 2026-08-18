@@ -87,7 +87,7 @@ func mustDigest(t *testing.T, d interface{ Digest() (v1.Hash, error) }) v1.Hash 
 
 func newStoreAt(t *testing.T, dir string, policy PullPolicy, platform v1.Platform, rt http.RoundTripper) *Store {
 	t.Helper()
-	s, err := NewStore(dir, anonKeychain{}, policy, platform, nil)
+	s, err := NewStore(dir, anonKeychain{}, policy, platform, nil, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

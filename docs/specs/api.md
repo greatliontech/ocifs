@@ -141,7 +141,9 @@ store-managed export cache, per `export.md`.
 **REQ-api-remove** (behavior): The library MUST offer removal of a
 cached reference (the `refs` row — the cached resolution, not the
 remote), of a local image (the `localimages` row for a committed
-digest), and of a named upper (the upper's dialect tree and its
+digest, together with the local-namespace resolution rows its own
+acquisitions recorded — otherwise an image would stay rooted by its
+past mounts), and of a named upper (the upper's dialect tree and its
 base binding — the explicit act REQ-api-mount-writable names).
 Removal severs the root; content becomes garbage for collection
 (`store.md` REQ-store-gc-roots) rather than being deleted inline.

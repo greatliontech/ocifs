@@ -78,18 +78,20 @@ func (s *Store) materializeAt(ctx context.Context, view *layer.View, final strin
 		return err
 	}
 	tmp := filepath.Join(parent, ".export-"+uid.String())
-	if err := os.Mkdir(tmp, 0o755); err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmp)
 	// The op row pins the source image (a collection root while
-	// live) and owns the temporary — sweep-exempt while this
-	// process lives, debris when dead (REQ-store-gc-roots).
+	// live) and owns the temporary — registered BEFORE the
+	// directory exists, so no window shows an unowned temporary to
+	// a concurrent debris sweep (REQ-store-gc-collect: every window
+	// sits inside a fence or a live ops row).
 	opID, err := s.BeginOp(ctx, opKindExport, []v1.Hash{pin}, []string{tmp})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = s.EndOp(context.WithoutCancel(ctx), opID) }()
+	if err := os.Mkdir(tmp, 0o755); err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
 	root, err := os.OpenRoot(tmp)
 	if err != nil {
 		return err

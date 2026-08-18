@@ -395,7 +395,10 @@ deduplicates a future pull; the grace is pure retention policy and
 never load-bearing for safety (REQ-store-gc-safe's fences and the
 `ops` roots are — every window in which content is legitimately
 unrooted sits inside a fence or a live `ops` row, with or without
-grace). Explicit collection may ignore the grace on demand. The
+grace). Explicit collection may ignore the grace on demand. A transition's
+collection runs after the transition's own lease span has ended —
+the sweep acquires the lease itself, and a collection started while
+its trigger still holds the lease would deadlock on it. The
 debris sweep reclaims what dead rows own wherever it lives: a dead
 `ops` row's recorded temporaries (including a caller-target
 export's temporary outside the store), dead `mounts` rows and

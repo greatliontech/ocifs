@@ -297,3 +297,39 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "7a16a9aa696f57cb0e04f96769ae282ca8a8e2ccb52ab973cb090a54dc982367"
 }
+
+bindings {
+  requirement_id: "REQ-api-remove"
+  content_hash: "f02485dc6e3907097815d8278b2f1eb3c05842508bfa630675c68a8be3b4436a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestGCPublicSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "f5ed3c6abc6623f7731d1aa77ab76542f419691eebb5c51ba49a6b634898df7a"
+}
+
+bindings {
+  requirement_id: "REQ-api-remove"
+  content_hash: "f02485dc6e3907097815d8278b2f1eb3c05842508bfa630675c68a8be3b4436a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestRemovalRefusedWhileServed"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "267201ba5b17cf5b8d669eb855c0e77084a2868a431c3927ba515f9538b4ec13"
+}
+
+bindings {
+  requirement_id: "REQ-api-gc"
+  content_hash: "a688363fc95f2bde23264f36fe02378904aa97ee936ae30198530b2b77c8040c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestGCPublicSurface"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "f5ed3c6abc6623f7731d1aa77ab76542f419691eebb5c51ba49a6b634898df7a"
+}
+
+bindings {
+  requirement_id: "REQ-api-gc"
+  content_hash: "a688363fc95f2bde23264f36fe02378904aa97ee936ae30198530b2b77c8040c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.GC"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "f06a4dac85d469e05584965f3c9852f7d08c9000bfd6290abb171f4bced9e806"
+}

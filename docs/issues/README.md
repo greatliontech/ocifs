@@ -9,10 +9,6 @@
   its windows test suite are authored and cross-compiled but
   unexecuted. Lands: when the windows test run reports back and its
   findings are dispositioned.
-- `docs/issues/export-temp-cleanup.md` — crashed exports leave inert
-  `.export-*` temporaries nothing sweeps; caller-target temporaries
-  land outside the store. Lands: with store GC, or earlier if
-  accumulation surfaces in practice.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform

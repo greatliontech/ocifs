@@ -260,6 +260,13 @@ func (s *Store) RegisterMountRecordArbitrated(ctx context.Context, id string, im
 		} else if !errors.Is(err, gmdb.ErrNotFound) {
 			return err
 		}
+		// The image digest becomes a root: consult the condemned
+		// set — registration runs unleased (REQ-store-gc-safe).
+		if cond, cerr := s.condemnedByLiveSweep(ctx, tx, image); cerr != nil {
+			return cerr
+		} else if cond {
+			return ErrCondemned
+		}
 		if upperName != "" {
 			for k, v := range ks.All() {
 				if string(k) == id {
@@ -328,6 +335,9 @@ func (s *Store) ReclaimDeadMounts(ctx context.Context) ([]string, error) {
 		}
 		stateDir := filepath.Join(s.path, "mounts", id)
 		acted := true
+		// The err == nil gate is load-bearing beyond ENOENT: a
+		// NUL-bearing internal guard id makes Stat fail EINVAL, and
+		// its reclamation must stay row-only.
 		if _, err := os.Stat(stateDir); err == nil {
 			detachStaleMount(filepath.Join(stateDir, "mnt"))
 			if err := os.RemoveAll(stateDir); err != nil {

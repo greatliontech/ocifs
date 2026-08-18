@@ -39,10 +39,57 @@ func main() {
 		rootFlags.ExtraDirs = *extraDirs
 	}
 
+	gcCmd.Flags().StringVarP(&gcFlags.WorkDir, "workdir", "w", filepath.Join(os.TempDir(), "ocifs"), "Work directory")
+	gcCmd.Flags().BoolVar(&gcFlags.IgnoreGrace, "ignore-grace", false, "Collect unreachable content regardless of age")
+	rootCmd.AddCommand(gcCmd)
+
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("Failed to execute", "error", err)
 		os.Exit(1)
 	}
+}
+
+type gcCmdFlags struct {
+	WorkDir     string
+	IgnoreGrace bool
+}
+
+var gcFlags = &gcCmdFlags{}
+
+// gcCmd is the explicit-collection verb (api.md REQ-api-gc): the
+// same engine as the library surface, reporting what was collected
+// and what could not be judged.
+var gcCmd = &cobra.Command{
+	Use:   "gc",
+	Short: "collect unreachable store content",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ofs, err := ocifs.New(ocifs.WithWorkDir(gcFlags.WorkDir))
+		if err != nil {
+			return err
+		}
+		defer ofs.Close()
+		var opts []ocifs.GCOption
+		if gcFlags.IgnoreGrace {
+			opts = append(opts, ocifs.GCIgnoreGrace())
+		}
+		res, err := ofs.GC(cmd.Context(), opts...)
+		if err != nil {
+			return err
+		}
+		for _, h := range res.CollectedBlobs {
+			cmd.Printf("collected blob %s\n", h)
+		}
+		for _, p := range res.CollectedPaths {
+			cmd.Printf("collected path %s\n", p)
+		}
+		for _, id := range res.ReclaimedMounts {
+			cmd.Printf("reclaimed dead mount %s\n", id)
+		}
+		for _, id := range res.UnjudgeableMounts {
+			cmd.Printf("unjudgeable mount row %s (foreign PID namespace; sweep from that namespace or reboot to resolve)\n", id)
+		}
+		return nil
+	},
 }
 
 func rootCmdRunE(cmd *cobra.Command, args []string) error {

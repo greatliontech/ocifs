@@ -22,6 +22,7 @@ import (
 type bookkeeping struct {
 	db  *gmdb.DB
 	dir string // the bookkeeping/ tier, for concurrent test handles
+	s   *Store
 }
 
 // Keyspace names are wire contract (REQ-store-bookkeeping). Later
@@ -124,6 +125,15 @@ func (b *bookkeeping) RefGet(ctx context.Context, ref name.Reference) (v1.Hash, 
 // re-derives or re-fetches (REQ-store-self-heal).
 func (b *bookkeeping) RefPut(ctx context.Context, ref name.Reference, hash v1.Hash) error {
 	return b.db.Update(ctx, func(tx *gmdb.Tx) error {
+		// A root over a digest a live sweep is deleting must back
+		// out to acquisition (REQ-store-gc-safe): this write may
+		// run unleased (cached-content publication), so the
+		// condemned set is its fence.
+		if cond, err := b.s.condemnedByLiveSweep(ctx, tx, hash); err != nil {
+			return err
+		} else if cond {
+			return ErrCondemned
+		}
 		ks, err := tx.OpenKeyspace(ksRefs)
 		if err != nil {
 			return err
@@ -150,6 +160,13 @@ func (b *bookkeeping) UpperBind(ctx context.Context, name string, base v1.Hash) 
 		}
 		if !errors.Is(err, gmdb.ErrNotFound) {
 			return err
+		}
+		// The binding is a root: consult the condemned set — this
+		// write runs unleased (REQ-store-gc-safe).
+		if cond, cerr := b.s.condemnedByLiveSweep(ctx, tx, base); cerr != nil {
+			return cerr
+		} else if cond {
+			return ErrCondemned
 		}
 		recorded = base
 		return ks.Insert([]byte(name), []byte(base.String()))

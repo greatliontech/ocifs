@@ -40,6 +40,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -96,6 +97,11 @@ type Store struct {
 	// root, not per Store instance — two instances over one root are
 	// still one ingesting process.
 	ingestMu *sync.Mutex
+	// autoGC and gcGrace configure automatic collection
+	// (REQ-store-gc-collect); construction-time knobs
+	// (api.md REQ-api-construction).
+	autoGC  bool
+	gcGrace time.Duration
 }
 
 // ingestLocks maps a cleaned store root to its in-process ingest
@@ -145,7 +151,7 @@ func ingestLockFor(root string) *sync.Mutex {
 // falls back to the host-derived platform — host os/arch, linux on
 // darwin (REQ-store-platform-default). A nil verifier disables the
 // verification seam (verification-seam.md REQ-seam-optional).
-func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform, verifier Verifier) (*Store, error) {
+func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform, verifier Verifier, autoGC bool, gcGrace time.Duration) (*Store, error) {
 	switch pullPolicy {
 	case PullIfNotPresent, PullAlways, PullNever:
 	default:
@@ -218,17 +224,27 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		return nil, err
 	}
 
-	return &Store{
+	st := &Store{
 		path:            path,
 		auth:            auth,
 		pullPolicy:      pullPolicy,
 		defaultPlatform: defaultPlatform,
 		bk:              bk,
 		cas:             contentCAS,
+		autoGC:          autoGC,
+		gcGrace:         gcGrace,
 		ociDir:          ociDir,
 		verifier:        verifier,
 		ingestMu:        ingestLockFor(path),
-	}, nil
+	}
+	bk.s = st
+	// Store initialization is a debris transition: dead mount and
+	// ops rows, dead leases, unowned export temporaries
+	// (REQ-store-gc-collect). Failure never blocks construction.
+	if autoGC {
+		_, _ = st.DebrisSweep(context.Background())
+	}
+	return st, nil
 }
 
 // NewMountState creates the per-mount state directory mounts/<id> —
@@ -290,7 +306,18 @@ func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) 
 }
 
 func validMountID(id string) bool {
-	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, `/\`)
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return false
+	}
+	// Control bytes are rejected so internal registry ids (the
+	// NUL-prefixed upper-removal guard) are unrepresentable through
+	// the API (api.md REQ-api-mount-id).
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x20 {
+			return false
+		}
+	}
+	return true
 }
 
 // BlobPath returns the on-disk path of the content-CAS blob a
@@ -344,9 +371,30 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	// root row — at exit (REQ-store-single-writer).
 	lg := &leaseGuard{s: s}
 	defer lg.release(context.WithoutCancel(ctx))
-	top, needRecord, err := s.resolveTop(ctx, req, lg)
+	img, moved, err := s.imageAttempt(ctx, req, lg)
+	if errors.Is(err, ErrCondemned) {
+		// The condemned set said a live sweep is deleting what this
+		// request would root: back out to acquisition and re-run —
+		// presence re-verifies and re-ingest happens under the
+		// lease (REQ-store-gc-safe).
+		img, moved, err = s.imageAttempt(ctx, req, lg)
+	}
+	if err == nil && moved {
+		// A re-resolution overwrote the row: the old digest just
+		// became garbage — a collection transition
+		// (REQ-store-gc-collect). The lease releases FIRST: the
+		// sweep acquires it itself, and collecting while holding it
+		// deadlocks on the in-process slot.
+		lg.release(context.WithoutCancel(ctx))
+		s.AutoCollect(ctx)
+	}
+	return img, err
+}
+
+func (s *Store) imageAttempt(ctx context.Context, req request, lg *leaseGuard) (*Image, bool, error) {
+	top, needRecord, prevMoved, err := s.resolveTop(ctx, req, lg)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// The verification seam sits between top-level resolution and any
@@ -354,7 +402,7 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	// rejection returns before assemble touches layer content and
 	// before the reference-cache record below (REQ-seam-abort).
 	if err := s.verify(ctx, req, top, lg); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	img, err := s.assemble(ctx, req, top, nil)
@@ -362,20 +410,20 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 		// The local namespace is never dialed: a missing piece there
 		// is store damage, failing as under Never
 		// (REQ-store-local-images).
-		f := &fetcher{store: s, repo: ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(ref.Context().RegistryStr())}
+		f := &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(req.ref.Context().RegistryStr())}
 		// Acquire BEFORE the mutex (lease → mutex, the commit
 		// path's order — the reverse deadlocks): this path is about
 		// to materialize, so the eager acquisition is the first
 		// write's.
 		if lerr := lg.ensure(ctx); lerr != nil {
-			return nil, lerr
+			return nil, false, lerr
 		}
 		s.ingestMu.Lock()
 		img, err = s.assemble(ctx, req, top, f)
 		s.ingestMu.Unlock()
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// The reference-cache entry is ingest's completion barrier: it is
@@ -383,75 +431,75 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	// fully materialized (REQ-store-ingest-order).
 	if needRecord {
 		if err := s.bk.RefPut(ctx, req.ref, top); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
-	return img, nil
+	return img, needRecord && prevMoved, nil
 }
 
 // resolveTop resolves the request to its top-level digest per pull
 // policy, retaining a remotely fetched top-level artifact in oci/
 // before returning. The second result reports whether the
 // reference-cache entry must still be recorded after materialization.
-func (s *Store) resolveTop(ctx context.Context, req request, lg *leaseGuard) (v1.Hash, bool, error) {
+func (s *Store) resolveTop(ctx context.Context, req request, lg *leaseGuard) (v1.Hash, bool, bool, error) {
 	cached, found, err := s.bk.RefGet(ctx, req.ref)
 	if err != nil {
-		return emptyHash, false, err
+		return emptyHash, false, false, err
 	}
 
 	// Digest-form: the digest is the identity — no resolution, no
 	// revalidation (an immutable binding cannot move), no network.
 	if req.digest != nil {
-		return *req.digest, !found || cached != *req.digest, nil
+		return *req.digest, !found || cached != *req.digest, found && cached != *req.digest, nil
 	}
 
 	// The local namespace is digest-addressed and never dialed: a
 	// tag under it resolves to nothing, under every policy
 	// (REQ-store-local-images overrides the pull policy wholesale).
 	if isLocalRef(req.ref.Context().RegistryStr()) {
-		return emptyHash, false, fmt.Errorf("reference %s: the %s namespace is digest-addressed", req.ref, LocalRegistry)
+		return emptyHash, false, false, fmt.Errorf("reference %s: the %s namespace is digest-addressed", req.ref, LocalRegistry)
 	}
 
 	switch s.pullPolicy {
 	case PullNever:
 		if !found {
-			return emptyHash, false, fmt.Errorf("image %s not found in cache and pull policy is 'Never'", req.ref)
+			return emptyHash, false, false, fmt.Errorf("image %s not found in cache and pull policy is 'Never'", req.ref)
 		}
-		return cached, false, nil
+		return cached, false, false, nil
 	case PullIfNotPresent:
 		if found {
-			return cached, false, nil
+			return cached, false, false, nil
 		}
 	case PullAlways:
 		if found {
 			desc, err := remote.Head(req.ref, s.remoteOpts(ctx)...)
 			if err != nil {
-				return emptyHash, false, err
+				return emptyHash, false, false, err
 			}
 			// Top-level to top-level: a HEAD on a multi-platform
 			// reference returns the index digest, and the ref cache
 			// records exactly that (REQ-store-pull-policy).
 			if desc.Digest == cached {
-				return cached, false, nil
+				return cached, false, false, nil
 			}
 		}
 	}
 
 	desc, err := remote.Get(req.ref, s.remoteOpts(ctx)...)
 	if err != nil {
-		return emptyHash, false, err
+		return emptyHash, false, false, err
 	}
 	// Retention is this request's first content-tier write: the
 	// lease span starts here (REQ-store-single-writer).
 	if err := lg.ensure(ctx); err != nil {
-		return emptyHash, false, err
+		return emptyHash, false, false, err
 	}
 	if err := s.writeOCIBlob(desc.Digest, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(desc.Manifest)), nil
 	}); err != nil {
-		return emptyHash, false, err
+		return emptyHash, false, false, err
 	}
-	return desc.Digest, true, nil
+	return desc.Digest, true, found && cached != desc.Digest, nil
 }
 
 func (s *Store) remoteOpts(ctx context.Context) []remote.Option {

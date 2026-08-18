@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -110,6 +111,27 @@ type OCIFS struct {
 	defaultPlatform v1.Platform
 	verifier        Verifier
 	store           *store.Store
+	autoGC          bool
+	gcGrace         time.Duration
+}
+
+// WithAutoGC turns automatic collection at garbage-creating
+// transitions on or off (default on — store.md
+// REQ-store-gc-collect).
+var WithAutoGC = func(on bool) Option {
+	return func(o *OCIFS) {
+		o.autoGC = on
+	}
+}
+
+// WithGCGrace sets the retention grace for unreachable content
+// (default 24h): blobs are content-addressed and shared, so
+// unreachable content still deduplicates a future pull. Pure
+// retention policy, never load-bearing for safety.
+var WithGCGrace = func(d time.Duration) Option {
+	return func(o *OCIFS) {
+		o.gcGrace = d
+	}
 }
 
 func New(opts ...Option) (*OCIFS, error) {
@@ -120,6 +142,8 @@ func New(opts ...Option) (*OCIFS, error) {
 			creds: make(map[string]authn.AuthConfig),
 		},
 		pullPolicy: PullIfNotPresent,
+		autoGC:     true,
+		gcGrace:    24 * time.Hour,
 	}
 
 	// apply options
@@ -128,7 +152,7 @@ func New(opts ...Option) (*OCIFS, error) {
 	}
 
 	// initialize store
-	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform, ofs.verifier)
+	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform, ofs.verifier, ofs.autoGC, ofs.gcGrace)
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +248,9 @@ func (im *ImageMount) Unmount() error {
 		if derr := im.ofs.store.DeregisterMount(context.Background(), im.id); derr != nil {
 			return derr
 		}
+		// Unmount is a garbage-creating transition
+		// (REQ-store-gc-collect).
+		im.ofs.store.AutoCollect(context.Background())
 	}
 	return err
 }
@@ -387,4 +414,50 @@ func (o *OCIFS) MountReport(id string) (projection.Report, error) {
 // equally leave it to exit — the database is crash-safe either way.
 func (o *OCIFS) Close() error {
 	return o.store.Close()
+}
+
+// GCOption configures an explicit collection.
+type GCOption func(*store.CollectOpts)
+
+// GCIgnoreGrace collects unreachable content regardless of age —
+// the wipe-now operator intent automatic collection deliberately
+// does not serve (api.md REQ-api-gc).
+var GCIgnoreGrace = func() GCOption {
+	return func(o *store.CollectOpts) {
+		o.Grace = -1
+	}
+}
+
+// GC runs one explicit collection pass, honoring the configured
+// retention grace unless overridden, and reports what was
+// collected — and what could not be judged (api.md REQ-api-gc).
+func (o *OCIFS) GC(ctx context.Context, opts ...GCOption) (*store.GCResult, error) {
+	co := store.CollectOpts{Grace: o.gcGrace}
+	for _, opt := range opts {
+		opt(&co)
+	}
+	return o.store.Collect(ctx, co)
+}
+
+// RemoveRef deletes the cached resolution for a reference — the
+// root, not the content; collection reclaims what nothing else
+// roots (api.md REQ-api-remove).
+func (o *OCIFS) RemoveRef(ctx context.Context, ref string) error {
+	return o.store.RemoveRef(ctx, ref)
+}
+
+// RemoveImage deletes a committed image's root. An image a live
+// mount serves is refused.
+func (o *OCIFS) RemoveImage(ctx context.Context, digest string) error {
+	h, err := v1.NewHash(digest)
+	if err != nil {
+		return err
+	}
+	return o.store.RemoveImage(ctx, h)
+}
+
+// RemoveUpper deletes a named upper — dialect tree and base
+// binding. An upper a live mount serves is refused.
+func (o *OCIFS) RemoveUpper(ctx context.Context, name string) error {
+	return o.store.RemoveUpper(ctx, name)
 }

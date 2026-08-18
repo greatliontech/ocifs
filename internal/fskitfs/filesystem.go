@@ -175,7 +175,7 @@ func loadVolume(cfg Config) (*Volume, fskit.VolumeIdentity, error) {
 	// No verifier: the appex serves cached content the pulling
 	// consumer already admitted through the seam
 	// (verification-seam.md REQ-seam-optional).
-	s, err := store.NewStore(cfg.Store, anonKeychain{}, store.PullNever, v1.Platform{}, nil)
+	s, err := store.NewStore(cfg.Store, anonKeychain{}, store.PullNever, v1.Platform{}, nil, false, 0)
 	if err != nil {
 		return nil, fskit.VolumeIdentity{}, err
 	}
