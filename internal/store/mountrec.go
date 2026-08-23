@@ -77,6 +77,18 @@ func encodeMountRecord(rec MountRecord) []byte {
 	return w.buf
 }
 
+// decodeMountRow classifies a mounts-row value for the walkers that
+// must not fail on rows they cannot read: a decode failure is a
+// FOREIGN row — a future format version, present and judgeable by
+// its lock but unreadable — never an error and never absence.
+// Walkers classify through this (or its ops sibling), never by
+// branching on decodeMountRecord's error directly, so the foreign
+// rule cannot diverge between walkers.
+func decodeMountRow(v []byte) (MountRecord, bool) {
+	rec, err := decodeMountRecord(v)
+	return rec, err != nil
+}
+
 func decodeMountRecord(data []byte) (MountRecord, error) {
 	var rec MountRecord
 	r := &binReader{buf: data}

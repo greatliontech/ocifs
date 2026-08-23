@@ -63,6 +63,13 @@ func encodeOpRecord(rec OpRecord) []byte {
 // judgeable through its claim lock (REQ-store-bookkeeping).
 var errForeignOpVersion = errors.New("foreign op record version")
 
+// decodeOpRow is decodeMountRow's ops-row sibling: decode failure =
+// FOREIGN (present, lock-judgeable, unreadable), never error/absence.
+func decodeOpRow(v []byte) (OpRecord, bool) {
+	rec, err := decodeOpRecord(v)
+	return rec, err != nil
+}
+
 func decodeOpRecord(data []byte) (OpRecord, error) {
 	var rec OpRecord
 	r := &binReader{buf: data}

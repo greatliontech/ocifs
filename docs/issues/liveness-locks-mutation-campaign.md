@@ -25,6 +25,13 @@ mutated from this tree; its probes ran (and killed) in gmdb's own
 per-chunk review loops. The gmdb side likewise ran its own
 hand-probe sets there.
 
+One recorded equivalence for the campaign's survivor triage: a
+mutant collapsing `claimLive` into `claimUndecided` (internal/store
+locks.go, claimVerdict) is equivalent by construction today — every
+call site branches on `!= claimDead` — and the split is kept as
+contract-naming (store.md's verdict is three-valued) and as the
+attachment point for a future undecided counter.
+
 ## What the campaign adds over the probes
 
 Breadth: the hand probes are one-to-a-few chosen mutations per

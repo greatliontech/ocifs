@@ -12,7 +12,6 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/greatliontech/gmdb"
-	"github.com/greatliontech/gmdb/oslock"
 
 	"github.com/greatliontech/ocifs/internal/atomicfile"
 )
@@ -230,9 +229,9 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
 			return err
 		}
 		for k, v := range mounts.All() {
-			rec, derr := decodeMountRecord(v)
+			rec, foreign := decodeMountRow(v)
 			mountRows = append(mountRows, markedMount{
-				id: string(k), image: rec.Image, foreign: derr != nil,
+				id: string(k), image: rec.Image, foreign: foreign,
 			})
 		}
 		uppers, err := rtx.OpenKeyspaceReadOnly(ksUppers)
@@ -250,9 +249,9 @@ func (s *Store) rootSet(ctx context.Context) ([]v1.Hash, []string, error) {
 			return err
 		}
 		for k, v := range ops.All() {
-			rec, derr := decodeOpRecord(v)
+			rec, foreign := decodeOpRow(v)
 			opRows = append(opRows, markedOp{
-				id: string(k), pins: rec.Pins, foreign: derr != nil,
+				id: string(k), pins: rec.Pins, foreign: foreign,
 			})
 		}
 		return nil
@@ -515,8 +514,8 @@ func (s *Store) tempOwnedByLiveOp(ctx context.Context, p string) bool {
 			return err
 		}
 		for k, v := range ks.All() {
-			rec, derr := decodeOpRecord(v)
-			if derr != nil {
+			rec, foreign := decodeOpRow(v)
+			if foreign {
 				continue // foreign temps unreadable: not matchable
 			}
 			rows = append(rows, opTemps{id: string(k), temps: rec.Temps})
@@ -575,8 +574,8 @@ func (s *Store) opsTempsSnapshot(ctx context.Context) map[string]string {
 			return err
 		}
 		for k, v := range ks.All() {
-			rec, derr := decodeOpRecord(v)
-			if derr != nil {
+			rec, foreign := decodeOpRow(v)
+			if foreign {
 				continue // foreign temps unreadable: not matchable
 			}
 			for _, t := range rec.Temps {
@@ -760,9 +759,9 @@ func (s *Store) condemnedByLiveSweep(_ context.Context, tx *gmdb.Tx, h v1.Hash) 
 		// release is WITHOUT unlink: the sweeper's row still exists
 		// and its file follows the row's own reclamation path
 		// (deferral shape — foreign rows defer indefinitely).
-		l, lerr := oslock.TryAcquire(s.opLockPath(sweeper))
-		if lerr != nil {
-			return true, nil // held or undecided: a live sweeper binds
+		verdict, l := judgeClaim(s.opLockPath(sweeper))
+		if verdict != claimDead {
+			return true, nil // live or undecided: a live sweeper binds
 		}
 		if err := clearCondemnedOf(gcks, sweeper); err != nil {
 			l.Close()
@@ -795,10 +794,12 @@ func (s *Store) sweeperLiveness(ops *gmdb.Keyspace, sweeper string) (sweeperVerd
 	} else if err != nil {
 		return sweeperLive, err
 	}
-	if s.opClaimHeld(sweeper) {
-		return sweeperLive, nil
+	verdict, l := judgeClaim(s.opLockPath(sweeper))
+	if verdict == claimDead {
+		l.Close() // judge-only consult: the deferral shape
+		return sweeperDead, nil
 	}
-	return sweeperDead, nil
+	return sweeperLive, nil // live or undecided both bind
 }
 
 // clearCondemnedOf deletes every condemned row a sweeper wrote —
@@ -943,9 +944,9 @@ func (s *Store) ReclaimDeadMounts(ctx context.Context) ([]string, error) {
 	}
 	var reclaimed []string
 	for _, id := range candidates {
-		l, err := oslock.TryAcquire(s.mountLockPath(id))
-		if err != nil {
-			// Held (live) or undecided: nothing to reclaim now.
+		verdict, l := judgeClaim(s.mountLockPath(id))
+		if verdict != claimDead {
+			// Live or undecided: nothing to reclaim now.
 			continue
 		}
 		stateDir := filepath.Join(s.path, "mounts", id)
@@ -987,8 +988,8 @@ func (s *Store) reclaimDeadOps(ctx context.Context, res *GCResult) error {
 			return err
 		}
 		for k, v := range ks.All() {
-			rec, derr := decodeOpRecord(v)
-			rows = append(rows, opRow{id: string(k), temps: rec.Temps, foreign: derr != nil})
+			rec, foreign := decodeOpRow(v)
+			rows = append(rows, opRow{id: string(k), temps: rec.Temps, foreign: foreign})
 		}
 		return nil
 	})
@@ -1011,8 +1012,8 @@ func (s *Store) reclaimDeadOps(ctx context.Context, res *GCResult) error {
 		if d.foreign {
 			continue
 		}
-		l, lerr := oslock.TryAcquire(s.opLockPath(d.id))
-		if lerr != nil {
+		verdict, l := judgeClaim(s.opLockPath(d.id))
+		if verdict != claimDead {
 			continue
 		}
 		acted := true

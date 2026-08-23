@@ -51,8 +51,8 @@ func (s *Store) RemoveImage(ctx context.Context, manifest v1.Hash) error {
 		}
 		for k, v := range mounts.All() {
 			id := string(k)
-			rec, derr := decodeMountRecord(v)
-			if derr == nil && rec.Image != manifest {
+			rec, foreign := decodeMountRow(v)
+			if !foreign && rec.Image != manifest {
 				continue
 			}
 			// A row naming this image — or a foreign-version row,
@@ -64,7 +64,7 @@ func (s *Store) RemoveImage(ctx context.Context, manifest v1.Hash) error {
 			if !s.mountClaimHeld(id) {
 				continue
 			}
-			if derr != nil {
+			if foreign {
 				return fmt.Errorf("image %s removal refused: live mount row %q is unreadable to this version", manifest, id)
 			}
 			return fmt.Errorf("image %s is served by live mount %q", manifest, id)

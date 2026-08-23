@@ -14,11 +14,6 @@
   platform fidelity mechanics. Lands: per backend, when its platform
   validation findings are dispositioned and a writable mount there
   is first needed.
-- `docs/issues/store-unify-liveness-verdict-judge.md` — the
-  try-lock claim verdict is spelled three ways across locks.go and
-  gc.go (judge-only, hygiene enum, acquire-and-keep) and the
-  foreign-row classification twice; a review-surfaced collapse
-  sketch. Lands: user decision.
 - `docs/issues/liveness-locks-mutation-campaign.md` — the held-lock
   rework's close-out ran targeted hand probes instead of a full
   gomutant campaign (tool defects make long runs lose incremental

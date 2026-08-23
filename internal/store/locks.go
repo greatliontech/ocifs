@@ -74,15 +74,54 @@ func upperDirOf(path, name string) string {
 	return filepath.Join(path, "uppers", name)
 }
 
-// claimHeld is the judge-only three-valued verdict on any claim
-// lock (held-lock liveness): acquired means dead — released
-// immediately without unlink, the deferral shape, leaving disposal
-// to the sweep — and both held and UNDECIDED read as alive, because
-// undecided is never death. Callers that must KEEP the acquisition
-// (reclamation) take the lock themselves.
-func claimHeld(path string) bool {
+// claimVerdict is the three-valued judgment of a claim's lock file
+// (held-lock liveness, store.md). judgeClaim is the ONLY derivation
+// site: call sites branch on these named values, never on raw error
+// shapes — parallel derivations are how one arm drifts when the
+// verdict rules change.
+type claimVerdict int
+
+const (
+	// claimLive: the try-lock blocked — a live holder, frozen
+	// processes included. Nothing is held by the judge.
+	claimLive claimVerdict = iota
+	// claimDead: the try-lock acquired — the previous holder is
+	// gone and the acquisition IS the claim: the caller is now the
+	// claim's holder and must end it with exactly one of
+	// Lock.Retire (final-holder disposal — unlink while held, then
+	// release) or Lock.Close (deferral — release without unlink;
+	// row and file persist for retry).
+	claimDead
+	// claimUndecided: any other outcome (open failure, permission
+	// problem) — never death. The caller treats the claim as live
+	// and retries later.
+	claimUndecided
+)
+
+// judgeClaim renders the verdict on a claim lock file. For
+// claimDead the returned Lock is non-nil and owned by the caller
+// (see claimDead's disposal contract); for every other verdict it
+// is nil.
+func judgeClaim(path string) (claimVerdict, *oslock.Lock) {
 	l, err := oslock.TryAcquire(path)
-	if err == nil {
+	switch {
+	case err == nil:
+		return claimDead, l
+	case errors.Is(err, oslock.ErrHeld):
+		return claimLive, nil
+	default:
+		return claimUndecided, nil
+	}
+}
+
+// claimHeld is the judge-only consult: a dead claim's accidental
+// acquisition is released immediately without unlink (the deferral
+// shape, leaving disposal to the sweep), and both live and
+// UNDECIDED read as held. Callers that must KEEP a dead claim's
+// acquisition (reclamation, the sweep) use judgeClaim directly.
+func claimHeld(path string) bool {
+	v, l := judgeClaim(path)
+	if v == claimDead {
 		l.Close()
 		return false
 	}
@@ -96,7 +135,10 @@ func (s *Store) mountClaimHeld(id string) bool {
 
 // rowExists reports whether ANY row occupies the id in the named
 // keyspace — decodable or foreign — with an undecided read counting
-// as existing (never a destruction verdict).
+// as existing (never a destruction verdict). Deliberately RAW
+// presence, not decodeMountRow/decodeOpRow classification: its one
+// consumer (sweepLockTier) asks "does residue exist", and a foreign
+// row is residue exactly like a native one.
 func (s *Store) rowExists(ctx context.Context, keyspace, id string) bool {
 	exists := true
 	err := dbView(ctx, s.bk.db, func(rtx *gmdb.ReadTx) error {
@@ -130,9 +172,9 @@ func (s *Store) sweepLockTier(ctx context.Context) {
 	}
 	for _, e := range ents {
 		name := e.Name()
-		l, err := oslock.TryAcquire(filepath.Join(s.locksDir(), name))
-		if err != nil {
-			continue // held (live) or undecided: untouched
+		v, l := judgeClaim(filepath.Join(s.locksDir(), name))
+		if v != claimDead {
+			continue // live or undecided: untouched
 		}
 		// RAW row existence, never decodability: a foreign-version
 		// row deliberately reads as absent through the decoding
