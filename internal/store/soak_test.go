@@ -18,12 +18,12 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// The crash harness (docs/plans/store-gc.md chunk 7): child
-// processes churn a SHARED store — ingesting or collecting — and
-// die by SIGKILL at arbitrary points; after every kill the store
-// must hold the crash model: rooted content serves whole, debris
-// reclaims, and a fresh sweep completes. The children exec the test
-// binary (env-gated); PDEATHSIG prevents leaks.
+// The crash harness: child processes churn a SHARED store —
+// ingesting or collecting — and die by SIGKILL at arbitrary points;
+// after every kill the store must hold the crash model: rooted
+// content serves whole, debris reclaims, and a fresh sweep
+// completes. The children exec the test binary (env-gated);
+// PDEATHSIG prevents leaks.
 
 const (
 	soakChildEnv  = "OCIFS_STORE_SOAK_CHILD"

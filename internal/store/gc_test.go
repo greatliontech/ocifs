@@ -1118,3 +1118,71 @@ func TestPropertyTierKeyspacesDisjoint(t *testing.T) {
 		}
 	})
 }
+
+// TestCollectHygieneDropsDeadSweeperCondemnedRows pins gcRowHygiene's
+// condemned-row arm (REQ-store-gc-safe): a Collect pass drops
+// condemned rows whose sweeper is dead (op row present, claim lock
+// held by nobody) or gone (no op row), and KEEPS rows whose sweeper
+// is live (held claim) — the fence a live sweep relies on. Without
+// the drop, dead sweepers' condemned rows accumulate across passes;
+// the judging consult ignores them independently, so this is the
+// hygiene tier, not the safety tier.
+func TestCollectHygieneDropsDeadSweeperCondemnedRows(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h1 := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("11", 32)}
+	h2 := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("22", 32)}
+	h3 := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("33", 32)}
+
+	// Dead sweeper whose ROW survives into hygiene: a FOREIGN
+	// (future-version) op row — reclaimDeadOps defers it wholesale,
+	// so hygiene meets a present row with no held claim and must
+	// judge it through the dead arm. (A native dead sweeper's row is
+	// deleted by reclaimDeadOps earlier in the same pass, arriving
+	// at hygiene as GONE — the dead arm's reachable case is exactly
+	// the foreign corpse.)
+	foreignRec := encodeOpRecord(OpRecord{Kind: "sweep", Owner: deadIdentity()})
+	foreignRec[0] = opRecVersion + 1
+	if err := writeRawOpRow(t, dir, "sweep-dead", foreignRec); err != nil {
+		t.Fatal(err)
+	}
+	deadKey := gcCondemnedPrefix + "oci\x00" + h1.Algorithm + "\x00" + h1.Hex
+	if err := writeGCRow(t, dir, deadKey, []byte("sweep-dead")); err != nil {
+		t.Fatal(err)
+	}
+	// Gone sweeper: condemned row naming no op row at all.
+	goneKey := gcCondemnedPrefix + "oci\x00" + h2.Algorithm + "\x00" + h2.Hex
+	if err := writeGCRow(t, dir, goneKey, []byte("sweep-gone")); err != nil {
+		t.Fatal(err)
+	}
+	// Live sweeper: op row with a HELD claim lock.
+	if err := writeOpRow(t, dir, "sweep-live", OpRecord{Kind: "sweep", Owner: deadIdentity()}); err != nil {
+		t.Fatal(err)
+	}
+	liveClaim, err := oslock.TryAcquire(s.opLockPath("sweep-live"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer liveClaim.Close()
+	liveKey := gcCondemnedPrefix + "oci\x00" + h3.Algorithm + "\x00" + h3.Hex
+	if err := writeGCRow(t, dir, liveKey, []byte("sweep-live")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Collect(context.Background(), CollectOpts{Grace: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if gcRowExists(t, dir, deadKey) {
+		t.Fatal("dead sweeper's condemned row survived hygiene")
+	}
+	if gcRowExists(t, dir, goneKey) {
+		t.Fatal("gone sweeper's condemned row survived hygiene")
+	}
+	if !gcRowExists(t, dir, liveKey) {
+		t.Fatal("live sweeper's condemned row dropped (fence lost)")
+	}
+}

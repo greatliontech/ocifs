@@ -17,8 +17,7 @@ import (
 // TestChurnSoak runs the full lifecycle loop with automatic
 // collection on and zero grace — pull, writable mount, write,
 // unmount, commit, remove, collect — and requires every cycle's
-// image to serve whole while the store never accretes: the plan's
-// churn deliverable (docs/plans/store-gc.md chunk 7).
+// image to serve whole while the store never accretes.
 func TestChurnSoak(t *testing.T) {
 	skipUnderMutationCampaign(t)
 	ofs, refStr := writableFixtureEnv(t, "wchurn", WithAutoGC(true), WithGCGrace(0))

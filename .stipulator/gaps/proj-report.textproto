@@ -1,9 +1,0 @@
-# proto-file: proto/stipulator/v1/records.proto
-# proto-message: stipulator.v1.Gap
-
-requirement_id: "REQ-proj-report"
-reason: "amended clauses (upper claim lock, no-unjudgeable GC report, report publication flag) land with the liveness-locks plan"
-lands { manual { condition: "liveness-locks plan lands: lock arbitration, lock-verdict GC report, publication flag" } }
-excuses: GAP_EXCUSE_UNCOVERED
-excuses: GAP_EXCUSE_STALE
-excuses: GAP_EXCUSE_BROKEN

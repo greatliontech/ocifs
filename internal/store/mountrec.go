@@ -366,8 +366,17 @@ func (s *Store) DeregisterMount(ctx context.Context, id string, claim *MountClai
 	if err := s.DeleteMountRecord(ctx, id); err != nil {
 		return err
 	}
+	if deregisterRowDeletedHook != nil {
+		deregisterRowDeletedHook()
+	}
 	if claim != nil {
 		claim.retire()
 	}
 	return nil
 }
+
+// deregisterRowDeletedHook fires between DeregisterMount's row
+// deletion and its claim retirement — the seam the ordering test
+// uses to observe the in-between window (the claim must still be
+// held there). Never set outside tests.
+var deregisterRowDeletedHook func()

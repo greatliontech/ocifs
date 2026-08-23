@@ -298,3 +298,54 @@ func TestProbesDoNotCrossTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestDeregisterHoldsClaimUntilRowGone pins DeregisterMount's
+// ORDERING (REQ-store-mount-registry: row removed, THEN the lock
+// file unlinked while held, then released): inside the window after
+// the row deletion and before retirement the claim lock is still
+// held, so a concurrent registration of the same id is refused.
+// Retire-before-row-delete would let a fresh registrant win the id
+// in that window and then lose ITS live row to the deregistration's
+// late delete — a served mount silently unrooted. (The final state
+// — both claim files gone — is pinned by
+// TestRemovalRefusedWhileServed; this test owns the ordering.)
+func TestDeregisterHoldsClaimUntilRowGone(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ee", 32)}
+	claim, err := s.RegisterMountRecordArbitrated(context.Background(), "clean", h, "", "/m", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowChecked := false
+	deregisterRowDeletedHook = func() {
+		windowChecked = true
+		c, err := s.RegisterMountRecordArbitrated(context.Background(), "clean", h, "", "/m", nil)
+		if err == nil {
+			c.release()
+			t.Error("registration succeeded inside the deregistration window (claim already released)")
+			return
+		}
+		// The refusal must be the HELD CLAIM specifically — any other
+		// failure (a condemned consult, an I/O error) would pass a
+		// vacuous version of this test while the ordering arm it
+		// names goes unverified.
+		if !strings.Contains(err.Error(), "in use by a live mount") {
+			t.Errorf("in-window registration refused for the wrong reason: %v", err)
+		}
+	}
+	t.Cleanup(func() { deregisterRowDeletedHook = nil })
+	if err := s.DeregisterMount(context.Background(), "clean", claim); err != nil {
+		t.Fatal(err)
+	}
+	if !windowChecked {
+		t.Fatal("deregistration window never observed")
+	}
+	if _, err := os.Stat(s.mountLockPath("clean")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("claim file survived deregistration: %v", err)
+	}
+}

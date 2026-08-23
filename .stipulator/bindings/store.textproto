@@ -990,3 +990,30 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "2676cf5c9e7383a2e91da54c6dfa1b0700f63dfeedd0d83cc2b8bbff2f9cf770"
 }
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCrossNamespaceMountReclaimedAfterKill"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "13f080ac82385dd3f4abe3f4c844c61f5872be1632d85be710e9da4a41e99001"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestDeregisterHoldsClaimUntilRowGone"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "dff4c58d751a6eb3a0d7f870afe19f8b1c280f98c2b98b086d916a22b98898d5"
+}
+
+bindings {
+  requirement_id: "REQ-store-gc-safe"
+  content_hash: "394e0faffbf3fb47b80c8b15f0ed3f111a922f6203296c7a7cd606193008c72c"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestCollectHygieneDropsDeadSweeperCondemnedRows"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "3ce60baa267ef276c60336ef8dab253e4a0ddaf762cee7070c6c9d7f887793de"
+}
