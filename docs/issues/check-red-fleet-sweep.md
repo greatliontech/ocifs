@@ -7,4 +7,5 @@ REQ-unify-clean`) and an uncovered REQ-api-mount-darwin. Undiagnosed —
 stale pins after the tool-phase releases are the likely proximate, the
 red itself needs a look.
 
-Lands: user decision.
+Lands: this repo's next change set — its gate runs stipulator check,
+which forces the diagnosis before anything else ships.

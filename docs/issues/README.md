@@ -27,4 +27,4 @@
   the fix mechanism. Lands: user decision.
 - **[check-red-fleet-sweep](check-red-fleet-sweep.md)** — stipulator check red on
   REQ-unify-clean plus stale content pins (fleet sweep 2026-08-27); undiagnosed.
-  Lands: user decision.
+  Lands: with this repo's next change set (the check gate forces the diagnosis).
