@@ -47,14 +47,33 @@ func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOptio
 		return "", err
 	}
 	if r.target == "" {
-		return o.store.Export(ctx, img)
+		return o.newImage(img).Export(ctx)
 	}
-	view, err := img.Unify()
+	return o.newImage(img).ExportTo(ctx, r.target)
+}
+
+// Export materializes this image's unified view into the
+// store-managed export cache and returns the export root (served
+// as-is when the entry already exists, REQ-export-cache). The image
+// was resolved and verified when it was acquired; nothing is
+// resolved or verified again (REQ-api-export). The handle is a
+// snapshot of that acquisition: content collected from under it
+// since fails the export rather than being fetched again.
+func (i *Image) Export(ctx context.Context) (string, error) {
+	return i.ofs.store.Export(ctx, i.img)
+}
+
+// ExportTo materializes this image's unified view into the caller's
+// own directory, which must not exist yet (REQ-export-atomic), and
+// returns that directory. As for Export, the acquisition that
+// produced the image — a pull or a commit — is the only one.
+func (i *Image) ExportTo(ctx context.Context, dir string) (string, error) {
+	view, err := i.img.Unify()
 	if err != nil {
 		return "", err
 	}
-	if err := o.store.ExportTo(ctx, view, r.target, img.Hash()); err != nil {
+	if err := i.ofs.store.ExportTo(ctx, view, dir, i.img.Hash()); err != nil {
 		return "", err
 	}
-	return r.target, nil
+	return dir, nil
 }

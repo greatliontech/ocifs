@@ -119,3 +119,102 @@ func TestExportSurface(t *testing.T) {
 		t.Fatalf("rejected export returned %v, want VerificationError", err)
 	}
 }
+
+// TestExportFromImage pins REQ-api-export's second arm: an image
+// already pulled exports what that pull materialized — the same
+// cache entry a by-reference export yields, or a caller target —
+// and the export runs no second resolution and no second seam pass:
+// a verifier that counts its calls sees exactly the pull's.
+func TestExportFromImage(t *testing.T) {
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	img := testPlatformImage(t, amd64, "which", "amd")
+	refStr := u.Host + "/test/export-from-image:v1"
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.Write(ref, img); err != nil {
+		t.Fatal(err)
+	}
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-export-image"))
+
+	seamRuns := 0
+	ofs, err := New(
+		WithWorkDir(filepath.Join(scratch, "work")),
+		WithDefaultPlatform(amd64),
+		WithVerifier(func(ctx context.Context, id ResolvedIdentity) error { seamRuns++; return nil }),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pulled, err := ofs.Pull(context.Background(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seamRuns != 1 {
+		t.Fatalf("pull ran the seam %d times", seamRuns)
+	}
+	out, err := pulled.Export(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seamRuns != 1 {
+		t.Fatalf("export from the image ran the seam again (%d runs)", seamRuns)
+	}
+	byRef, err := ofs.Export(context.Background(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seamRuns != 2 {
+		t.Fatalf("the by-reference export ran the seam %d times in total, want exactly one more", seamRuns)
+	}
+	if out != byRef {
+		t.Fatalf("export from the image landed at %q, by reference at %q", out, byRef)
+	}
+	if b, err := os.ReadFile(filepath.Join(out, "which")); err != nil || string(b) != "amd" {
+		t.Fatalf("exported content = %q, %v", b, err)
+	}
+	if pulled.Digest().Hex != filepath.Base(out) {
+		t.Fatalf("export keyed by %s, image digest %s", filepath.Base(out), pulled.Digest().Hex)
+	}
+
+	target := filepath.Join(scratch, "rootfs")
+	got, err := pulled.ExportTo(context.Background(), target)
+	if err != nil || got != target {
+		t.Fatalf("ExportTo = %q, %v", got, err)
+	}
+	if b, err := os.ReadFile(filepath.Join(target, "which")); err != nil || string(b) != "amd" {
+		t.Fatalf("target content = %q, %v", b, err)
+	}
+	if _, err := pulled.ExportTo(context.Background(), target); err == nil {
+		t.Fatal("ExportTo over an existing target succeeded")
+	}
+	if seamRuns != 2 {
+		t.Fatalf("ExportTo from the image ran the seam (%d runs)", seamRuns)
+	}
+
+	// The other order: a by-reference export materializes first, and
+	// the image's export is then the same cache entry — the key is
+	// the acquisition's digest, whichever side asked first.
+	other, err := New(WithWorkDir(filepath.Join(scratch, "other")), WithDefaultPlatform(amd64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := other.Export(context.Background(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pulled2, err := other.Pull(context.Background(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := pulled2.Export(context.Background()); err != nil || again != first {
+		t.Fatalf("image export after a by-reference export = %q, %v; want %q", again, err, first)
+	}
+}

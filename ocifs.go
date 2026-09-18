@@ -164,9 +164,17 @@ func New(opts ...Option) (*OCIFS, error) {
 }
 
 // Image is a materialized image: the platform-selected manifest and
-// its config, ready to mount or export.
+// its config, ready to mount or export. It remembers the store that
+// materialized it, so an export of it is the same acquisition
+// continued — no second resolution, no second seam run. Every Image
+// is made by newImage, so none exists without its store.
 type Image struct {
+	ofs *OCIFS
 	img *store.Image
+}
+
+func (o *OCIFS) newImage(img *store.Image) *Image {
+	return &Image{ofs: o, img: img}
 }
 
 // Digest returns the digest of the platform-selected manifest — the
@@ -206,7 +214,7 @@ func (o *OCIFS) Pull(ctx context.Context, imageRef string, opts ...PullOption) (
 	if err != nil {
 		return nil, err
 	}
-	return &Image{img: img}, nil
+	return o.newImage(img), nil
 }
 
 // mountServer is what a platform backend returns from platformMount:

@@ -134,7 +134,16 @@ digest under the store's local namespace (`store.md`).
 
 **REQ-api-export** (behavior): The library MUST offer export of a
 materialized image into a caller-supplied target directory or the
-store-managed export cache, per `export.md`.
+store-managed export cache, per `export.md` — by reference string,
+resolved per the pull policy and running the verification seam like
+any acquisition, and from an image already acquired — pulled or
+committed — which exports exactly what that acquisition
+materialized, its selected platform included, with no second
+resolution and no second seam run: a consumer that needs both the
+image's config and its export resolves once. The image is a snapshot
+of its acquisition, not a reference: content collected from under it
+since (`store.md` REQ-store-gc-collect) fails the export; only a
+by-reference export acquires again.
 
 ## Removal and collection
 

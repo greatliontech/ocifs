@@ -45,5 +45,5 @@ func (o *OCIFS) Commit(ctx context.Context, baseRef string, opts ...CommitOption
 	if err != nil {
 		return nil, fmt.Errorf("committed image %s does not materialize: %w", digest, err)
 	}
-	return &Image{img: img}, nil
+	return o.newImage(img), nil
 }

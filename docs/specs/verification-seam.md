@@ -27,9 +27,12 @@ own concern). The store retains the resolved top-level artifact
 (`store.md` REQ-store-ingest-order), so the seam's inputs are
 available for cached content without network access. The seam
 governs consumer acquisition through the library surface (`api.md`
-REQ-api-acquire); platform-initiated serving of already-materialized
-content — the darwin app extension — is downstream of an admitted
-acquisition and runs no seam of its own.
+REQ-api-acquire); what is downstream of an admitted acquisition runs
+no seam of its own — platform-initiated serving of already-
+materialized content (the darwin app extension), and an export made
+from the image an admitted acquisition returned (`api.md`
+REQ-api-export), which materializes that acquisition's content and
+resolves nothing.
 
 **REQ-seam-input** (behavior): The verifier MUST receive the
 resolved identity: the reference as requested, the resolved
