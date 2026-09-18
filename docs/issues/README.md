@@ -25,6 +25,3 @@
   mutually destructive (tree removal and stale-mount reaping hit the
   other run's live state); two incidents recorded, oslock now offers
   the fix mechanism. Lands: user decision.
-- **[check-red-fleet-sweep](check-red-fleet-sweep.md)** — stipulator check red on
-  REQ-unify-clean plus stale content pins (fleet sweep 2026-08-27); undiagnosed.
-  Lands: with this repo's next change set (the check gate forces the diagnosis).

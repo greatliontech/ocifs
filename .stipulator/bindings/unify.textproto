@@ -165,7 +165,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-unify-clean"
-  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  content_hash: "c81fa403a0a441ed576fac66286fb48d04c37fbd1a28dd8609a0b67a80e781f7"
+  source_hash: "14b569d26a6f8c4d57b6978b42d6f601adbd8a4135918a8edcd85cf6eb7e8cb9"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/layer.Unify"
   role: BINDING_ROLE_IMPLEMENTS
@@ -174,7 +175,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-unify-clean"
-  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  content_hash: "c81fa403a0a441ed576fac66286fb48d04c37fbd1a28dd8609a0b67a80e781f7"
+  source_hash: "14b569d26a6f8c4d57b6978b42d6f601adbd8a4135918a8edcd85cf6eb7e8cb9"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/layer.TestNonDirAncestorDiscardsDescendants"
   role: BINDING_ROLE_TESTS
@@ -183,7 +185,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-unify-clean"
-  content_hash: "2ce4d4f83e9b2f0aaaf2ede4ea6d117c99b54e572d3fb978dfc7403e49b7244a"
+  content_hash: "c81fa403a0a441ed576fac66286fb48d04c37fbd1a28dd8609a0b67a80e781f7"
+  source_hash: "14b569d26a6f8c4d57b6978b42d6f601adbd8a4135918a8edcd85cf6eb7e8cb9"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/layer.TestPropertyOracle"
   role: BINDING_ROLE_TESTS
