@@ -34,7 +34,7 @@ match, the default keychain applies if enabled, else anonymous.
 Resolution is deterministic — overlapping prefixes never resolve
 differently across calls.
 
-## Image acquisition
+## Image acquisition and resolution
 
 **REQ-api-acquire** (behavior): The library MUST offer image
 acquisition by reference string (tag or digest form), resolved per
@@ -43,6 +43,13 @@ explicit platform (`store.md` REQ-store-digest-entry). Both yield a
 materialized image whose config file is accessible to the consumer,
 and both run the verification seam (`verification-seam.md`) when a
 verifier is configured.
+
+**REQ-api-resolve** (behavior): The library MUST offer resolution by
+reference string (tag or digest form), resolved per the pull policy
+and running the verification seam exactly as an acquisition would,
+that yields the resolved top-level digest and materializes nothing:
+no layer content is fetched, unpacked, or exported, and the
+reference cache records nothing, since nothing was ingested.
 
 ## Mount
 

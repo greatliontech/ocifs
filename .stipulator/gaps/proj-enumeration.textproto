@@ -3,4 +3,6 @@
 
 requirement_id: "REQ-proj-enumeration"
 reason: "The kernel pins immutable sorted snapshots and exact resume; the backend cookie/session glue and the change-verifier clause are pinned by the FUSE, ProjFS, and FSKit backends"
+content_hash: "175f19fc3e13c8ea5f13a037bf8840ccfbbae96419bd0eb2ad3cc3fe24ce338c"
+source_hash: "32f28d9fc003150a156475940a8c147e14ec9d7eb55d05b9d8211bb1a66dedb2"
 lands { manual { condition: "backend enumeration glue lands and pins cookies, sessions, and change verifiers" } }

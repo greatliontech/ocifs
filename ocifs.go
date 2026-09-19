@@ -90,11 +90,11 @@ type Verifier = store.Verifier
 // platform selection happens only after the seam passes).
 type ResolvedIdentity = store.ResolvedIdentity
 
-// VerificationError is the error an acquisition returns when the
-// configured Verifier rejects it; match with errors.As to
-// distinguish verification failure from resolution failure. Nothing
-// is served and the reference cache records nothing for the failed
-// resolution.
+// VerificationError is the error an acquisition or a resolution
+// returns when the configured Verifier rejects it; match with
+// errors.As to distinguish verification failure from resolution
+// failure. Nothing is served and the reference cache records nothing
+// for the failed resolution.
 type VerificationError = store.VerificationError
 
 // WithVerifier configures the verification seam's hook
@@ -215,6 +215,32 @@ func (o *OCIFS) Pull(ctx context.Context, imageRef string, opts ...PullOption) (
 		return nil, err
 	}
 	return o.newImage(img), nil
+}
+
+// Resolved is what a resolution yields: the reference as requested
+// and the top-level digest it resolved to, admitted by the
+// verification seam where one is configured.
+type Resolved struct {
+	// Reference is the reference exactly as requested.
+	Reference string
+	// Digest is the top-level digest the reference resolved to: the
+	// index of a multi-platform image, the manifest otherwise.
+	Digest v1.Hash
+}
+
+// Resolve resolves imageRef — tag or digest form, per the pull policy
+// — to its top-level digest and runs the verification seam on it
+// exactly as an acquisition would, materializing nothing (api.md
+// REQ-api-resolve): for a consumer whose substrate fetches the
+// content itself by that digest, this is the whole of the
+// acquisition. A digest-form reference resolves to itself and still
+// runs the seam.
+func (o *OCIFS) Resolve(ctx context.Context, imageRef string) (*Resolved, error) {
+	h, err := o.store.Resolve(ctx, imageRef)
+	if err != nil {
+		return nil, err
+	}
+	return &Resolved{Reference: imageRef, Digest: h}, nil
 }
 
 // mountServer is what a platform backend returns from platformMount:

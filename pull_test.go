@@ -278,3 +278,87 @@ func TestVerifierSeamOnAcquisition(t *testing.T) {
 		t.Fatalf("admitted pull served wrong image: %+v", cf)
 	}
 }
+
+// Resolution runs the seam and yields the digest without materializing:
+// a rejected resolution is the seam's refusal; an admitted one leaves
+// no layer content and no reference-cache entry behind, so a
+// pull-never acquisition afterwards still finds nothing (api.md
+// REQ-api-resolve).
+func TestResolveRunsSeamWithoutMaterializing(t *testing.T) {
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	idx := mutate.AppendManifests(empty.Index,
+		mutate.IndexAddendum{Add: testPlatformImage(t, amd64, "resolve", "amd64"), Descriptor: v1.Descriptor{Platform: &amd64}},
+	)
+	refStr := u.Host + "/test/resolve:v1"
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.WriteIndex(ref, idx); err != nil {
+		t.Fatal(err)
+	}
+	idxDigest, err := idx.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-resolve"))
+	rejected := errors.New("untrusted")
+	admit := false
+	var seen []ResolvedIdentity
+	ofs, err := New(
+		WithWorkDir(filepath.Join(scratch, "work")),
+		WithDefaultPlatform(amd64),
+		WithVerifier(func(ctx context.Context, id ResolvedIdentity) error {
+			seen = append(seen, id)
+			if !admit {
+				return rejected
+			}
+			return nil
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var verr *VerificationError
+	if _, err := ofs.Resolve(context.Background(), refStr); !errors.As(err, &verr) || verr.Digest != idxDigest {
+		t.Fatalf("rejected resolution returned %v, want VerificationError at %s", err, idxDigest)
+	}
+	admit = true
+	res, err := ofs.Resolve(context.Background(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Digest != idxDigest || res.Reference != refStr {
+		t.Fatalf("resolved %+v, want %s", res, idxDigest)
+	}
+	if len(seen) != 2 || seen[1].Digest != idxDigest || len(seen[1].Artifact) == 0 {
+		t.Fatalf("the seam saw %d identities, last %+v", len(seen), seen[len(seen)-1])
+	}
+	// Nothing materialized, nothing recorded: a pull that may not
+	// reach the network finds no image.
+	never, err := New(WithWorkDir(filepath.Join(scratch, "work")), WithDefaultPlatform(amd64), WithPullPolicy(PullNever))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := never.Pull(context.Background(), refStr); err == nil {
+		t.Fatal("a resolution recorded the reference as acquired")
+	}
+	digestRef := u.Host + "/test/resolve@" + idxDigest.String()
+	if _, err := never.Pull(context.Background(), digestRef); err == nil {
+		t.Fatal("a resolution materialized the image")
+	}
+	// The digest form resolves to itself, runs the seam, and dials no
+	// network: the retained top-level artifact is the seam's input
+	// after the registry is gone.
+	srv.Close()
+	before := len(seen)
+	if res, err := ofs.Resolve(context.Background(), digestRef); err != nil || res.Digest != idxDigest || len(seen) != before+1 {
+		t.Fatalf("digest-form resolution without a registry: %+v %v, seam runs %d", res, err, len(seen)-before)
+	}
+}

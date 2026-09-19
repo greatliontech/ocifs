@@ -3,8 +3,8 @@
 
 bindings {
   requirement_id: "REQ-seam-position"
-  content_hash: "3032decbe725ee4262aa17455fffe962943c05f6f205d723d735f504ead5fc5c"
-  source_hash: "876d59c30c0a5b416c6cb24a1c9934a13d0982151acd0661e3241f91c89e1b76"
+  content_hash: "bfcfac4c5e580ad3125189b5a6fc4c1db88098101baf2640f3ec32730325ef26"
+  source_hash: "944879245cdd2eddcd93c1b0e4d66b34ed024e6ddeb10c21440da251e230324a"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.Store.verify"
   role: BINDING_ROLE_IMPLEMENTS
@@ -13,8 +13,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-seam-position"
-  content_hash: "3032decbe725ee4262aa17455fffe962943c05f6f205d723d735f504ead5fc5c"
-  source_hash: "876d59c30c0a5b416c6cb24a1c9934a13d0982151acd0661e3241f91c89e1b76"
+  content_hash: "bfcfac4c5e580ad3125189b5a6fc4c1db88098101baf2640f3ec32730325ef26"
+  source_hash: "944879245cdd2eddcd93c1b0e4d66b34ed024e6ddeb10c21440da251e230324a"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyVerifierRejectionLeavesNoTrace"
   role: BINDING_ROLE_TESTS
@@ -23,8 +23,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-seam-position"
-  content_hash: "3032decbe725ee4262aa17455fffe962943c05f6f205d723d735f504ead5fc5c"
-  source_hash: "876d59c30c0a5b416c6cb24a1c9934a13d0982151acd0661e3241f91c89e1b76"
+  content_hash: "bfcfac4c5e580ad3125189b5a6fc4c1db88098101baf2640f3ec32730325ef26"
+  source_hash: "944879245cdd2eddcd93c1b0e4d66b34ed024e6ddeb10c21440da251e230324a"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestVerifierRunsPerRequestCachedIncluded"
   role: BINDING_ROLE_TESTS
@@ -34,6 +34,7 @@ bindings {
 bindings {
   requirement_id: "REQ-seam-input"
   content_hash: "65a981fac0d566f217cd22e556793a3b7b711ef64c1d312efcc8ea3fae9e3f00"
+  source_hash: "714e70f55f53ca7e0a36b46536962251767c34c40e255a71a6628c6f0116b920"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestVerifierReceivesResolvedIdentity"
   role: BINDING_ROLE_TESTS
@@ -43,6 +44,7 @@ bindings {
 bindings {
   requirement_id: "REQ-seam-abort"
   content_hash: "41226625ae4d5a2c9dad97338b13a387564176d9752f7e9fcbb5131dde898f95"
+  source_hash: "528e01fddfeb61052e089627bb1c597f01595ea2e2afd8cd1666869e46014ca8"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyVerifierRejectionLeavesNoTrace"
   role: BINDING_ROLE_TESTS
@@ -52,6 +54,7 @@ bindings {
 bindings {
   requirement_id: "REQ-seam-abort"
   content_hash: "41226625ae4d5a2c9dad97338b13a387564176d9752f7e9fcbb5131dde898f95"
+  source_hash: "528e01fddfeb61052e089627bb1c597f01595ea2e2afd8cd1666869e46014ca8"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs/internal/store.TestResolutionFailureIsNotVerificationError"
   role: BINDING_ROLE_TESTS
@@ -61,6 +64,7 @@ bindings {
 bindings {
   requirement_id: "REQ-seam-optional"
   content_hash: "65d57123d493b1060c129083f306ee5f801b2c387a0db1829056c1d3a99b666f"
+  source_hash: "fa6d3c2deadd648e18025a58d3ca31be719a70bb382aa02638be456e089b2d8a"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPullSurface"
   role: BINDING_ROLE_TESTS
@@ -69,10 +73,20 @@ bindings {
 
 bindings {
   requirement_id: "REQ-seam-position"
-  content_hash: "3032decbe725ee4262aa17455fffe962943c05f6f205d723d735f504ead5fc5c"
-  source_hash: "876d59c30c0a5b416c6cb24a1c9934a13d0982151acd0661e3241f91c89e1b76"
+  content_hash: "bfcfac4c5e580ad3125189b5a6fc4c1db88098101baf2640f3ec32730325ef26"
+  source_hash: "944879245cdd2eddcd93c1b0e4d66b34ed024e6ddeb10c21440da251e230324a"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestExportFromImage"
   role: BINDING_ROLE_TESTS
   shape_hash: "e04f51583bc0566dd4681a4033ed5695b1968760c5c0722a84bd2e715a6b0eeb"
+}
+
+bindings {
+  requirement_id: "REQ-seam-position"
+  content_hash: "bfcfac4c5e580ad3125189b5a6fc4c1db88098101baf2640f3ec32730325ef26"
+  source_hash: "944879245cdd2eddcd93c1b0e4d66b34ed024e6ddeb10c21440da251e230324a"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestResolveRunsSeamWithoutMaterializing"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "e1c33e41377af908c4fff1a1a34895b8e7800d80868a0ea5c846b466fdef70f5"
 }

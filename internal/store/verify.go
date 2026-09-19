@@ -37,9 +37,9 @@ type ResolvedIdentity struct {
 // against the consumer's trust policy. ocifs never ships an
 // implementation and never interprets the policy — a nil Verifier
 // means every resolvable image is served (REQ-seam-optional). It
-// runs on every acquisition request, cached or not; caching verdicts
-// is the verifier's own concern. A non-nil error aborts the request
-// (REQ-seam-abort).
+// runs on every acquisition and resolution request, cached or not;
+// caching verdicts is the verifier's own concern. A non-nil error
+// aborts the request (REQ-seam-abort).
 type Verifier func(ctx context.Context, id ResolvedIdentity) error
 
 // VerificationError reports a Verifier rejection, distinguishing
@@ -76,7 +76,7 @@ func (s *Store) verify(ctx context.Context, req request, top v1.Hash, lg *leaseG
 	}
 	raw, err := s.ensureManifest(ctx, nil, top)
 	if errors.Is(err, errIncomplete) {
-		f := &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever}
+		f := s.newFetcher(req)
 		// A heal writes the content tiers: lease before mutex
 		// (REQ-store-single-writer; the reverse order deadlocks
 		// against the commit path).

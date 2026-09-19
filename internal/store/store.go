@@ -354,14 +354,14 @@ type request struct {
 	explicit bool
 }
 
-// Image materializes imageRef for the requested platform (nil: the
-// store's default) and returns the platform-selected image. The
-// reference may be tag- or digest-form; digest-form requests never
-// re-resolve a tag (REQ-store-digest-entry).
-func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platform) (*Image, error) {
+// newRequest parses imageRef — tag or digest form, a digest-form
+// reference carrying its digest so it never re-resolves a tag
+// (REQ-store-digest-entry) — for the requested platform (nil: the
+// store's default).
+func (s *Store) newRequest(imageRef string, platform *v1.Platform) (request, error) {
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
-		return nil, err
+		return request{}, err
 	}
 	req := request{ref: ref, platform: s.defaultPlatform, explicit: platform != nil}
 	if platform != nil {
@@ -370,9 +370,28 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	if d, ok := ref.(name.Digest); ok {
 		h, err := v1.NewHash(d.DigestStr())
 		if err != nil {
-			return nil, err
+			return request{}, err
 		}
 		req.digest = &h
+	}
+	return req, nil
+}
+
+// newFetcher is the one fetcher a request may heal or materialize
+// through: fetching is allowed by the pull policy, and never for the
+// reserved local namespace, where a missing piece is store damage
+// failing as under Never whatever the surrounding DNS makes of the
+// name (REQ-store-local-images).
+func (s *Store) newFetcher(req request) *fetcher {
+	return &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(req.ref.Context().RegistryStr())}
+}
+
+// Image materializes imageRef for the requested platform (nil: the
+// store's default) and returns the platform-selected image.
+func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platform) (*Image, error) {
+	req, err := s.newRequest(imageRef, platform)
+	if err != nil {
+		return nil, err
 	}
 
 	// The lease guard spans this request: acquired at the first
@@ -401,6 +420,34 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	return img, err
 }
 
+// Resolve resolves imageRef to its top-level digest per the pull
+// policy and runs the verification seam on it, materializing nothing
+// and recording no reference-cache entry: the entry is ingest's
+// completion barrier (REQ-store-ingest-order), and nothing was
+// ingested. A resolution retains the top-level artifact it fetched —
+// a tag's, or the seam's heal of an absent digest-form artifact — as
+// any resolution does, but roots nothing: with no refs row the
+// artifact is unrooted (REQ-store-gc-roots) and stands only until a
+// sweep past the retention grace collects it. The platform
+// is irrelevant to resolution — the seam judges the top-level
+// artifact, before any platform selection — so none is requested.
+func (s *Store) Resolve(ctx context.Context, imageRef string) (v1.Hash, error) {
+	req, err := s.newRequest(imageRef, nil)
+	if err != nil {
+		return emptyHash, err
+	}
+	lg := &leaseGuard{s: s}
+	defer lg.release(context.WithoutCancel(ctx))
+	top, _, _, err := s.resolveTop(ctx, req, lg)
+	if err != nil {
+		return emptyHash, err
+	}
+	if err := s.verify(ctx, req, top, lg); err != nil {
+		return emptyHash, err
+	}
+	return top, nil
+}
+
 func (s *Store) imageAttempt(ctx context.Context, req request, lg *leaseGuard) (*Image, bool, error) {
 	top, needRecord, prevMoved, err := s.resolveTop(ctx, req, lg)
 	if err != nil {
@@ -417,10 +464,7 @@ func (s *Store) imageAttempt(ctx context.Context, req request, lg *leaseGuard) (
 
 	img, err := s.assemble(ctx, req, top, nil)
 	if errors.Is(err, errIncomplete) {
-		// The local namespace is never dialed: a missing piece there
-		// is store damage, failing as under Never
-		// (REQ-store-local-images).
-		f := &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(req.ref.Context().RegistryStr())}
+		f := s.newFetcher(req)
 		// Acquire BEFORE the mutex (lease → mutex, the commit
 		// path's order — the reverse deadlocks): this path is about
 		// to materialize, so the eager acquisition is the first

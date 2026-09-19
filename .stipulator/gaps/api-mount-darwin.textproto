@@ -3,4 +3,6 @@
 
 requirement_id: "REQ-api-mount-darwin"
 reason: "The declarative-config serving path is pinned portably (ParseConfig + loadVolume end to end offline) and the orchestration and appex are authored; the OS-spawned extension, bridge dispatch, sandbox/app-group behavior, and the real platform mount await the darwin Tier-2 run (docs/issues/fskit-darwin-validation.md)"
+content_hash: "85d9ff724bf8d47d4ac44956b8dbf04cd6372f8c557b2ae2510350935f5d39c2"
+source_hash: "3802982227e2aff80c684c850814f25ef86980e97fb6a32a448a3cbfeead3de5"
 lands { manual { condition: "darwin Tier-2 mount validation reports back with findings dispositioned" } }

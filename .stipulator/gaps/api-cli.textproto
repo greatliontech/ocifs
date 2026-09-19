@@ -3,4 +3,6 @@
 
 requirement_id: "REQ-api-cli"
 reason: "The linux serve-until-signalled arm is pinned by the network-free smoke test; the darwin orchestrate-and-do-not-serve arm lands with the FSKit backend"
+content_hash: "9909a73f394ce826b846facadc9c94f0e6b27db7b991cf38659ad0e1d0f844a8"
+source_hash: "0327f09439d83f288e89593847a0e285ea4846c26ef001dcd240fe0ff4c016d5"
 lands { manual { condition: "darwin appex orchestration lands and pins the CLI's darwin arm" } }

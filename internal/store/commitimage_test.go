@@ -204,6 +204,22 @@ func TestLocalNamespaceNeverDials(t *testing.T) {
 	if _, err := cut.Image(context.Background(), LocalRef(digest), nil); err == nil {
 		t.Fatal("damaged local image materialized")
 	}
+
+	// Damage the top-level artifact itself: the seam's heal path,
+	// which a verifier turns on, reads it and must fail as store
+	// damage without dialing — under a resolution as under an
+	// acquisition.
+	if err := os.Remove(filepath.Join(blob, digest.Hex)); err != nil {
+		t.Fatal(err)
+	}
+	cut = newStoreAt(t, dir, PullAlways, linuxAMD64, cutTransport(t))
+	cut.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+	if _, err := cut.Resolve(context.Background(), LocalRef(digest)); err == nil || !strings.Contains(err.Error(), "store-resident, never fetched") {
+		t.Fatalf("damaged local top-level artifact resolved: %v", err)
+	}
+	if _, err := cut.Image(context.Background(), LocalRef(digest), nil); err == nil || !strings.Contains(err.Error(), "store-resident, never fetched") {
+		t.Fatalf("damaged local top-level artifact acquired under a verifier: %v", err)
+	}
 }
 
 // TestCommitRecordsLocalImageRoot pins the localimages row

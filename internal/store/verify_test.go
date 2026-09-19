@@ -47,14 +47,6 @@ func treeFiles(t testing.TB, root string) map[string]int64 {
 	return files
 }
 
-// refsContent snapshots the reference cache by full content: a
-// rejection must not record anything, and a rewritten row is
-// content-identical to the one it clobbers only when nothing
-// changed.
-func refsContent(t testing.TB, dir string) map[string]string {
-	return refRows(t, dir)
-}
-
 func sameContent(a, b map[string]string) bool {
 	if len(a) != len(b) {
 		return false
@@ -86,14 +78,18 @@ func sameTree(a, b map[string]int64) bool {
 // manifest, a rejecting verifier aborts with a VerificationError and
 // the request materializes nothing — no layer unpacked into the CAS
 // or layer-index tier, no descriptor appended, no reference-cache
-// entry recorded. The one write resolution itself performs — retaining
-// the top-level artifact in oci/blobs, the seam's own input — is the
-// only new object tolerated.
+// entry recorded. A resolution leaves the same absence of trace
+// whether the verifier rejects or admits it (REQ-api-resolve). The
+// one write resolution itself performs — retaining the top-level
+// artifact in oci/blobs, the seam's own input — is the only new
+// object tolerated.
 func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		cached := rapid.Bool().Draw(rt, "cached")
 		digestForm := rapid.Bool().Draw(rt, "digestForm")
 		indexed := rapid.Bool().Draw(rt, "indexed")
+		resolve := rapid.Bool().Draw(rt, "resolve")
+		admitted := resolve && rapid.Bool().Draw(rt, "admitted")
 
 		reg := newTestRegistry()
 		refStr := testHost + "/seam/notrace:v1"
@@ -132,18 +128,32 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 		// request under test.
 		s := newStoreAt(t, dir, PullIfNotPresent, linux, reg)
 		s.verifier = rejectAll
+		if admitted {
+			s.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+		}
 		before := map[string]map[string]int64{}
 		for _, tier := range []string{"blobs", "oci"} {
 			before[tier] = treeFiles(t, filepath.Join(dir, tier))
 		}
-		beforeRefs := refsContent(t, dir)
-		_, err := s.Image(context.Background(), reqRef, nil)
-		var verr *VerificationError
-		if !errors.As(err, &verr) {
-			rt.Fatalf("rejected request returned %v, want VerificationError", err)
+		beforeRefs := refRows(t, dir)
+		var err error
+		if resolve {
+			var got v1.Hash
+			got, err = s.Resolve(context.Background(), reqRef)
+			if admitted && (err != nil || got != top) {
+				rt.Fatalf("admitted resolution: %v %v, want %v", got, err, top)
+			}
+		} else {
+			_, err = s.Image(context.Background(), reqRef, nil)
 		}
-		if !errors.Is(err, errRejected) {
-			rt.Fatalf("VerificationError does not wrap the verifier's error: %v", err)
+		if !admitted {
+			var verr *VerificationError
+			if !errors.As(err, &verr) {
+				rt.Fatalf("rejected request returned %v, want VerificationError", err)
+			}
+			if !errors.Is(err, errRejected) {
+				rt.Fatalf("VerificationError does not wrap the verifier's error: %v", err)
+			}
 		}
 
 		for _, tier := range []string{"blobs"} {
@@ -155,7 +165,7 @@ func TestPropertyVerifierRejectionLeavesNoTrace(t *testing.T) {
 		// Size equality is too coarse for the reference cache — an
 		// overwritten digest is digest-sized — so refs rows are
 		// compared by content.
-		if afterRefs := refsContent(t, dir); !sameContent(beforeRefs, afterRefs) {
+		if afterRefs := refRows(t, dir); !sameContent(beforeRefs, afterRefs) {
 			rt.Fatalf("rejected request rewrote refs rows: before %v, after %v", beforeRefs, afterRefs)
 		}
 		// oci/ may gain exactly the retained top-level artifact — the
@@ -402,7 +412,7 @@ func TestRejectionPreservesPriorReferenceRecord(t *testing.T) {
 	if _, err := pre.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
-	recorded := refsContent(t, dir)
+	recorded := refRows(t, dir)
 
 	// The tag moves; PullAlways revalidates, resolves the new top,
 	// and the verifier rejects it.
@@ -417,7 +427,7 @@ func TestRejectionPreservesPriorReferenceRecord(t *testing.T) {
 	if verr.Digest != mustDigest(t, v2img) {
 		t.Fatalf("rejection judged %s, want the moved tag's new top %s", verr.Digest, mustDigest(t, v2img))
 	}
-	if after := refsContent(t, dir); !sameContent(recorded, after) {
+	if after := refRows(t, dir); !sameContent(recorded, after) {
 		t.Fatalf("rejected resolution touched the reference cache: before %v, after %v", recorded, after)
 	}
 
@@ -438,5 +448,60 @@ func TestRejectionPreservesPriorReferenceRecord(t *testing.T) {
 	}
 	if len(seen) != 1 || seen[0].Digest != mustDigest(t, v1img) {
 		t.Fatalf("serve through the surviving record did not re-run the seam on the old identity: %v", seen)
+	}
+}
+
+// TestResolveFollowsPullPolicy pins REQ-api-resolve's "resolved per
+// the pull policy": Always validates an unmoved tag by HEAD alone and
+// re-resolves a moved one to its new digest yet records nothing, so
+// the reference cache still names the digest the last acquisition
+// recorded; IfNotPresent and Never serve that recorded digest without
+// a dial; Never refuses a tag it has no record of.
+func TestResolveFollowsPullPolicy(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/seam/policy:v1"
+	img1 := imageWithPlatform(t, linuxAMD64, newRawLayer(t, tarBytes(t, tfile("v", "one"))))
+	push(t, reg, refStr, img1)
+	dir := scratchDir(t)
+	if _, err := newStoreAt(t, dir, PullIfNotPresent, linuxAMD64, reg).Image(context.Background(), refStr, nil); err != nil {
+		t.Fatal(err)
+	}
+	recorded := refRows(t, dir)
+
+	// Unmoved tag: Always validates the recorded digest by HEAD and
+	// fetches no content.
+	rec := &recordingTransport{inner: reg}
+	always := newStoreAt(t, dir, PullAlways, linuxAMD64, rec)
+	always.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+	got, err := always.Resolve(context.Background(), refStr)
+	if err != nil || got != mustDigest(t, img1) {
+		t.Fatalf("Always resolved %v %v, want the recorded %v", got, err, mustDigest(t, img1))
+	}
+	for _, r := range rec.requests() {
+		if strings.HasPrefix(r, "GET ") && (strings.Contains(r, "/manifests/") || strings.Contains(r, "/blobs/")) {
+			t.Fatalf("content fetched despite a matching HEAD: %s", r)
+		}
+	}
+
+	img2 := imageWithPlatform(t, linuxAMD64, newRawLayer(t, tarBytes(t, tfile("v", "two"))))
+	push(t, reg, refStr, img2)
+	got, err = always.Resolve(context.Background(), refStr)
+	if err != nil || got != mustDigest(t, img2) {
+		t.Fatalf("Always resolved %v %v, want the moved tag's %v", got, err, mustDigest(t, img2))
+	}
+	if !sameContent(recorded, refRows(t, dir)) {
+		t.Fatalf("a resolution rewrote the reference cache: %v", refRows(t, dir))
+	}
+
+	for _, policy := range []PullPolicy{PullIfNotPresent, PullNever} {
+		s := newStoreAt(t, dir, policy, linuxAMD64, cutTransport(t))
+		s.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+		if got, err := s.Resolve(context.Background(), refStr); err != nil || got != mustDigest(t, img1) {
+			t.Fatalf("%v resolved %v %v, want the recorded %v", policy, got, err, mustDigest(t, img1))
+		}
+	}
+	never := newStoreAt(t, dir, PullNever, linuxAMD64, cutTransport(t))
+	if _, err := never.Resolve(context.Background(), testHost+"/seam/policy:unseen"); err == nil {
+		t.Fatal("Never resolved a tag it has no record of")
 	}
 }
