@@ -13,16 +13,19 @@ configure at construction: a work directory (store root; default:
 synthesize in mounts; registry credentials as a map of registry or
 registry/repository prefixes to credentials plus an opt-in to the
 ambient default keychain; a pull policy (default `IfNotPresent`,
-semantics in `store.md`); a default platform (default derived
-from the host — semantics and the darwin fallback in `store.md`);
-automatic garbage collection on or off (default on); and the
-collection retention grace (default 24h) — both per `store.md`
-REQ-store-gc-collect. Construction initializes the store — including its
-bookkeeping database — and fails if the store cannot be
-initialized; a Close counterpart releases the database's
-coordination resources, and leaving a process-lifetime handle to
-exit is equally safe (the database is crash-safe by its own
-contract).
+semantics in `store.md`); a default platform (default derived from
+the host — semantics and the darwin fallback in `store.md`);
+automatic garbage collection on or off (default on); the collection
+retention grace (default 24h) — both per `store.md`
+REQ-store-gc-collect; and a registry transport, through which every
+registry round trip goes — the registry client's own by default,
+which wraps a given one for its retries as well — for a consumer
+that serves a registry in-process or pins its client. Construction
+initializes the store — including its bookkeeping database — and
+fails if the store cannot be initialized; a Close counterpart
+releases the database's coordination resources, and leaving a
+process-lifetime handle to exit is equally safe (the database is
+crash-safe by its own contract).
 
 **REQ-api-keychain** (behavior): Credential resolution MUST pick the
 longest matching configured prefix, where a prefix matches only at a

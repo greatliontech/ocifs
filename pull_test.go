@@ -7,13 +7,16 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -360,5 +363,113 @@ func TestResolveRunsSeamWithoutMaterializing(t *testing.T) {
 	before := len(seen)
 	if res, err := ofs.Resolve(context.Background(), digestRef); err != nil || res.Digest != idxDigest || len(seen) != before+1 {
 		t.Fatalf("digest-form resolution without a registry: %+v %v, seam runs %d", res, err, len(seen)-before)
+	}
+}
+
+// handlerRoundTripper serves a registry handler as the transport:
+// every registry round trip is an in-process call, no socket. It
+// keeps the RoundTripper contract — the caller's request is not
+// mutated, and its body is closed.
+type handlerRoundTripper struct{ h http.Handler }
+
+func (t handlerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	served := req.Clone(req.Context())
+	if served.Body == nil {
+		served.Body = http.NoBody
+	}
+	rec := httptest.NewRecorder()
+	t.h.ServeHTTP(rec, served)
+	if req.Body != nil {
+		req.Body.Close()
+	}
+	resp := rec.Result()
+	resp.Request = req
+	return resp, nil
+}
+
+// bearerGate fronts a registry handler with a token challenge: every
+// request but the token endpoint's needs a bearer the endpoint minted
+// for the fixture's one user — the round trips a consumer's
+// credentials ride, all through the same transport.
+func bearerGate(inner http.Handler, host, user, pass string) http.Handler {
+	const token = "fixture-bearer"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			u, p, ok := r.BasicAuth()
+			if !ok || u != user || p != pass {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"token":"`+token+`"}`)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+host+`/token",service="fixture"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+}
+
+// The transport a consumer hands at construction carries every
+// registry round trip: an image is pulled from a registry that is a
+// handler in this process, no socket bound, through the token
+// challenge and exchange the consumer's credentials answer; without
+// the transport the same host is a dial that resolves nowhere
+// (REQ-api-construction).
+func TestTransportServesRegistryInProcess(t *testing.T) {
+	const host = "inprocess.invalid"
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	img := testPlatformImage(t, amd64, "hello", "through the transport")
+	want, err := img.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := name.ParseReference(host + "/test/transport:v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	open := handlerRoundTripper{h: inner}
+	if err := remote.Write(ref, img, remote.WithTransport(open)); err != nil {
+		t.Fatal(err)
+	}
+	gated := handlerRoundTripper{h: bearerGate(inner, host, "user", "pass")}
+	ofs, err := New(WithWorkDir(filepath.Join(t.TempDir(), "work")), WithDefaultPlatform(amd64), WithTransport(gated), WithAuthSource(host, authn.AuthConfig{Username: "user", Password: "pass"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ofs.Close()
+	pulled, err := ofs.Pull(context.Background(), ref.String())
+	if err != nil {
+		t.Fatalf("pull through the in-process transport: %v", err)
+	}
+	if pulled.Digest() != want {
+		t.Fatalf("pulled %s, want %s", pulled.Digest(), want)
+	}
+	// The wrong credentials are refused by the same challenge, through
+	// the same transport.
+	wrong, err := New(WithWorkDir(filepath.Join(t.TempDir(), "wrong")), WithDefaultPlatform(amd64), WithTransport(gated), WithAuthSource(host, authn.AuthConfig{Username: "user", Password: "nope"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wrong.Close()
+	if _, err := wrong.Pull(context.Background(), ref.String()); err == nil {
+		t.Fatal("a pull with the wrong credentials was served")
+	}
+	// Without the transport the same host is a dial, and there is
+	// nothing to dial; the attempt is bounded so a proxy in the
+	// environment cannot stretch it.
+	bare, err := New(WithWorkDir(filepath.Join(t.TempDir(), "bare")), WithDefaultPlatform(amd64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bare.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := bare.Pull(ctx, ref.String()); err == nil {
+		t.Fatal("a pull with no transport reached an in-process handler")
 	}
 }

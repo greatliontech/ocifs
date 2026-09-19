@@ -115,7 +115,7 @@ func TestLoadVolumeEndToEnd(t *testing.T) {
 	// every write inside the campaign's observation bracket).
 	scratch := scratchtest.Dir(t, "fskitfs")
 	storeDir := filepath.Join(scratch, "store")
-	s, err := store.NewStore(storeDir, anonKeychain{}, store.PullIfNotPresent, v1.Platform{}, nil, false, 0)
+	s, err := store.NewStore(store.Config{Path: storeDir, Auth: anonKeychain{}, PullPolicy: store.PullIfNotPresent, DefaultPlatform: v1.Platform{}, Verifier: nil, AutoGC: false, GCGrace: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestEnumerateCookieWrapDoesNotPanic(t *testing.T) {
 func TestProbeRecognizesOnlyStoreLayouts(t *testing.T) {
 	scratch := scratchtest.Dir(t, "fskitfs")
 	storeDir := filepath.Join(scratch, "probe-store")
-	if _, err := store.NewStore(storeDir, anonKeychain{}, store.PullNever, v1.Platform{}, nil, false, 0); err != nil {
+	if _, err := store.NewStore(store.Config{Path: storeDir, Auth: anonKeychain{}, PullPolicy: store.PullNever, DefaultPlatform: v1.Platform{}, Verifier: nil, AutoGC: false, GCGrace: 0}); err != nil {
 		t.Fatal(err)
 	}
 	res, err := FileSystem{}.Probe(fakeResource(storeDir))
@@ -246,7 +246,7 @@ func (r fakeResource) BlockDevice() (fskit.BlockDevice, bool) { return nil, fals
 // bookkeeping record, as any inspecting process would.
 func readMountRecord(t *testing.T, storeDir, id string) (store.MountRecord, error) {
 	t.Helper()
-	s, err := store.NewStore(storeDir, anonKeychain{}, store.PullNever, v1.Platform{}, nil, false, 0)
+	s, err := store.NewStore(store.Config{Path: storeDir, Auth: anonKeychain{}, PullPolicy: store.PullNever, DefaultPlatform: v1.Platform{}, Verifier: nil, AutoGC: false, GCGrace: 0})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,8 +3,8 @@
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "d3bc22784f5e6d6e48bd68dc7a6c16b5fa78db8350e786c2ca35ee699d7957f7"
-  source_hash: "b562e71db65ae95ad9e886f8ae6656be52473d68e821d92571478b3df0390791"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.New"
   role: BINDING_ROLE_IMPLEMENTS
@@ -13,8 +13,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "d3bc22784f5e6d6e48bd68dc7a6c16b5fa78db8350e786c2ca35ee699d7957f7"
-  source_hash: "b562e71db65ae95ad9e886f8ae6656be52473d68e821d92571478b3df0390791"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPullSurface"
   role: BINDING_ROLE_TESTS
@@ -73,8 +73,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-construction"
-  content_hash: "d3bc22784f5e6d6e48bd68dc7a6c16b5fa78db8350e786c2ca35ee699d7957f7"
-  source_hash: "b562e71db65ae95ad9e886f8ae6656be52473d68e821d92571478b3df0390791"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestConstructionFailsOnUninitializableStore"
   role: BINDING_ROLE_TESTS
@@ -459,4 +459,34 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.TestPropertyVerifierRejectionLeavesNoTrace"
   role: BINDING_ROLE_TESTS
   shape_hash: "9fa7f11ac2e435a479a9840361468809840ba1ab18f5d8f26ab557a68d96545e"
+}
+
+bindings {
+  requirement_id: "REQ-api-construction"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.WithTransport"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "84ca8eb070edb9e093557f30a50b29dc2bb9e32455dd156cf6dbd97100b155db"
+}
+
+bindings {
+  requirement_id: "REQ-api-construction"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestTransportServesRegistryInProcess"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "1dc0c2afb6cf3eb386028a5b2ab1056729734cc9df41648bc7bdafa1d1061605"
+}
+
+bindings {
+  requirement_id: "REQ-api-construction"
+  content_hash: "2c80be4f5f5140d82c26b37c07b46b32fcb3bde91bfcf72412c528d9941910b8"
+  source_hash: "3bd1c95abc1904b23c8e8781102535a2c3a6f706508de0b72af5a9b9b7080200"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "6ddbc8d816706e03aadc9567c7189482842b6758edcb8a8909526bc70b063e98"
 }

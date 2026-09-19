@@ -35,7 +35,11 @@ const (
 func soakChild(t *testing.T) {
 	mode := os.Getenv(soakChildEnv)
 	dir := os.Getenv(soakStoreEnv)
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, true, 0)
+	var rt http.RoundTripper
+	if mode == "ingest" {
+		rt = remoteTransport(os.Getenv(soakServerEnv))
+	}
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, AutoGC: true, Transport: rt})
 	if err != nil {
 		fmt.Println("child:", err)
 		os.Exit(1)
@@ -45,7 +49,6 @@ func soakChild(t *testing.T) {
 	ctx := context.Background()
 	switch mode {
 	case "ingest":
-		s.transport = remoteTransport(os.Getenv(soakServerEnv))
 		for i := 0; ; i++ {
 			ref := fmt.Sprintf("%s/soak/img%d:v1", testHost, i%8)
 			_, _ = s.Image(ctx, ref, nil)
@@ -95,12 +98,11 @@ func TestCrashStormSharedStore(t *testing.T) {
 	push(t, reg, anchor, makeImage(t, newRawLayer(t, tarBytes(t, tfile("precious", "must-survive")))))
 
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, true, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, AutoGC: true, Transport: handlerTransport{h: reg.h}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	s.transport = handlerTransport{h: reg.h}
 	if _, err := s.Image(context.Background(), anchor, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -216,12 +218,11 @@ func TestReadersSurviveCollection(t *testing.T) {
 	keep := testHost + "/soak/keeper:v1"
 	push(t, reg, keep, makeImage(t, newRawLayer(t, tarBytes(t, tfile("k", "keeper-bytes")))))
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, true, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, AutoGC: true, Transport: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	s.transport = reg
 	if _, err := s.Image(context.Background(), keep, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestReadersSurviveCollection(t *testing.T) {
 	// The reader is a second handle — cross-process semantics over
 	// gmdb coordination (same-process handles are gmdb's own
 	// documented cross-process proxy).
-	reader, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	reader, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}

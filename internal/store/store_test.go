@@ -200,11 +200,10 @@ func (anonKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
 func newTestStore(t *testing.T, policy PullPolicy, rt http.RoundTripper) (*Store, string) {
 	t.Helper()
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, policy, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: policy, Transport: rt})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.transport = rt
 	return s, dir
 }
 
@@ -617,11 +616,10 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 	if err := os.MkdirAll(oldDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	s1, err := NewStore(oldDir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+	s1, err := NewStore(Config{Path: oldDir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, Transport: rt})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s1.transport = rt
 	if _, err := s1.Image(context.Background(), refStr, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -633,7 +631,7 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2, err := NewStore(newDir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s2, err := NewStore(Config{Path: newDir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,11 +784,10 @@ func TestConcurrentInstancesOneRoot(t *testing.T) {
 	dir := scratchDir(t)
 	stores := make([]*Store, 2)
 	for i := range stores {
-		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+		s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, Transport: rt})
 		if err != nil {
 			t.Fatal(err)
 		}
-		s.transport = rt
 		stores[i] = s
 	}
 
@@ -894,6 +891,33 @@ func TestTamperedBlobNotPersisted(t *testing.T) {
 	}
 }
 
+// A construction naming no pull policy is refused, as is one naming
+// a value outside the three: the zero value picks nothing, so an
+// omitted field cannot yield a store that dials.
+func TestNewStoreRefusesUnnamedPullPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{"unset", Config{}, "pull policy Unset is not one of IfNotPresent, Always, Never"},
+		{"out of range", Config{PullPolicy: PullNever + 1}, "pull policy Unknown is not one of IfNotPresent, Always, Never"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := tc.cfg
+			cfg.Path, cfg.Auth = scratchDir(t), anonKeychain{}
+			s, err := NewStore(cfg)
+			if err == nil {
+				s.Close()
+				t.Fatal("store constructed")
+			}
+			if err.Error() != tc.want {
+				t.Fatalf("error %q, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestNewStoreWritesConformantEmptyIndex(t *testing.T) {
 	// The OCI image-index schema requires `manifests` to be an
 	// array; a fresh store must not persist `"manifests": null`.
@@ -926,7 +950,7 @@ func TestCrashedFirstCreationHeals(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "oci-layout"), []byte(`{"imageLayoutVersion": "1.0.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +977,7 @@ func TestPreLayoutStoreRejected(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "oci", "index.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+	_, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent})
 	if !errors.Is(err, ErrPreLayoutStore) {
 		t.Fatalf("err = %v, want ErrPreLayoutStore", err)
 	}
@@ -1084,7 +1108,7 @@ func TestPreDatabaseStoreRejected(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("sha256:deadbeef"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewStore(dir, nil, PullNever, v1.Platform{}, nil, false, 0); !errors.Is(err, ErrPreDatabaseStore) {
+	if _, err := NewStore(Config{Path: dir, Auth: nil, PullPolicy: PullNever}); !errors.Is(err, ErrPreDatabaseStore) {
 		t.Fatalf("NewStore over a refs/ tier: %v, want ErrPreDatabaseStore", err)
 	}
 	if _, err := os.Stat(sentinel); err != nil {
@@ -1097,7 +1121,7 @@ func TestPreDatabaseStoreRejected(t *testing.T) {
 // operations after Close fail rather than hang or corrupt.
 func TestCloseLifecycle(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1127,7 +1151,7 @@ func TestAdoptRefusalOrder(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "refs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewStore(dir, nil, PullNever, v1.Platform{}, nil, false, 0); !errors.Is(err, ErrPreLayoutStore) {
+	if _, err := NewStore(Config{Path: dir, Auth: nil, PullPolicy: PullNever}); !errors.Is(err, ErrPreLayoutStore) {
 		t.Fatalf("both signatures: %v, want ErrPreLayoutStore first", err)
 	}
 }
@@ -1351,7 +1375,7 @@ func TestSelfIdentityCollected(t *testing.T) {
 		t.Skip("identity discriminators are linux-collected; other platforms record pid only")
 	}
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1401,7 +1425,7 @@ func deadIdentity() LivenessIdentity {
 // state directories; a row whose claim is held stays untouched.
 func TestReclaimDeadMounts(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1466,7 +1490,7 @@ func TestReclaimDeadMounts(t *testing.T) {
 // mount; the live holder's lock refuses a second one.
 func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1499,7 +1523,7 @@ func TestUpperArbitrationIgnoresDeadHolder(t *testing.T) {
 // no held lock — is overwritten.
 func TestSameIDLiveRowRefusedAtRegistration(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1531,7 +1555,7 @@ func TestSameIDLiveRowRefusedAtRegistration(t *testing.T) {
 // a holder refuses as in-use (REQ-store-mount-registry).
 func TestReclaimNeverTouchesHeldClaims(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1586,7 +1610,7 @@ func TestReclaimNeverTouchesHeldClaims(t *testing.T) {
 // would mask a mark that trusts rows over locks.
 func TestRootSetJudgesByLock(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1736,12 +1760,12 @@ func opsRows(t testing.TB, storeDir string) map[string]OpRecord {
 // next acquisition (it is recreated-in-place by the acquire).
 func TestIngestLease(t *testing.T) {
 	dir := scratchDir(t)
-	s1, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s1, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s1.Close() })
-	s2, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s2, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1851,7 +1875,7 @@ func TestOpRowLifecycle(t *testing.T) {
 	}
 
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}

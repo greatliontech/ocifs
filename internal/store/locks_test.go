@@ -47,7 +47,7 @@ func assertOnlyProbeResidue(t *testing.T, dir string) {
 // retires its own file — at most a deferred probe leftover remains.
 func TestLocksTierCreatedAtInit(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestInitRefusesUnsoundLocking(t *testing.T) {
 	orig := newStoreProbe
 	newStoreProbe = func(string) error { return ErrLockingUnsound }
 	defer func() { newStoreProbe = orig }()
-	_, err := NewStore(scratchDir(t), anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	_, err := NewStore(Config{Path: scratchDir(t), Auth: anonKeychain{}, PullPolicy: PullNever})
 	if !errors.Is(err, ErrLockingUnsound) {
 		t.Fatalf("unsound filesystem adopted: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestProbePathsUnique(t *testing.T) {
 // reclamation deferral shape).
 func TestLockTierSweep(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestProbesDoNotCrossTrip(t *testing.T) {
 // TestRemovalRefusedWhileServed; this test owns the ordering.)
 func TestDeregisterHoldsClaimUntilRowGone(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}

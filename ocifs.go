@@ -10,6 +10,7 @@ package ocifs
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -49,6 +50,17 @@ var WithExtraDirs = func(extraDirs []string) Option {
 var WithAuthSource = func(prefix string, auth authn.AuthConfig) Option {
 	return func(o *OCIFS) {
 		o.authn.creds[prefix] = auth
+	}
+}
+
+// WithTransport routes every registry round trip through rt in place
+// of the registry client's own transport, which wraps a given one
+// for its retries as well: a consumer that serves a registry
+// in-process, or pins its client, hands it here (api.md
+// REQ-api-construction).
+var WithTransport = func(rt http.RoundTripper) Option {
+	return func(o *OCIFS) {
+		o.transport = rt
 	}
 }
 
@@ -109,6 +121,7 @@ type OCIFS struct {
 	workDir         string
 	extraDirs       []string
 	authn           *ocifsKeychain
+	transport       http.RoundTripper
 	pullPolicy      PullPolicy
 	defaultPlatform v1.Platform
 	verifier        Verifier
@@ -154,7 +167,7 @@ func New(opts ...Option) (*OCIFS, error) {
 	}
 
 	// initialize store
-	s, err := store.NewStore(ofs.workDir, ofs.authn, ofs.pullPolicy, ofs.defaultPlatform, ofs.verifier, ofs.autoGC, ofs.gcGrace)
+	s, err := store.NewStore(store.Config{Path: ofs.workDir, Auth: ofs.authn, PullPolicy: ofs.pullPolicy, DefaultPlatform: ofs.defaultPlatform, Verifier: ofs.verifier, AutoGC: ofs.autoGC, GCGrace: ofs.gcGrace, Transport: ofs.transport})
 	if err != nil {
 		return nil, err
 	}

@@ -10,13 +10,18 @@ func (s PullPolicy) String() string {
 		return "Always"
 	case PullNever:
 		return "Never"
+	case pullPolicyUnset:
+		return "Unset"
 	default:
 		return "Unknown"
 	}
 }
 
 const (
-	PullIfNotPresent PullPolicy = iota
+	// pullPolicyUnset is the zero value, what a Config that names no
+	// policy carries; construction refuses it.
+	pullPolicyUnset PullPolicy = iota
+	PullIfNotPresent
 	PullAlways
 	PullNever
 )

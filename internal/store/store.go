@@ -148,18 +148,45 @@ func ingestLockFor(root string) *sync.Mutex {
 	return m.(*sync.Mutex)
 }
 
-// NewStore opens or creates the store at path. A zero defaultPlatform
-// falls back to the host-derived platform — host os/arch, linux on
-// darwin (REQ-store-platform-default). A nil verifier disables the
-// verification seam (verification-seam.md REQ-seam-optional).
-func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPlatform v1.Platform, verifier Verifier, autoGC bool, gcGrace time.Duration) (*Store, error) {
-	switch pullPolicy {
+// Config is a store's construction, whole: everything a consumer
+// configures, taken once — a consumer sets nothing after the store
+// is shared.
+type Config struct {
+	Path string
+	Auth authn.Keychain
+	// PullPolicy is named, never defaulted: a Config that leaves it
+	// unset is refused, so an omission cannot pick a policy that
+	// dials.
+	PullPolicy PullPolicy
+	// A zero DefaultPlatform falls back to the host-derived
+	// platform — host os/arch, linux on darwin
+	// (REQ-store-platform-default).
+	DefaultPlatform v1.Platform
+	// A nil Verifier disables the verification seam
+	// (verification-seam.md REQ-seam-optional).
+	Verifier Verifier
+	// AutoGC turns automatic collection on; GCGrace is the grace it
+	// collects under, consulted by nothing else. Unset, the store
+	// collects nothing on its own.
+	AutoGC  bool
+	GCGrace time.Duration
+	// Transport carries every registry round trip; nil is the
+	// registry client's own transport, which wraps a given one for
+	// its retries as well.
+	Transport http.RoundTripper
+}
+
+// NewStore opens or creates the store at cfg.Path; a Config naming
+// no pull policy is refused.
+func NewStore(cfg Config) (*Store, error) {
+	switch cfg.PullPolicy {
 	case PullIfNotPresent, PullAlways, PullNever:
 	default:
 		// An unvalidated policy would fall through resolveTop's
 		// switch into an unconditional pull.
-		return nil, fmt.Errorf("unknown pull policy %v", pullPolicy)
+		return nil, fmt.Errorf("pull policy %s is not one of IfNotPresent, Always, Never", cfg.PullPolicy)
 	}
+	path := cfg.Path
 	ociDir := filepath.Join(path, "oci")
 	idxPath := filepath.Join(ociDir, "index.json")
 	markerPath := filepath.Join(ociDir, "oci-layout")
@@ -224,8 +251,9 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 		return nil, err
 	}
 
-	if defaultPlatform.Equals(v1.Platform{}) {
-		defaultPlatform = hostPlatform()
+	platform := cfg.DefaultPlatform
+	if platform.Equals(v1.Platform{}) {
+		platform = hostPlatform()
 	}
 
 	contentCAS, err := cas.New(filepath.Join(path, "blobs"))
@@ -239,22 +267,23 @@ func NewStore(path string, auth authn.Keychain, pullPolicy PullPolicy, defaultPl
 
 	st := &Store{
 		path:            path,
-		auth:            auth,
-		pullPolicy:      pullPolicy,
-		defaultPlatform: defaultPlatform,
+		auth:            cfg.Auth,
+		pullPolicy:      cfg.PullPolicy,
+		transport:       cfg.Transport,
+		defaultPlatform: platform,
 		bk:              bk,
 		cas:             contentCAS,
-		autoGC:          autoGC,
-		gcGrace:         gcGrace,
+		autoGC:          cfg.AutoGC,
+		gcGrace:         cfg.GCGrace,
 		ociDir:          ociDir,
-		verifier:        verifier,
+		verifier:        cfg.Verifier,
 		ingestMu:        ingestLockFor(path),
 	}
 	bk.s = st
 	// Store initialization is a debris transition: dead mount and
 	// ops rows, dead leases, unowned export temporaries
 	// (REQ-store-gc-collect). Failure never blocks construction.
-	if autoGC {
+	if cfg.AutoGC {
 		_, _ = st.DebrisSweep(context.Background())
 	}
 	return st, nil

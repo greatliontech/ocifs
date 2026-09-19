@@ -143,7 +143,7 @@ func TestSharedBlobSurvivesPartialRemoval(t *testing.T) {
 // bindings, and op pins; a dead or finished sweeper binds nobody.
 func TestCondemnedConsultRefusesUnleasedPublish(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestCondemnedConsultRefusesUnleasedPublish(t *testing.T) {
 // TestRemovalRefusedWhileServed pins REQ-api-remove's refusals.
 func TestRemovalRefusedWhileServed(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,12 +252,11 @@ func TestAutoCollectOnRemoval(t *testing.T) {
 	ref := testHost + "/gc/auto:v1"
 	push(t, reg, ref, makeImage(t, newRawLayer(t, tarBytes(t, tfile("f", "auto-bytes")))))
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, true, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, AutoGC: true, Transport: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	s.transport = reg
 	if _, err := s.Image(context.Background(), ref, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +273,7 @@ func TestAutoCollectOnRemoval(t *testing.T) {
 // unowned export temporaries go at open.
 func TestDebrisSweepAtInit(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +301,7 @@ func TestDebrisSweepAtInit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, true, time.Hour)
+	s2, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever, AutoGC: true, GCGrace: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +324,7 @@ func TestDebrisSweepAtInit(t *testing.T) {
 // a live op's temporary survives even a grace-ignored pass.
 func TestOwnedTempExemptFromCollection(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,7 +558,7 @@ func writeRawMountRow(t testing.TB, storeDir, id string, raw []byte) error {
 // manifest would collect a live root's children.
 func TestMediaTypelessIndexWalks(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +594,7 @@ func TestMediaTypelessIndexWalks(t *testing.T) {
 // algorithm directory.
 func TestCASRootTempCollected(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +620,7 @@ func TestCASRootTempCollected(t *testing.T) {
 // reaches this branch.
 func TestReclaimDeferralKeepsRowAndFile(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,7 +671,7 @@ func TestReclaimDeferralKeepsRowAndFile(t *testing.T) {
 // the retry reclaims all three.
 func TestReclaimDeadOpDeferral(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -723,7 +722,7 @@ func TestReclaimDeadOpDeferral(t *testing.T) {
 // let the hook's write succeed.
 func TestCondemnMarksUnderWriteGrant(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -766,7 +765,7 @@ func TestCondemnMarksUnderWriteGrant(t *testing.T) {
 // key alone names, defer what needs the value).
 func TestForeignDeadOpDefers(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -806,7 +805,7 @@ func TestForeignDeadOpDefers(t *testing.T) {
 // instead of eating them.
 func TestUndecidedReadsNeverDestroy(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -864,7 +863,7 @@ func TestUndecidedReadsNeverDestroy(t *testing.T) {
 // rowless but claimed — must survive even a grace-ignoring sweep.
 func TestMidRegistrationStateSurvivesSweep(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -919,7 +918,7 @@ func TestMountIDRejectsControlBytes(t *testing.T) {
 // debris.
 func TestDeadSweeperCondemnedRowBindsNobody(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1033,12 +1032,11 @@ func TestPropertyCollectNeverEatsRooted(t *testing.T) {
 	}
 	rapid.Check(t, func(rt *rapid.T) {
 		dir := scratchDir(t)
-		s, err := NewStore(dir, anonKeychain{}, PullIfNotPresent, v1.Platform{}, nil, false, 0)
+		s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullIfNotPresent, Transport: reg})
 		if err != nil {
 			rt.Fatal(err)
 		}
 		defer s.Close()
-		s.transport = reg
 		reader := newStoreAt(t, dir, PullNever, v1.Platform{}, cutTransport(t))
 
 		rooted := map[int]bool{}
@@ -1085,7 +1083,7 @@ func TestPropertyCollectNeverEatsRooted(t *testing.T) {
 // keyspace, not just one collision fixture.
 func TestPropertyTierKeyspacesDisjoint(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1129,7 +1127,7 @@ func TestPropertyTierKeyspacesDisjoint(t *testing.T) {
 // hygiene tier, not the safety tier.
 func TestCollectHygieneDropsDeadSweeperCondemnedRows(t *testing.T) {
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}

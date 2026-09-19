@@ -8,8 +8,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
 // TestOverwriteTransitionCollects pins the ref-overwrite collection
@@ -21,12 +19,11 @@ func TestOverwriteTransitionCollects(t *testing.T) {
 	ref := testHost + "/dbg/move:v1"
 	push(t, reg, ref, makeImage(t, newRawLayer(t, tarBytes(t, tfile("f", "one")))))
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullAlways, v1.Platform{}, nil, true, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullAlways, AutoGC: true, Transport: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	s.transport = reg
 	if _, err := s.Image(context.Background(), ref, nil); err != nil {
 		t.Fatal(err)
 	}

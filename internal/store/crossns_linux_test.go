@@ -30,7 +30,7 @@ const (
 // liveness design consulted is meaningless from the parent's side.
 func crossNSChild() {
 	dir := os.Getenv(crossNSStoreEnv)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		fmt.Println("child:", err)
 		os.Exit(1)
@@ -70,7 +70,7 @@ func TestCrossNamespaceMountReclaimedAfterKill(t *testing.T) {
 	}
 
 	dir := scratchDir(t)
-	s, err := NewStore(dir, anonKeychain{}, PullNever, v1.Platform{}, nil, false, 0)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
 	if err != nil {
 		t.Fatal(err)
 	}
