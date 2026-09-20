@@ -242,15 +242,37 @@ type Resolved struct {
 	Digest v1.Hash
 }
 
-// Resolve resolves imageRef — tag or digest form, per the pull policy
-// — to its top-level digest and runs the verification seam on it
-// exactly as an acquisition would, materializing nothing (api.md
-// REQ-api-resolve): for a consumer whose substrate fetches the
-// content itself by that digest, this is the whole of the
+// ResolveOption shapes one resolution.
+type ResolveOption func(*resolveReq)
+
+type resolveReq struct {
+	policy PullPolicy
+}
+
+// ResolveUnder resolves under the given pull policy in place of the
+// store's, for this call alone (api.md REQ-api-resolve): a consumer
+// re-resolving a reference it holds cached asks Always of the one
+// call. A store held at Never grants no call a policy past it.
+var ResolveUnder = func(p PullPolicy) ResolveOption {
+	return func(r *resolveReq) {
+		r.policy = p
+	}
+}
+
+// Resolve resolves imageRef — tag or digest form, per the store's
+// pull policy or the one an option states for this call alone
+// (ResolveUnder) — to its top-level digest and runs the verification
+// seam on it exactly as an acquisition would, materializing nothing
+// (api.md REQ-api-resolve): for a consumer whose substrate fetches
+// the content itself by that digest, this is the whole of the
 // acquisition. A digest-form reference resolves to itself and still
 // runs the seam.
-func (o *OCIFS) Resolve(ctx context.Context, imageRef string) (*Resolved, error) {
-	h, err := o.store.Resolve(ctx, imageRef)
+func (o *OCIFS) Resolve(ctx context.Context, imageRef string, opts ...ResolveOption) (*Resolved, error) {
+	r := resolveReq{policy: o.pullPolicy}
+	for _, opt := range opts {
+		opt(&r)
+	}
+	h, err := o.store.ResolveUnder(ctx, imageRef, r.policy)
 	if err != nil {
 		return nil, err
 	}

@@ -283,7 +283,10 @@ used iff the remote digest matches the cached **top-level** digest
 (top-level to top-level — a HEAD on a multi-platform reference
 returns the index digest); otherwise pull. `Never`: cached content
 only, no network access; a reference with no cached resolution, or a
-platform not materialized locally, is an error.
+platform not materialized locally, is an error; a store held at
+`Never` grants no call a policy past it (`api.md` REQ-api-resolve). A
+value that is none of the three is refused, at construction and by a
+call stating one.
 
 ## Digest-addressed entry
 

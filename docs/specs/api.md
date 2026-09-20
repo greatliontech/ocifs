@@ -53,7 +53,13 @@ reference string (tag or digest form), resolved per the pull policy
 and running the verification seam exactly as an acquisition would,
 that yields the resolved top-level digest and materializes nothing:
 no layer content is fetched, unpacked, or exported, and the
-reference cache records nothing, since nothing was ingested.
+reference cache records nothing, since nothing was ingested. The
+policy a resolution runs under is the store's unless the call states
+one for itself alone — a consumer re-resolving a reference it holds
+cached asks `Always` of that call — and a store held at `Never` is
+its consumer's word that it dials for nothing: a call asks nothing
+past it, and is refused. An acquisition runs under the store's
+policy alone.
 
 ## Mount
 

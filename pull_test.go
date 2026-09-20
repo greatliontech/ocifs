@@ -473,3 +473,83 @@ func TestTransportServesRegistryInProcess(t *testing.T) {
 		t.Fatal("a pull with no transport reached an in-process handler")
 	}
 }
+
+// A resolution under a policy the call states — Always over a store
+// held at IfNotPresent — asks the registry for the reference it
+// holds cached, the store's own policy answering from the cache
+// (REQ-api-resolve, REQ-store-pull-policy); a policy the store does
+// not know is refused.
+func TestResolveUnderPolicy(t *testing.T) {
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	refStr := u.Host + "/test/moving:v1"
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := func(marker string) v1.Hash {
+		idx := mutate.AppendManifests(empty.Index,
+			mutate.IndexAddendum{Add: testPlatformImage(t, amd64, marker, "amd64"), Descriptor: v1.Descriptor{Platform: &amd64}},
+		)
+		if err := remote.WriteIndex(ref, idx); err != nil {
+			t.Fatal(err)
+		}
+		h, err := idx.Digest()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	first := push("first")
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-resolve-under"))
+	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")), WithDefaultPlatform(amd64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ofs.Close() })
+	if _, err := ofs.Pull(context.Background(), refStr); err != nil {
+		t.Fatal(err)
+	}
+	second := push("second")
+	if res, err := ofs.Resolve(context.Background(), refStr); err != nil || res.Digest != first {
+		t.Fatalf("the store's policy re-resolved a cached tag: %+v %v", res, err)
+	}
+	if res, err := ofs.Resolve(context.Background(), refStr, ResolveUnder(PullAlways)); err != nil || res.Digest != second {
+		t.Fatalf("Always for the call alone: %+v %v, want %s", res, err, second)
+	}
+	// The call's policy is the call's: the store still answers from
+	// the cache afterwards, nothing recorded by the resolution.
+	if res, err := ofs.Resolve(context.Background(), refStr); err != nil || res.Digest != first {
+		t.Fatalf("the store's policy after the call: %+v %v", res, err)
+	}
+	if _, err := ofs.Resolve(context.Background(), u.Host+"/test/unknown:v1", ResolveUnder(PullNever)); err == nil {
+		t.Fatal("Never resolved an uncached reference")
+	}
+	for _, p := range []PullPolicy{PullPolicy(42), PullPolicy(0)} {
+		if _, err := ofs.Resolve(context.Background(), refStr, ResolveUnder(p)); err == nil {
+			t.Fatalf("policy %d resolved", p)
+		}
+	}
+	// The call's Always materialized nothing and recorded nothing: a
+	// store that may not dial finds no image at the new digest.
+	never, err := New(WithWorkDir(filepath.Join(scratch, "work")), WithDefaultPlatform(amd64), WithPullPolicy(PullNever))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { never.Close() })
+	if _, err := never.Pull(context.Background(), u.Host+"/test/moving@"+second.String()); err == nil {
+		t.Fatal("a resolution under Always materialized the image")
+	}
+	// A store held at Never grants no call a policy past it.
+	if _, err := never.Resolve(context.Background(), refStr, ResolveUnder(PullAlways)); err == nil || !strings.Contains(err.Error(), "held at Never") {
+		t.Fatalf("Always asked of a store held at Never: %v", err)
+	}
+	if res, err := never.Resolve(context.Background(), refStr, ResolveUnder(PullNever)); err != nil || res.Digest != first {
+		t.Fatalf("Never asked of a store held at Never: %+v %v", res, err)
+	}
+}

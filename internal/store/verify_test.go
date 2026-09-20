@@ -505,3 +505,33 @@ func TestResolveFollowsPullPolicy(t *testing.T) {
 		t.Fatal("Never resolved a tag it has no record of")
 	}
 }
+
+// The seam's heal of an absent digest-form artifact runs under the
+// call's policy: Never forbids the fetch and names itself, the
+// store's IfNotPresent heals from the registry (REQ-api-resolve,
+// REQ-store-pull-policy).
+func TestResolveUnderHealsPerCall(t *testing.T) {
+	reg := newTestRegistry()
+	refStr := testHost + "/seam/heal:v1"
+	img := imageWithPlatform(t, linuxAMD64, newRawLayer(t, tarBytes(t, tfile("v", "one"))))
+	push(t, reg, refStr, img)
+	dir := scratchDir(t)
+	if _, err := newStoreAt(t, dir, PullIfNotPresent, linuxAMD64, reg).Image(context.Background(), refStr, nil); err != nil {
+		t.Fatal(err)
+	}
+	digest := mustDigest(t, img)
+	if err := os.Remove(filepath.Join(dir, "oci", "blobs", "sha256", digest.Hex)); err != nil {
+		t.Fatal(err)
+	}
+	digestRef := testHost + "/seam/heal@" + digest.String()
+	cut := newStoreAt(t, dir, PullIfNotPresent, linuxAMD64, cutTransport(t))
+	cut.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+	if _, err := cut.ResolveUnder(context.Background(), digestRef, PullNever); err == nil || !strings.Contains(err.Error(), "pull policy Never forbids fetching") {
+		t.Fatalf("Never for the call over an absent artifact: %v", err)
+	}
+	healing := newStoreAt(t, dir, PullIfNotPresent, linuxAMD64, reg)
+	healing.verifier = func(context.Context, ResolvedIdentity) error { return nil }
+	if got, err := healing.ResolveUnder(context.Background(), digestRef, PullIfNotPresent); err != nil || got != digest {
+		t.Fatalf("the store's policy healing: %v %v", got, err)
+	}
+}

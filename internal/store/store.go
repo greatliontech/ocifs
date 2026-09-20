@@ -179,12 +179,8 @@ type Config struct {
 // NewStore opens or creates the store at cfg.Path; a Config naming
 // no pull policy is refused.
 func NewStore(cfg Config) (*Store, error) {
-	switch cfg.PullPolicy {
-	case PullIfNotPresent, PullAlways, PullNever:
-	default:
-		// An unvalidated policy would fall through resolveTop's
-		// switch into an unconditional pull.
-		return nil, fmt.Errorf("pull policy %s is not one of IfNotPresent, Always, Never", cfg.PullPolicy)
+	if err := checkPolicy(cfg.PullPolicy); err != nil {
+		return nil, err
 	}
 	path := cfg.Path
 	ociDir := filepath.Join(path, "oci")
@@ -381,6 +377,9 @@ type request struct {
 	digest   *v1.Hash
 	platform v1.Platform
 	explicit bool
+	// policy is the pull policy this request resolves and fetches
+	// under: the store's, or one the request states for itself.
+	policy PullPolicy
 }
 
 // newRequest parses imageRef — tag or digest form, a digest-form
@@ -392,7 +391,7 @@ func (s *Store) newRequest(imageRef string, platform *v1.Platform) (request, err
 	if err != nil {
 		return request{}, err
 	}
-	req := request{ref: ref, platform: s.defaultPlatform, explicit: platform != nil}
+	req := request{ref: ref, platform: s.defaultPlatform, explicit: platform != nil, policy: s.pullPolicy}
 	if platform != nil {
 		req.platform = *platform
 	}
@@ -412,7 +411,7 @@ func (s *Store) newRequest(imageRef string, platform *v1.Platform) (request, err
 // failing as under Never whatever the surrounding DNS makes of the
 // name (REQ-store-local-images).
 func (s *Store) newFetcher(req request) *fetcher {
-	return &fetcher{store: s, repo: req.ref.Context(), allowed: s.pullPolicy != PullNever && !isLocalRef(req.ref.Context().RegistryStr())}
+	return &fetcher{store: s, repo: req.ref.Context(), policy: req.policy, allowed: req.policy != PullNever && !isLocalRef(req.ref.Context().RegistryStr())}
 }
 
 // Image materializes imageRef for the requested platform (nil: the
@@ -449,8 +448,9 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 	return img, err
 }
 
-// Resolve resolves imageRef to its top-level digest per the pull
-// policy and runs the verification seam on it, materializing nothing
+// Resolve resolves imageRef to its top-level digest per the store's
+// pull policy — ResolveUnder per one the call states — and runs the
+// verification seam on it, materializing nothing
 // and recording no reference-cache entry: the entry is ingest's
 // completion barrier (REQ-store-ingest-order), and nothing was
 // ingested. A resolution retains the top-level artifact it fetched —
@@ -461,10 +461,26 @@ func (s *Store) Image(ctx context.Context, imageRef string, platform *v1.Platfor
 // is irrelevant to resolution — the seam judges the top-level
 // artifact, before any platform selection — so none is requested.
 func (s *Store) Resolve(ctx context.Context, imageRef string) (v1.Hash, error) {
+	return s.ResolveUnder(ctx, imageRef, s.pullPolicy)
+}
+
+// ResolveUnder is Resolve under the pull policy the call states for
+// itself alone (REQ-api-resolve): a consumer re-resolving a reference
+// it holds cached asks Always of the one call. A store held at Never
+// is its consumer's word that it dials for nothing, so a call asks
+// nothing past it; a value that is none of the three is refused.
+func (s *Store) ResolveUnder(ctx context.Context, imageRef string, policy PullPolicy) (v1.Hash, error) {
+	if err := checkPolicy(policy); err != nil {
+		return emptyHash, err
+	}
+	if s.pullPolicy == PullNever && policy != PullNever {
+		return emptyHash, fmt.Errorf("pull policy %s asked of a store held at Never", policy)
+	}
 	req, err := s.newRequest(imageRef, nil)
 	if err != nil {
 		return emptyHash, err
 	}
+	req.policy = policy
 	lg := &leaseGuard{s: s}
 	defer lg.release(context.WithoutCancel(ctx))
 	top, _, _, err := s.resolveTop(ctx, req, lg)
@@ -543,7 +559,7 @@ func (s *Store) resolveTop(ctx context.Context, req request, lg *leaseGuard) (v1
 		return emptyHash, false, false, fmt.Errorf("reference %s: the %s namespace is digest-addressed", req.ref, LocalRegistry)
 	}
 
-	switch s.pullPolicy {
+	switch req.policy {
 	case PullNever:
 		if !found {
 			return emptyHash, false, false, fmt.Errorf("image %s not found in cache and pull policy is 'Never'", req.ref)
@@ -602,7 +618,19 @@ func (s *Store) remoteOpts(ctx context.Context) []remote.Option {
 type fetcher struct {
 	store   *Store
 	repo    name.Repository
+	policy  PullPolicy // the request's, named where it forbids
 	allowed bool
+}
+
+// checkPolicy refuses a value that is none of the three policies: an
+// unvalidated policy would fall through resolveTop's switch into an
+// unconditional pull (REQ-store-pull-policy).
+func checkPolicy(p PullPolicy) error {
+	switch p {
+	case PullIfNotPresent, PullAlways, PullNever:
+		return nil
+	}
+	return fmt.Errorf("pull policy %s is not one of IfNotPresent, Always, Never", p)
 }
 
 func (f *fetcher) manifest(ctx context.Context, h v1.Hash) ([]byte, error) {
@@ -779,7 +807,7 @@ func (s *Store) ensureManifest(ctx context.Context, f *fetcher, h v1.Hash) ([]by
 		if isLocalRef(f.repo.RegistryStr()) {
 			return nil, fmt.Errorf("artifact %s is not retained in oci/ and %s images are store-resident, never fetched: the local commit is damaged", h, LocalRegistry)
 		}
-		return nil, fmt.Errorf("artifact %s is not retained in oci/ and pull policy %s forbids fetching it", h, s.pullPolicy)
+		return nil, fmt.Errorf("artifact %s is not retained in oci/ and pull policy %s forbids fetching it", h, f.policy)
 	}
 	raw, err = f.manifest(ctx, h)
 	if err != nil {
@@ -834,7 +862,7 @@ func (s *Store) fetchMissingBlob(ctx context.Context, f *fetcher, h v1.Hash) err
 		if isLocalRef(f.repo.RegistryStr()) {
 			return fmt.Errorf("blob %s is missing from oci/ and %s images are store-resident, never fetched: the local commit is damaged", h, LocalRegistry)
 		}
-		return fmt.Errorf("blob %s is missing from oci/ and pull policy %s forbids fetching it", h, s.pullPolicy)
+		return fmt.Errorf("blob %s is missing from oci/ and pull policy %s forbids fetching it", h, f.policy)
 	}
 	return s.writeOCIBlob(h, func() (io.ReadCloser, error) { return f.blob(ctx, h) })
 }
