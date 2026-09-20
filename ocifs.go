@@ -2,9 +2,10 @@
 // public surface is pinned by docs/specs/api.md; construction
 // configures the store root, credentials, pull policy, default
 // platform, and an optional verification hook
-// (docs/specs/verification-seam.md), and acquisition works by
-// reference string (tag or digest form) with an optional explicit
-// platform.
+// (docs/specs/verification-seam.md), acquisition works by reference
+// string (tag or digest form) with an optional explicit platform, and
+// the credential resolution the store uses is available to the
+// consumer for round trips it makes itself.
 package ocifs
 
 import (
@@ -488,6 +489,11 @@ func (o *OCIFS) MountReport(id string) (projection.Report, bool, error) {
 	}
 	return rec.Report, rec.Published, nil
 }
+
+// Keychain is the store's credential resolution (api.md
+// REQ-api-keychain), for round trips the consumer makes itself: what
+// the store sends for a registry, the consumer sends.
+func (o *OCIFS) Keychain() authn.Keychain { return o.authn }
 
 // Close releases the store's coordination resources — the
 // bookkeeping database's reader slots, heartbeat, and writer

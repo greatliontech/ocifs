@@ -25,3 +25,8 @@
   mutually destructive (tree removal and stale-mount reaping hit the
   other run's live state); two incidents recorded, oslock now offers
   the fix mechanism. Lands: user decision.
+- `docs/issues/options-apply-after-construction.md` — `Option` values
+  write a constructed store's fields, so one applied after New races
+  the store's and a consumer's credential resolution; the collapse is
+  options onto a settings value only New holds. Lands: when an option
+  is next added, removed or changed.

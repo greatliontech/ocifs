@@ -1,6 +1,9 @@
 package ocifs
 
 import (
+	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,7 +22,7 @@ func (r testResource) RegistryStr() string {
 	return s
 }
 
-func resolvedUser(t *testing.T, kc *ocifsKeychain, target string) string {
+func resolvedUser(t *testing.T, kc authn.Keychain, target string) string {
 	t.Helper()
 	a, err := kc.Resolve(testResource(target))
 	if err != nil {
@@ -115,4 +118,45 @@ func TestPropertyKeychainDeterministicLongestPrefix(t *testing.T) {
 			}
 		}
 	})
+}
+
+// The exported keychain resolves as the store does (REQ-api-keychain):
+// the longest configured prefix at a segment boundary, the default
+// keychain where enabled for a miss, anonymous otherwise. The
+// ambient keychain is a Docker configuration of the test's own, so
+// the default arm resolves a credential only that keychain holds.
+func TestKeychainExportedResolvesAsTheStore(t *testing.T) {
+	dockerConfig := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dockerConfig, "config.json"), []byte(`{"auths":{"r.io":{"auth":"`+base64.StdEncoding.EncodeToString([]byte("ambient:secret"))+`"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DOCKER_CONFIG", dockerConfig)
+	source := WithAuthSource("r.io/team", authn.AuthConfig{Username: "team"})
+	miss := "r.io/teammate/plugin"
+
+	withDefault, err := New(WithWorkDir(t.TempDir()), source, WithEnableDefaultKeychain())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer withDefault.Close()
+	kc := withDefault.Keychain()
+	if got := resolvedUser(t, kc, "r.io/team/plugin"); got != "team" {
+		t.Fatalf("prefix hit resolved %q, want team", got)
+	}
+	if got := resolvedUser(t, kc, miss); got != "ambient" {
+		t.Fatalf("a miss under the default keychain resolved %q, want the ambient credential", got)
+	}
+
+	without, err := New(WithWorkDir(t.TempDir()), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer without.Close()
+	a, err := without.Keychain().Resolve(testResource(miss))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a != authn.Anonymous {
+		t.Fatalf("a miss without the default keychain resolved %v, want anonymous", a)
+	}
 }

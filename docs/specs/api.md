@@ -35,7 +35,8 @@ scoped to `r.io/team` must not be sent for `r.io/teammate`, a
 foreign repository whose name merely extends the string. With no
 match, the default keychain applies if enabled, else anonymous.
 Resolution is deterministic — overlapping prefixes never resolve
-differently across calls.
+differently across calls. The same resolution is available to the
+consumer for round trips it makes itself.
 
 ## Image acquisition and resolution
 

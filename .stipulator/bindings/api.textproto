@@ -23,8 +23,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-keychain"
-  content_hash: "f00e3758367c9e5dcde99a0f1ba140265fe28ab9bb9f8407535b42f13ca7b2ba"
-  source_hash: "0099e9195723ae3df8d166759830301443c14cf2223b4f78bb92f51b5948a87f"
+  content_hash: "b75a4d76d208e2d98276b19ee8ba86823888668677def4593c035c962c8e7408"
+  source_hash: "119cf4c9ca21c1104b167062cc6bcfc931344f0792f56ab3720704d851c76517"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.ocifsKeychain.Resolve"
   role: BINDING_ROLE_IMPLEMENTS
@@ -33,8 +33,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-keychain"
-  content_hash: "f00e3758367c9e5dcde99a0f1ba140265fe28ab9bb9f8407535b42f13ca7b2ba"
-  source_hash: "0099e9195723ae3df8d166759830301443c14cf2223b4f78bb92f51b5948a87f"
+  content_hash: "b75a4d76d208e2d98276b19ee8ba86823888668677def4593c035c962c8e7408"
+  source_hash: "119cf4c9ca21c1104b167062cc6bcfc931344f0792f56ab3720704d851c76517"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestKeychainLongestPrefixWins"
   role: BINDING_ROLE_TESTS
@@ -43,8 +43,8 @@ bindings {
 
 bindings {
   requirement_id: "REQ-api-keychain"
-  content_hash: "f00e3758367c9e5dcde99a0f1ba140265fe28ab9bb9f8407535b42f13ca7b2ba"
-  source_hash: "0099e9195723ae3df8d166759830301443c14cf2223b4f78bb92f51b5948a87f"
+  content_hash: "b75a4d76d208e2d98276b19ee8ba86823888668677def4593c035c962c8e7408"
+  source_hash: "119cf4c9ca21c1104b167062cc6bcfc931344f0792f56ab3720704d851c76517"
   backend: "go"
   symbol: "github.com/greatliontech/ocifs.TestPropertyKeychainDeterministicLongestPrefix"
   role: BINDING_ROLE_TESTS
@@ -489,4 +489,24 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.NewStore"
   role: BINDING_ROLE_IMPLEMENTS
   shape_hash: "6ddbc8d816706e03aadc9567c7189482842b6758edcb8a8909526bc70b063e98"
+}
+
+bindings {
+  requirement_id: "REQ-api-keychain"
+  content_hash: "b75a4d76d208e2d98276b19ee8ba86823888668677def4593c035c962c8e7408"
+  source_hash: "119cf4c9ca21c1104b167062cc6bcfc931344f0792f56ab3720704d851c76517"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.OCIFS.Keychain"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "154f7666117f29d312b1573025e418779c56ad123adca23806b2984cb2dfa986"
+}
+
+bindings {
+  requirement_id: "REQ-api-keychain"
+  content_hash: "b75a4d76d208e2d98276b19ee8ba86823888668677def4593c035c962c8e7408"
+  source_hash: "119cf4c9ca21c1104b167062cc6bcfc931344f0792f56ab3720704d851c76517"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.TestKeychainExportedResolvesAsTheStore"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "d14dca153786834641adcc5e23b4b5ba3f831cc108dc64a904e10c615a8e3c76"
 }
