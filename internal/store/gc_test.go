@@ -1184,3 +1184,120 @@ func TestCollectHygieneDropsDeadSweeperCondemnedRows(t *testing.T) {
 		t.Fatal("live sweeper's condemned row dropped (fence lost)")
 	}
 }
+
+// TestRemoveAllEmptiesEveryRoot pins REQ-api-remove's emptying: every
+// refs row and every unserved local image severed in one pass, the
+// image a live mount serves kept and reported, and severed once the
+// mount is gone.
+func TestRemoveAllEmptiesEveryRoot(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	ctx := context.Background()
+	served := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ee", 32)}
+	idle := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ef", 32)}
+	for _, h := range []v1.Hash{served, idle} {
+		if err := s.bk.LocalImagePut(ctx, h, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refs := []string{"r.io/xx:aa", "r.io/yy@sha256:" + strings.Repeat("ab", 32)}
+	for _, r := range refs {
+		ref, err := name.ParseReference(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.bk.RefPut(ctx, ref, idle); err != nil {
+			t.Fatal(err)
+		}
+	}
+	upClaim, err := s.ClaimUpper("up1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.RegisterMountRecordArbitrated(ctx, "served", served, "up1", "/m", upClaim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A crashed mount — its row left, its claim released — serves
+	// nothing: liveness is the claim's, never the row's.
+	if dead, err := s.RegisterMountRecordArbitrated(ctx, "crashed", idle, "", "/c", nil); err != nil {
+		t.Fatal(err)
+	} else {
+		dead.release()
+	}
+	kept, err := s.RemoveAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 1 || kept[0] != served {
+		t.Fatalf("kept = %v, want the served image alone", kept)
+	}
+	for _, r := range refs {
+		ref, _ := name.ParseReference(r)
+		if _, ok, err := s.bk.RefGet(ctx, ref); err != nil || ok {
+			t.Fatalf("ref %s survived the emptying (%v, %v)", r, ok, err)
+		}
+	}
+	if present, err := s.bk.LocalImagePresent(ctx, idle); err != nil || present {
+		t.Fatalf("the unserved image survived the emptying (%v, %v)", present, err)
+	}
+	if present, err := s.bk.LocalImagePresent(ctx, served); err != nil || !present {
+		t.Fatalf("the served image was severed under its live mount (%v, %v)", present, err)
+	}
+	if err := s.DeregisterMount(ctx, "served", claim); err != nil {
+		t.Fatal(err)
+	}
+	// A named upper's base binding is the explicit act's to remove:
+	// the emptying leaves the binding row, the root collection reads.
+	if _, err := s.bk.UpperBind(ctx, "bound", served); err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := s.RemoveAll(ctx); err != nil || len(kept) != 0 {
+		t.Fatalf("emptying after the mount's end: kept %v, %v", kept, err)
+	}
+	if present, err := s.bk.LocalImagePresent(ctx, served); err != nil || present {
+		t.Fatalf("the once-served image survived the emptying (%v, %v)", present, err)
+	}
+	if base, err := s.bk.UpperBinding(ctx, "bound"); err != nil || base != served {
+		t.Fatalf("the upper's base binding did not survive the emptying: %v, %v", base, err)
+	}
+
+	// A live mount row this version cannot read may serve any local
+	// image: every one is kept and reported, the references severed;
+	// dead, the row keeps nothing.
+	if err := s.bk.LocalImagePut(ctx, idle, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bk.RefPut(ctx, mustRef(t, "r.io/xx:again"), idle); err != nil {
+		t.Fatal(err)
+	}
+	foreign := append([]byte{mountRecVersion + 1}, encodeMountRecord(MountRecord{Owner: deadIdentity()})[1:]...)
+	if err := writeRawMountRow(t, dir, "future", foreign); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := oslock.TryAcquire(s.mountLockPath("future"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err = s.RemoveAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 1 || kept[0] != idle {
+		t.Fatalf("kept under a live unreadable row = %v, want every local image", kept)
+	}
+	if _, ok, err := s.bk.RefGet(ctx, mustRef(t, "r.io/xx:again")); err != nil || ok {
+		t.Fatalf("a reference survived the emptying under a live unreadable row (%v, %v)", ok, err)
+	}
+	holder.Close()
+	if kept, err := s.RemoveAll(ctx); err != nil || len(kept) != 0 {
+		t.Fatalf("emptying past the dead unreadable row: kept %v, %v", kept, err)
+	}
+	if present, err := s.bk.LocalImagePresent(ctx, idle); err != nil || present {
+		t.Fatalf("the image survived the emptying past the dead unreadable row (%v, %v)", present, err)
+	}
+}

@@ -174,7 +174,17 @@ base binding — the explicit act REQ-api-mount-writable names).
 Removal severs the root; content becomes garbage for collection
 (`store.md` REQ-store-gc-roots) rather than being deleted inline.
 Removing a named upper currently mounted, or a local image a live
-mount serves, is refused.
+mount serves, is refused. The library also offers removal of every
+root at once — the operator's emptying of the store: every cached
+reference and every local image no live mount serves, severed in one
+write transaction, the local images a live mount kept reported back
+rather than refused, so what a consumer can empty is emptied and what
+a running mount holds stands until the next emptying — a live mount
+row this version cannot read (`store.md` REQ-store-bookkeeping) may
+serve any local image, so under one every local image is kept and
+reported, the references severed all the same; named uppers, the
+explicit act's, are untouched. Collection ignoring the grace then
+reclaims the content, as after any removal.
 
 **REQ-api-gc** (behavior): The library MUST offer explicit
 collection: honoring the retention grace by default, ignoring it on

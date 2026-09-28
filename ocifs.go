@@ -572,3 +572,19 @@ func (o *OCIFS) RemoveImage(ctx context.Context, digest string) error {
 func (o *OCIFS) RemoveUpper(ctx context.Context, name string) error {
 	return o.store.RemoveUpper(ctx, name)
 }
+
+// RemoveAll severs every root the store holds at once — every cached
+// reference and every local image no live mount serves — and returns
+// the digests live mounts kept; collection reclaims what nothing
+// roots any more (api.md REQ-api-remove).
+func (o *OCIFS) RemoveAll(ctx context.Context) ([]string, error) {
+	kept, err := o.store.RemoveAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(kept))
+	for _, h := range kept {
+		out = append(out, h.String())
+	}
+	return out, nil
+}
