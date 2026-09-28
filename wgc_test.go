@@ -4,6 +4,7 @@ package ocifs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -120,5 +121,59 @@ func TestGCResultNameable(t *testing.T) {
 	var gc func(*OCIFS, context.Context, ...GCOption) (*GCResult, error) = (*OCIFS).GC
 	if gc == nil {
 		t.Fatal("GC does not return the report by its name")
+	}
+}
+
+// A hold keeps an acquired image and its export through an emptying
+// and a grace-ignored collection, reported among the kept; released,
+// the next collection reclaims it (REQ-api-hold).
+func TestHoldKeepsTheExportThroughEmptying(t *testing.T) {
+	ofs, refStr := writableFixtureEnv(t, "whold")
+	img, err := ofs.Pull(t.Context(), refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The hold comes first; the export under it is the one vouched for.
+	hold, err := ofs.Hold(t.Context(), img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootfs, err := img.Export(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err := ofs.RemoveAll(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 1 || kept[0] != img.Digest().String() {
+		t.Fatalf("kept = %v, want the held image", kept)
+	}
+	if _, err := ofs.GC(t.Context(), GCIgnoreGrace()); err != nil {
+		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(rootfs); err != nil || len(entries) == 0 {
+		t.Fatalf("the held image's export after the emptying: %v, %v", entries, err)
+	}
+	if _, err := img.Export(t.Context()); err != nil {
+		t.Fatalf("the held image exports after the emptying: %v", err)
+	}
+	if err := hold.Release(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := hold.Release(t.Context()); err != nil {
+		t.Fatalf("a second release: %v", err)
+	}
+	if _, err := ofs.GC(t.Context(), GCIgnoreGrace()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(rootfs); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the export survived the release and a collection: %v", err)
+	}
+	if _, err := ofs.Hold(t.Context(), img); !errors.Is(err, ErrGone) {
+		t.Fatalf("a hold over a collected image: %v, want ErrGone", err)
+	}
+	if _, err := ofs.Hold(t.Context(), nil); err == nil {
+		t.Fatal("a hold over no image was granted")
 	}
 }

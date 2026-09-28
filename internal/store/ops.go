@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/uuid"
@@ -25,7 +26,33 @@ const opRecVersion = 1
 const (
 	opKindExport = "export"
 	opKindSweep  = "sweep"
+	opKindHold   = "hold"
 )
+
+// ErrGone refuses a hold over an image a collection took before it:
+// the consumer re-acquires.
+var ErrGone = errors.New("the image is no longer the store's; re-acquire")
+
+// Hold takes a consumer's hold over an image (api.md REQ-api-hold):
+// an op of its own kind pinning the manifest, a collection root while
+// the holder lives, crash-released with it. The manifest is checked
+// after the pin, when no sweep can take it any more: a hold is never
+// granted over a manifest collected before it. The manifest is the
+// witness, not the whole subgraph — a sweep that died between a
+// layer's deletion and the manifest's leaves debris this check does
+// not see, an export under the pin then failing on the missing layer
+// as the snapshot rule has it.
+func (s *Store) Hold(ctx context.Context, manifest v1.Hash) (*OpClaim, error) {
+	claim, err := s.BeginOp(ctx, opKindHold, []v1.Hash{manifest}, nil)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(s.ociBlobPath(manifest)); err != nil {
+		_ = s.EndOp(ctx, claim)
+		return nil, fmt.Errorf("hold %s: %w", manifest, ErrGone)
+	}
+	return claim, nil
+}
 
 // OpRecord is the ops-row value. Owner is diagnostic identity only
 // (held-lock liveness): it never decides the op's liveness — the

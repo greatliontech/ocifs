@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -49,6 +50,30 @@ func (s *Store) RemoveRef(ctx context.Context, refStr string) error {
 type liveMounts struct {
 	served  map[v1.Hash][]string
 	foreign []string
+}
+
+// liveOpPins is what live in-flight operations pin right now: every
+// pinned digest of every readable ops row whose claim is held (a
+// hold among them, api.md REQ-api-hold). A live row this version
+// cannot read pins what it cannot report; collection halts visibly
+// under it (REQ-store-bookkeeping), which is where it is reported.
+// Liveness is the claim's, judged as for mounts.
+func (s *Store) liveOpPins(tx *gmdb.Tx) (map[v1.Hash]bool, error) {
+	pinned := map[v1.Hash]bool{}
+	ops, err := tx.OpenKeyspace(ksOps)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range ops.All() {
+		rec, foreign := decodeOpRow(v)
+		if foreign || !s.opClaimHeld(string(k)) {
+			continue
+		}
+		for _, p := range rec.Pins {
+			pinned[p] = true
+		}
+	}
+	return pinned, nil
 }
 
 func (s *Store) liveMounts(tx *gmdb.Tx) (liveMounts, error) {
@@ -171,18 +196,26 @@ func (s *Store) RemoveUpper(ctx context.Context, upperName string) error {
 
 // RemoveAll severs every root at once — every refs row and every
 // localimages row no live mount serves — in one write transaction,
-// returning the local images live mounts kept, sorted by digest
-// (api.md REQ-api-remove: the operator's emptying of the store). A
-// live mount row this version cannot read may serve any local image,
-// so under one every local image is kept. A kept image stays rooted
-// by its mounts row regardless, so severing nothing of it changes no
-// reachability. Named uppers keep their base bindings: they are the
-// explicit act's to remove.
+// returning what stays kept, deduplicated and sorted by digest: the
+// local images live mounts serve, and the images live in-flight
+// operations pin — a hold among them, an export in flight likewise
+// (api.md REQ-api-remove: the operator's emptying of the store;
+// REQ-api-hold). A live mount row this version cannot read may serve
+// any local image, so under one every local image is kept; a live
+// ops row this version cannot read pins what it cannot report, and
+// collection halts under it. A kept image stays rooted by its mounts
+// row or its operation regardless, so severing its reference changes
+// no reachability while the root lives. Named uppers keep their base
+// bindings: they are the explicit act's to remove.
 func (s *Store) RemoveAll(ctx context.Context) ([]v1.Hash, error) {
 	var kept []v1.Hash
 	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
 		kept = nil
 		live, err := s.liveMounts(tx)
+		if err != nil {
+			return err
+		}
+		held, err := s.liveOpPins(tx)
 		if err != nil {
 			return err
 		}
@@ -217,6 +250,12 @@ func (s *Store) RemoveAll(ctx context.Context) ([]v1.Hash, error) {
 				return err
 			}
 		}
+		for h := range held {
+			if !slices.Contains(kept, h) {
+				kept = append(kept, h)
+			}
+		}
+		slices.SortFunc(kept, func(a, b v1.Hash) int { return strings.Compare(a.String(), b.String()) })
 		return nil
 	})
 	if err != nil {

@@ -100,7 +100,8 @@ within one registration the flag is monotone — only a fresh
 registration of the id clears it.
 `ops` — key: an operation id; value: a versioned record of an in-flight
 extra-transactional operation (an export materialization, a commit, a
-sweep) — the owner's diagnostic identity, the digests the operation pins
+sweep, a consumer's hold — `api.md` REQ-api-hold) — the owner's
+diagnostic identity, the digests the operation pins
 (roots while the op's claim lock is held — REQ-store-gc-roots), and the
 temporary paths it owns (exempt from sweeps while the lock is held,
 swept as debris once it is not, wherever they live — including a
@@ -499,8 +500,11 @@ automatically at the transitions that create garbage — a `refs` row
 overwritten by re-resolution, a reference or local image removed
 (`api.md` REQ-api-remove), an unmount, and store initialization
 (crash debris: dead mount and ops rows, `.export-*` temporaries
-owned by no live row, orphaned tier files per
-REQ-store-gc-roots) — and on explicit demand
+owned by no live row — a condemned export among them, renamed to one
+before its removal so that a crash mid-removal leaves debris and
+never a partial tree at the final path the export cache serves whole
+— orphaned tier files per REQ-store-gc-roots) — and on explicit
+demand
 (`api.md` REQ-api-gc). Automatic collection is on by default and
 disableable at construction. Unreachable content younger than the
 configured retention grace (default 24h) is retained — blobs are

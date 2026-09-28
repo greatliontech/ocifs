@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/uuid"
 	"github.com/greatliontech/gmdb"
 
 	"github.com/greatliontech/ocifs/internal/atomicfile"
@@ -37,7 +39,8 @@ const (
 type GCResult struct {
 	// CollectedBlobs lists removed digests (oci and content-CAS
 	// keys), CollectedPaths removed files and directories outside
-	// the digest keyspaces (export temporaries, mount state).
+	// the digest keyspaces (cached exports, export temporaries,
+	// mount state).
 	CollectedBlobs []v1.Hash
 	CollectedPaths []string
 	// ReclaimedMounts lists dead mount ids reclaimed.
@@ -50,8 +53,11 @@ type GCResult struct {
 	// (REQ-store-bookkeeping). Dead foreign rows halt nothing and
 	// are never listed.
 	ForeignVersionRows []string
-	// Deferred lists items whose deletion failed this pass; they
-	// stay condemnation-eligible and retry next pass.
+	// Deferred lists items whose deletion failed this pass, each in
+	// its keyed form — `<tier>\x00<algorithm>\x00<hex>` for a digest
+	// tier (oci, cas, layeridx), `path\x00<path>` for a temporary or
+	// mount state, `export\x00<path>` for a cached export; they stay
+	// condemnation-eligible and retry next pass.
 	Deferred []string
 }
 
@@ -139,6 +145,9 @@ func (s *Store) Collect(ctx context.Context, opts CollectOpts) (*GCResult, error
 	if len(due) == 0 {
 		return res, nil
 	}
+	if condemnHook != nil {
+		condemnHook()
+	}
 
 	// Condemn inside one write transaction, re-verifying roots
 	// (REQ-store-gc-safe); then delete files; then clear rows.
@@ -171,8 +180,8 @@ type gcItem struct {
 }
 
 func (it gcItem) key() string {
-	if it.tier == "path" {
-		return "path\x00" + it.path
+	if it.tier == "path" || it.tier == "export" {
+		return it.tier + "\x00" + it.path
 	}
 	return it.tier + "\x00" + it.digest.Algorithm + "\x00" + it.digest.Hex
 }
@@ -410,7 +419,11 @@ func (s *Store) unreachableItems(ctx context.Context, reachable map[string]bool)
 				}
 				h := v1.Hash{Algorithm: a.Name(), Hex: e.Name()}
 				if !reachable["export\x00"+h.Algorithm+"\x00"+h.Hex] {
-					items = append(items, gcItem{tier: "path", path: p})
+					// Keyed by path, judged by digest: the re-mark
+					// under the write grant reads the digest, so an
+					// export rooted again since — a hold taken
+					// meanwhile (api.md REQ-api-hold) — stays.
+					items = append(items, gcItem{tier: "export", path: p, digest: h})
 				}
 			}
 		}
@@ -658,6 +671,12 @@ func (s *Store) applyGrace(ctx context.Context, candidates []gcItem, grace time.
 // fail. Never set outside tests.
 var markHook func()
 
+// condemnHook fires between the mark and the condemnation — the
+// window in which a root may appear after the mark found its content
+// unreachable — the seam that lets a test root content there and
+// assert the re-mark keeps it. Never set outside tests.
+var condemnHook func()
+
 // condemn re-marks and writes the condemned set INSIDE one write
 // transaction (REQ-store-gc-safe): the re-mark runs while this
 // transaction holds the database's write grant, so every root
@@ -699,7 +718,7 @@ func (s *Store) condemn(ctx context.Context, sweepOp string, due []gcItem) ([]gc
 			// path is not garbage and stays silent, but a skip the
 			// operator did not cause must never be one they cannot
 			// see (Deferred is the vocabulary for exactly this).
-			if c.tier == "path" {
+			if c.tier == "path" || c.tier == "export" {
 				if ownedTemps == nil {
 					// The keyed form, matching every other Deferred
 					// element (one parse rule for the whole list).
@@ -732,7 +751,9 @@ func (s *Store) condemnedByLiveSweep(_ context.Context, tx *gmdb.Tx, h v1.Hash) 
 	if err != nil {
 		return false, err
 	}
-	for _, tier := range []string{"oci", "cas", "layeridx", "export"} {
+	// A condemned export is keyed by path, never consulted here: the
+	// manifest's own condemnation is what an acquisition must see.
+	for _, tier := range []string{"oci", "cas", "layeridx"} {
 		v, err := gcks.Get([]byte(gcCondemnedPrefix + tier + "\x00" + h.Algorithm + "\x00" + h.Hex))
 		if errors.Is(err, gmdb.ErrNotFound) {
 			continue
@@ -854,9 +875,40 @@ func (s *Store) deleteItem(ctx context.Context, it gcItem, res *GCResult) error 
 			return err
 		}
 		res.CollectedPaths = append(res.CollectedPaths, it.path)
+	case "export":
+		removed, err := removeExportTree(it.path)
+		if err != nil {
+			return err
+		}
+		if removed {
+			res.CollectedPaths = append(res.CollectedPaths, it.path)
+		}
 	}
 	return nil
 }
+
+// removeExportTree removes a cached export at its final path so that
+// no crash leaves a partial tree there for Export's fast path to
+// serve whole (REQ-store-gc-collect, REQ-export-cache): the tree is
+// renamed to an unowned `.export-` temporary beside it — one rename,
+// atomic — and removed under that name, a crash mid-removal leaving
+// debris the next sweep collects and the final path absent.
+// It reports whether there was a tree to remove.
+func removeExportTree(final string) (bool, error) {
+	tmp := filepath.Join(filepath.Dir(final), ".export-gc-"+uuid.NewString())
+	if err := os.Rename(final, tmp); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, removeTree(tmp)
+}
+
+// removeTree is the removal a condemned export's temporary goes
+// through; a test stands a failing one in for a sweeper that died
+// mid-removal.
+var removeTree = forceRemoveTree
 
 // forceRemoveTree removes a tree whose recorded modes may make
 // directories untraversable (an exported image's read-only dirs): a

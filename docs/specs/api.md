@@ -162,6 +162,25 @@ of its acquisition, not a reference: content collected from under it
 since (`store.md` REQ-store-gc-collect) fails the export; only a
 by-reference export acquires again.
 
+## Hold
+
+**REQ-api-hold** (behavior): The library MUST offer a hold over an
+acquired image: a consumer's claim that the image — and an export
+materialized under the hold — stays until the hold is released,
+whatever removes its reference meanwhile; a hold is an in-flight
+operation pinning the image's manifest (`store.md`
+REQ-store-gc-roots), held-lock live, so a crashed holder releases it
+with its process, and a held image is never condemned under it. The
+hold comes first: an export materialized before the hold was taken is
+the snapshot rule's (REQ-api-export), collectible meanwhile, so a
+consumer that runs from an export holds, then exports — the export
+under the pin re-materializing what a collection took. A hold over an
+image collected before it, or condemned by a live sweep, is refused
+distinguishably, the consumer re-acquiring. Emptying the store
+(REQ-api-remove) reports a held image among the kept, as it reports
+one a live mount serves; released, the image is garbage unless
+something else roots it.
+
 ## Removal and collection
 
 **REQ-api-remove** (behavior): The library MUST offer removal of a
@@ -178,8 +197,15 @@ mount serves, is refused. The library also offers removal of every
 root at once — the operator's emptying of the store: every cached
 reference and every local image no live mount serves, severed in one
 write transaction, the local images a live mount kept reported back
-rather than refused, so what a consumer can empty is emptied and what
-a running mount holds stands until the next emptying — a live mount
+rather than refused, so what a consumer can empty is emptied; what a
+running mount holds stands until the next emptying, and what a live
+in-flight operation pins — a hold (REQ-api-hold) among them, an
+export in flight likewise — stands until that operation ends, its
+reference severed all the same, the pinned reported among the kept
+by digest as the store materialized it; a live `ops` row this version
+cannot read pins what it cannot report, its references severed all
+the same and collection halting visibly under it (REQ-api-gc) — a
+live mount
 row this version cannot read (`store.md` REQ-store-bookkeeping) may
 serve any local image, so under one every local image is kept and
 reported, the references severed all the same; named uppers, the

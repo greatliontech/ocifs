@@ -10,6 +10,7 @@ package ocifs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -583,8 +584,11 @@ func (o *OCIFS) RemoveUpper(ctx context.Context, name string) error {
 
 // RemoveAll severs every root the store holds at once — every cached
 // reference and every local image no live mount serves — and returns
-// the digests live mounts kept; collection reclaims what nothing
-// roots any more (api.md REQ-api-remove).
+// what stays kept, sorted: the local images live mounts serve and the
+// images live in-flight operations pin (a hold among them), each by
+// the digest the store materialized — the platform child of an
+// index-resolved reference, not the index; collection reclaims what
+// nothing roots any more (api.md REQ-api-remove).
 func (o *OCIFS) RemoveAll(ctx context.Context) ([]string, error) {
 	kept, err := o.store.RemoveAll(ctx)
 	if err != nil {
@@ -595,4 +599,51 @@ func (o *OCIFS) RemoveAll(ctx context.Context) ([]string, error) {
 		out = append(out, h.String())
 	}
 	return out, nil
+}
+
+// Hold is a consumer's claim over an acquired image: the image and
+// its export stay until Release, whatever removes the reference
+// meanwhile, and a crashed holder releases with its process (api.md
+// REQ-api-hold).
+type Hold struct {
+	ofs   *OCIFS
+	claim *store.OpClaim
+}
+
+// ErrGone refuses a hold over an image a collection took before it,
+// and ErrCondemned one over an image a live sweep has condemned: the
+// consumer re-acquires and holds again (api.md REQ-api-hold).
+var (
+	ErrGone      = store.ErrGone
+	ErrCondemned = store.ErrCondemned
+)
+
+// Hold takes a hold over the image (api.md REQ-api-hold): an
+// in-flight operation pinning its manifest, a collection root while
+// the holder lives. The hold comes before the export it vouches for:
+// an export materialized earlier is the snapshot rule's, collectible
+// meanwhile, so a consumer holds, then exports. A refused hold wraps
+// ErrGone or ErrCondemned.
+func (o *OCIFS) Hold(ctx context.Context, img *Image) (*Hold, error) {
+	if img == nil {
+		return nil, errors.New("ocifs: hold over no image")
+	}
+	claim, err := o.store.Hold(ctx, img.Digest())
+	if err != nil {
+		return nil, err
+	}
+	return &Hold{ofs: o, claim: claim}, nil
+}
+
+// Release ends the hold; the image is garbage unless something else
+// roots it. A second Release is nothing. A hold outliving the store's
+// Close releases with an error, its row left as a dead claim the next
+// sweep reclaims.
+func (h *Hold) Release(ctx context.Context) error {
+	if h.claim == nil {
+		return nil
+	}
+	claim := h.claim
+	h.claim = nil
+	return h.ofs.store.EndOp(ctx, claim)
 }

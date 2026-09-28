@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1299,5 +1300,215 @@ func TestRemoveAllEmptiesEveryRoot(t *testing.T) {
 	}
 	if present, err := s.bk.LocalImagePresent(ctx, idle); err != nil || present {
 		t.Fatalf("the image survived the emptying past the dead unreadable row (%v, %v)", present, err)
+	}
+
+	// A live hold's pin is reported among the kept, its reference
+	// severed all the same; a dead hold — its row left, its claim
+	// released — keeps nothing.
+	heldImage := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("aa", 32)}
+	if err := s.bk.RefPut(ctx, mustRef(t, "r.io/held:v1"), heldImage); err != nil {
+		t.Fatal(err)
+	}
+	hold, err := s.BeginOp(ctx, opKindHold, []v1.Hash{heldImage}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := s.RemoveAll(ctx); err != nil || len(kept) != 1 || kept[0] != heldImage {
+		t.Fatalf("kept under a live hold = %v, %v, want the held image", kept, err)
+	}
+	if _, ok, err := s.bk.RefGet(ctx, mustRef(t, "r.io/held:v1")); err != nil || ok {
+		t.Fatalf("the held image's reference survived the emptying (%v, %v)", ok, err)
+	}
+	hold.lock.Close() // the holder gone, its row left
+	if kept, err := s.RemoveAll(ctx); err != nil || len(kept) != 0 {
+		t.Fatalf("kept under a dead hold = %v, %v", kept, err)
+	}
+
+	// The kept list is one entry per digest, sorted: a local image a
+	// live mount serves and a hold also pins appears once, beside a
+	// second held digest that sorts before it.
+	if err := s.bk.LocalImagePut(ctx, served, 1); err != nil {
+		t.Fatal(err)
+	}
+	upClaim2, err := s.ClaimUpper("up2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim2, err := s.RegisterMountRecordArbitrated(ctx, "served-again", served, "up2", "/m2", upClaim2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("11", 32)}
+	last := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ff", 32)}
+	holds := []*OpClaim{}
+	for _, h := range []v1.Hash{served, last, first} {
+		c, err := s.BeginOp(ctx, opKindHold, []v1.Hash{h}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		holds = append(holds, c)
+	}
+	kept, err = s.RemoveAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 3 || kept[0] != first || kept[1] != served || kept[2] != last {
+		t.Fatalf("kept = %v, want [%s %s %s]: one entry per digest, sorted", kept, first, served, last)
+	}
+	for _, c := range holds {
+		if err := s.EndOp(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.DeregisterMount(ctx, "served-again", claim2); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCondemnedExportNeverHalfServed pins REQ-store-gc-collect's
+// crash rule for the export cache: a condemned export is renamed to
+// an unowned temporary before its removal, so a sweeper dying
+// mid-removal leaves the final path absent — never a partial tree
+// Export's fast path would serve whole — and debris the next sweep
+// collects.
+func TestCondemnedExportNeverHalfServed(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("cc", 32)}
+	final := filepath.Join(dir, "exports", h.Algorithm, h.Hex)
+	for _, f := range []string{"a", "b", "c"} {
+		if err := os.MkdirAll(final, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(final, f), []byte(f), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The sweeper dies after removing one file of the renamed tree.
+	orig := removeTree
+	removeTree = func(p string) error {
+		if err := os.Remove(filepath.Join(p, "a")); err != nil {
+			return err
+		}
+		return errors.New("the sweeper died")
+	}
+	res, err := s.Collect(context.Background(), CollectOpts{Grace: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Deferred) != 1 || res.Deferred[0] != "export\x00"+final {
+		t.Fatalf("the failed removal was not deferred: %+v", res)
+	}
+	removeTree = orig
+	if _, err := os.Stat(final); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a partial tree stands at the final path: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "exports", h.Algorithm))
+	if err != nil || len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), ".export-") {
+		t.Fatalf("the exports tier after the crash: %v, %v; want the renamed temporary alone", entries, err)
+	}
+	if _, err := s.Collect(context.Background(), CollectOpts{Grace: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(filepath.Join(dir, "exports", h.Algorithm)); err != nil || len(entries) != 0 {
+		t.Fatalf("the debris survived the next sweep: %v, %v", entries, err)
+	}
+}
+
+// TestHoldBetweenMarkAndCondemnKeepsTheExport pins REQ-api-hold's
+// export clause against the sweep's window: a hold taken after the
+// mark found the image unreachable, and the export served from the
+// cache under it, survive the condemnation — the re-mark under the
+// write grant judges the export by its digest, rooted again.
+func TestHoldBetweenMarkAndCondemnKeepsTheExport(t *testing.T) {
+	reg := newTestRegistry()
+	ref := testHost + "/gc/heldexport:v1"
+	push(t, reg, ref, makeImage(t, newRawLayer(t, tarBytes(t, tfile("f", "held")))))
+	s, _ := newTestStore(t, PullIfNotPresent, reg)
+	ctx := context.Background()
+	img, err := s.Image(ctx, ref, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := s.Export(ctx, img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveRef(ctx, ref); err != nil {
+		t.Fatal(err)
+	}
+	var hold *OpClaim
+	var served string
+	var hookErr error
+	fired := false
+	condemnHook = func() {
+		if fired {
+			return
+		}
+		fired = true
+		// Between the mark and the condemnation: the consumer holds,
+		// then exports from the cache.
+		hold, hookErr = s.Hold(ctx, img.Hash())
+		if hookErr != nil {
+			return
+		}
+		served, hookErr = s.Export(ctx, img)
+	}
+	defer func() { condemnHook = nil }()
+	res, err := s.Collect(ctx, CollectOpts{Grace: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hookErr != nil {
+		t.Fatalf("the hold or the export in the window: %v", hookErr)
+	}
+	if served != final {
+		t.Fatalf("the export in the window = %s, want the cached %s", served, final)
+	}
+	if _, err := os.Stat(final); err != nil {
+		t.Fatalf("the export held in the window was condemned: %v (collected %v)", err, res.CollectedPaths)
+	}
+	if err := s.EndOp(ctx, hold); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Collect(ctx, CollectOpts{Grace: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(final); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the export survived the hold's release: %v", err)
+	}
+}
+
+// TestCondemnedExportGoneBeforeRemoval pins the report's honesty: a
+// cached export gone by the time its removal runs (deleted by hand
+// between the mark and the condemnation) fails nothing and is not
+// reported removed.
+func TestCondemnedExportGoneBeforeRemoval(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("dc", 32)}
+	final := filepath.Join(dir, "exports", h.Algorithm, h.Hex)
+	if err := os.MkdirAll(final, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(final, "f"), []byte("f"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	condemnHook = func() { _ = os.RemoveAll(final) }
+	defer func() { condemnHook = nil }()
+	res, err := s.Collect(context.Background(), CollectOpts{Grace: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(res.CollectedPaths, final) || len(res.Deferred) != 0 {
+		t.Fatalf("an export gone before its removal was reported: %+v", res)
 	}
 }
