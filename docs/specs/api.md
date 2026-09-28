@@ -193,8 +193,10 @@ deliberately does not serve), returning what was collected, what
 was deferred, and any live foreign-version mount or ops rows that
 halted image-tier collection (`store.md` REQ-store-bookkeeping) — every
 verdict is a held-lock verdict, judgeable from any namespace that
-can open the store, so no unjudgeable class exists to report. The
-CLI exposes the same verb.
+can open the store, so no unjudgeable class exists to report, and
+the report's type is the library's own to name, so a consumer can
+spell what it holds the collection to. The CLI exposes the same
+verb.
 
 ## CLI
 

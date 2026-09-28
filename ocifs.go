@@ -539,10 +539,18 @@ var GCIgnoreGrace = func() GCOption {
 	}
 }
 
+// GCResult is what a collection pass reports: the blobs and paths
+// collected, the dead mounts reclaimed, the live rows of another
+// version that halted image-tier collection, and the items whose
+// deletion is deferred to the next pass (api.md REQ-api-gc). A
+// consumer holding a collection to its word reads it by this name.
+type GCResult = store.GCResult
+
 // GC runs one explicit collection pass, honoring the configured
 // retention grace unless overridden, and reports what was
-// collected — and what could not be judged (api.md REQ-api-gc).
-func (o *OCIFS) GC(ctx context.Context, opts ...GCOption) (*store.GCResult, error) {
+// collected, what was deferred, and the live rows of another version
+// that halted image-tier collection (api.md REQ-api-gc).
+func (o *OCIFS) GC(ctx context.Context, opts ...GCOption) (*GCResult, error) {
 	co := store.CollectOpts{Grace: o.gcGrace}
 	for _, opt := range opts {
 		opt(&co)

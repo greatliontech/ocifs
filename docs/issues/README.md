@@ -30,3 +30,7 @@
   the store's and a consumer's credential resolution; the collapse is
   options onto a settings value only New holds. Lands: when an option
   is next added, removed or changed.
+- `docs/issues/mount-report-types-internal.md` — MountReport returns
+  an internal type, so a consumer cannot name a report's disposition
+  or reason. Lands: when a consumer first switches on them
+  exhaustively.

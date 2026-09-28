@@ -3,6 +3,7 @@
 package ocifs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,5 +110,15 @@ func TestRemoveAllPublicSurface(t *testing.T) {
 	}
 	if _, err := ofs.Resolve(t.Context(), refStr, ResolveUnder(PullNever)); err == nil {
 		t.Fatal("the pulled reference still resolves from the store after emptying")
+	}
+}
+
+// The collection's report is nameable at the library surface, and GC
+// returns it by that name: a consumer holds GC to its word through
+// the type (REQ-api-gc).
+func TestGCResultNameable(t *testing.T) {
+	var gc func(*OCIFS, context.Context, ...GCOption) (*GCResult, error) = (*OCIFS).GC
+	if gc == nil {
+		t.Fatal("GC does not return the report by its name")
 	}
 }
