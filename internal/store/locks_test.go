@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -262,9 +263,7 @@ func TestLockTierSweep(t *testing.T) {
 	s.sweepLockTier(ctx)
 
 	for _, gone := range []string{s.mountLockPath("gone"), s.upperLockPath("gone"), filepath.Join(s.locksDir(), "probe-stranded")} {
-		if _, err := os.Stat(gone); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("stranded lock file %s survived the sweep: %v", gone, err)
-		}
+		requireRetired(t, gone)
 	}
 	if _, err := os.Stat(s.mountLockPath("deferred")); err != nil {
 		t.Fatalf("deferred mount's lock file swept despite surviving row: %v", err)
@@ -345,7 +344,29 @@ func TestDeregisterHoldsClaimUntilRowGone(t *testing.T) {
 	if !windowChecked {
 		t.Fatal("deregistration window never observed")
 	}
-	if _, err := os.Stat(s.mountLockPath("clean")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("claim file survived deregistration: %v", err)
+	requireRetired(t, s.mountLockPath("clean"))
+}
+
+// requireRetired asserts a claim's lock file is retired: unlinked, or
+// on a platform that unlinks no open file (windows, the holder's own
+// handle refusing it) left in place unheld, so a try-lock acquires
+// it as a dead claim's file — the lock, not the file's absence,
+// being the authority (store.md, held-lock liveness).
+func requireRetired(t *testing.T, path string) {
+	t.Helper()
+	_, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return
 	}
+	if err != nil {
+		t.Fatalf("retired lock file %s: %v", path, err)
+	}
+	if runtime.GOOS != "windows" {
+		t.Fatalf("retired lock file %s still exists", path)
+	}
+	l, err := oslock.TryAcquire(path)
+	if err != nil {
+		t.Fatalf("retired lock file %s left held: %v", path, err)
+	}
+	l.Close()
 }

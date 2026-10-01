@@ -54,8 +54,8 @@ func (s *Server) Unmount() error {
 			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 				// Metadata dirt can leave a read-only placeholder;
 				// clear and retry once. A placeholder held open by a
-				// foreign process can still survive — noted in the
-				// validation checklist.
+				// foreign process can still survive
+				// (docs/issues/projfs-foreign-held-placeholder.md).
 				os.Chmod(p, 0o666)
 				os.Remove(p)
 			}

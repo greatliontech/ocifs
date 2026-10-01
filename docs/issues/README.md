@@ -5,10 +5,31 @@
   bridge dispatch, orchestrated mount) awaits a darwin Tier-2 run.
   Lands: when the darwin mount validation reports back and its
   findings are dispositioned.
-- `docs/issues/projfs-windows-validation.md` — the ProjFS backend and
-  its windows test suite are authored and cross-compiled but
-  unexecuted. Lands: when the windows test run reports back and its
-  findings are dispositioned.
+- `docs/issues/projfs-filtered-pagination-untested.md` — a wildcard
+  search over a paginating ProjFS directory has no dedicated test.
+  Lands: when the windows row witnesses a filtered enumeration that
+  pages.
+- `docs/issues/projfs-content-id-by-review.md` — the placeholder
+  ContentID digest is pinned by review alone, ProjFS exposing no
+  read-back. Lands: when a read-back of a placeholder's ContentID
+  exists (projfs-go or the platform) and the windows row compares it.
+- `docs/issues/layer-suite-linux-gated.md` — the layer suite's
+  extraction oracle needs mkfifo and the property tests share its
+  linux-gated file, so three oracle-free property tests and the
+  oracle run on linux alone. Lands: when the three run on every row
+  and the oracle builds its FIFO cases without mkfifo or states the
+  cap.
+- `docs/issues/projfs-foreign-held-placeholder.md` — a placeholder a
+  foreign process holds open at unmount survives the residue sweep
+  unreported. Lands: when the windows row probes it and the sweep's
+  answer is dispositioned.
+- `docs/issues/store-tests-linux-gated.md` — the store's collection,
+  lock-retirement-under-collection and export tests are linux-gated.
+  Lands: when the three files run on the windows and darwin rows.
+- `docs/issues/lock-files-persist-on-windows.md` — gmdb's lock opens
+  without delete sharing, so a retired lock file is never unlinked
+  on windows and `locks/` grows per claim. Lands: when ocifs depends
+  on a gmdb release whose Retire unlinks on windows.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform

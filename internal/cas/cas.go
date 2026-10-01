@@ -7,16 +7,19 @@
 // re-verification (the store's integrity boundary is the local
 // filesystem). Publication is atomic and durable
 // (internal/atomicfile), and an existing entry is never rewritten by
-// a Put that observes it: concurrent Puts of identical content that
-// both miss the existence check rename over each other, last one
-// winning — byte-identical either way, and readers holding the
-// replaced inode still see complete content.
+// a Put that observes it, nor by one that races it: publication
+// never replaces, so two Puts of one content leave the first's
+// bytes, identical to the second's, and the second reports the key
+// as published (a replace a platform may refuse while the target is
+// held never runs).
 package cas
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -53,15 +56,11 @@ func (c *CAS) Put(r io.Reader) (v1.Hash, int64, error) {
 		return v1.Hash{}, 0, err
 	}
 	key := v1.Hash{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}
-	path := c.Path(key)
-	if _, err := os.Stat(path); err == nil {
-		w.Abort()
-		return key, n, nil
-	} else if !os.IsNotExist(err) {
-		w.Abort()
-		return v1.Hash{}, 0, err
-	}
-	if err := w.Commit(path, 0o644); err != nil {
+	// Published without replacing: a blob already at its path is the
+	// same bytes by construction, a concurrent put's included, so an
+	// existing target is the publication, never a replace a platform
+	// may refuse.
+	if err := w.CommitNew(c.Path(key), 0o644); err != nil && !errors.Is(err, fs.ErrExist) {
 		return v1.Hash{}, 0, err
 	}
 	return key, n, nil

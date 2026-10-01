@@ -56,15 +56,20 @@ func (w *Writer) Commit(path string, perm os.FileMode) error {
 // temporary is discarded and the error satisfies
 // errors.Is(err, fs.ErrExist). Link is the no-replace publication
 // primitive — unlike a stat-then-rename it has no window in which a
-// concurrent writer's file can be clobbered.
+// concurrent writer's file can be clobbered — and a published link
+// is final: the temporary's removal, which a platform may refuse
+// while the file is open, fails no publication.
 func (w *Writer) CommitNew(path string, perm os.FileMode) error {
 	if err := w.prepare(path, perm); err != nil {
 		return err
 	}
 	linkErr := os.Link(w.f.Name(), path)
-	if err := os.Remove(w.f.Name()); linkErr == nil && err != nil {
-		return err
-	}
+	// The temporary's name goes after the link; where the platform
+	// refuses (windows, the one file now open under its published
+	// name by a reader with no delete sharing), the publication stands
+	// and the dot-temporary is an inert second name the orphan sweep
+	// collects — nothing fails after a publication.
+	os.Remove(w.f.Name())
 	return linkErr
 }
 

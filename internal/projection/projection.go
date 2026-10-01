@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"slices"
 	"sort"
 	"strings"
 
@@ -247,7 +246,9 @@ func (p *Projection) Seek(dir *Entry, name string) int {
 // Report returns a copy of the projection report accumulated at
 // build time; the kernel state stays unreachable through it.
 func (p *Projection) Report() Report {
-	return Report{Entries: slices.Clone(p.report.Entries)}
+	// The entries list is always present (REQ-proj-report): an empty
+	// report is an empty list, never an absent one.
+	return Report{Entries: append([]ReportEntry{}, p.report.Entries...)}
 }
 
 func kindOf(h *tar.Header) (Kind, bool) {

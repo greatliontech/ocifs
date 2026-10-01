@@ -2,8 +2,10 @@ package atomicfile
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -50,7 +52,13 @@ func TestWritePublishesExactBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != 0o640 {
+	// windows keeps no mode but the read-only attribute: a 0640 file
+	// is writable there.
+	if runtime.GOOS == "windows" {
+		if fi.Mode().Perm()&0o200 == 0 {
+			t.Fatalf("mode %v, want writable", fi.Mode().Perm())
+		}
+	} else if fi.Mode().Perm() != 0o640 {
 		t.Fatalf("mode %v, want 0640", fi.Mode().Perm())
 	}
 	if names := listNames(t, dir); len(names) != 1 {
@@ -152,5 +160,25 @@ func TestCommitIntoUncreatablePathCleansUp(t *testing.T) {
 	}
 	if names := listNames(t, dir); len(names) != 1 || names[0] != "obstacle" {
 		t.Fatalf("residue after failed commit: %v", names)
+	}
+}
+
+// WriteNew publishes where nothing stands and refuses where a file
+// does, the first bytes kept and the temporary gone either way.
+func TestWriteNewNeverReplaces(t *testing.T) {
+	dir := scratchDir(t)
+	path := filepath.Join(dir, "blob")
+	if err := WriteNew(path, strings.NewReader("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteNew(path, strings.NewReader("second"), 0o644)
+	if !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("a second write: %v, want ErrExist", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "first" {
+		t.Fatalf("content %q", b)
+	}
+	if names := listNames(t, dir); len(names) != 1 {
+		t.Fatalf("unexpected files: %v", names)
 	}
 }

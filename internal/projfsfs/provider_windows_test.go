@@ -151,15 +151,18 @@ func TestProjectionTreeAndCaseInsensitiveLookup(t *testing.T) {
 func TestEnumerationOrderAndStability(t *testing.T) {
 	f := serveFixture(t, basicSpecs())
 
+	// The directory's own order, as the backend hands it to the
+	// platform: os.ReadDir would sort by name and hide it.
 	var passes [][]string
 	for i := 0; i < 3; i++ {
-		ents, err := os.ReadDir(filepath.Join(f.root, "docs"))
+		d, err := os.Open(filepath.Join(f.root, "docs"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		var names []string
-		for _, e := range ents {
-			names = append(names, e.Name())
+		names, err := d.Readdirnames(-1)
+		d.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
 		passes = append(passes, names)
 	}

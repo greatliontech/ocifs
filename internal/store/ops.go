@@ -262,7 +262,41 @@ func (s *Store) EndOp(ctx context.Context, claim *OpClaim) error {
 		claim.lock.Close()
 		return err
 	}
-	return claim.lock.Retire()
+	return retired(claim.lock.Retire())
+}
+
+// retired reads a retirement's error: an unlink the platform refuses
+// (windows, the holder's own handle) is deferred, not failed — the
+// claim has ended, the file left is an acquirable dead entry
+// (store.md, held-lock liveness) — while any other error the
+// retirement joins with it, a close failing, stands.
+func retired(err error) error {
+	if err == nil {
+		return nil
+	}
+	multi, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		if errors.Is(err, oslock.ErrUnlinkDeferred) {
+			return nil
+		}
+		return err
+	}
+	parts := multi.Unwrap()
+	// The deferral's own wrapping: the sentinel first, the refusal's
+	// cause beside it — the deferral whole, nothing else carried. The
+	// shape is Retire's (a fmt error of two %w, joined with the close
+	// error after it): a join opening with the bare sentinel would
+	// read as a deferral too, which Retire never produces.
+	if len(parts) > 0 && parts[0] == oslock.ErrUnlinkDeferred {
+		return nil
+	}
+	var rest []error
+	for _, e := range parts {
+		if e != nil && !errors.Is(e, oslock.ErrUnlinkDeferred) {
+			rest = append(rest, e)
+		}
+	}
+	return errors.Join(rest...)
 }
 
 // opClaimHeld is the judge-only three-valued verdict on an op id's

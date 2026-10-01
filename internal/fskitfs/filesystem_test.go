@@ -31,7 +31,7 @@ func TestParseConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Store != "/stores/s1" || cfg.Image != "r.io/a@sha256:abc" || cfg.Platform != "linux/arm64" || cfg.State != "/stores/s1/mounts/m1" {
+	if cfg.Store != filepath.FromSlash("/stores/s1") || cfg.Image != "r.io/a@sha256:abc" || cfg.Platform != "linux/arm64" || cfg.State != "/stores/s1/mounts/m1" {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 	if strings.Join(cfg.ExtraDirs, "|") != "proc|sys/x" {

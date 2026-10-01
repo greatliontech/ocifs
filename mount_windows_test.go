@@ -78,6 +78,9 @@ func TestMountWindowsEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The store's handles close before the test directory goes:
+	// windows removes no open file.
+	defer ofs.Close()
 	im, err := ofs.Mount(refStr, MountWithID("win-e2e"))
 	if err != nil {
 		t.Fatal(err)

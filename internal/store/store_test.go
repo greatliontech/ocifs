@@ -625,7 +625,12 @@ func TestRelocatedStoreServesFully(t *testing.T) {
 	}
 
 	// Move the whole store root; a layer index recording paths
-	// (rather than CAS keys) would keep pointing into old/.
+	// (rather than CAS keys) would keep pointing into old/. The
+	// store closes first: a directory with open files does not move
+	// on windows.
+	if err := s1.Close(); err != nil {
+		t.Fatal(err)
+	}
 	newDir := filepath.Join(parent, "new")
 	if err := os.Rename(oldDir, newDir); err != nil {
 		t.Fatal(err)
@@ -1478,10 +1483,10 @@ func TestReclaimDeadMounts(t *testing.T) {
 	if _, err := s.MountRecord(context.Background(), "livemount"); err != nil {
 		t.Fatalf("live row reclaimed: %v", err)
 	}
-	// The claim files retired with their rows.
-	if _, err := os.Stat(s.mountLockPath("deadmount")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("dead mount's lock file survived reclamation: %v", err)
-	}
+	// The claim files retired with their rows: unlinked, or on a
+	// platform that unlinks no open file left unheld, an acquirable
+	// dead claim (the lock, not the file's absence, is the authority).
+	requireRetired(t, s.mountLockPath("deadmount"))
 }
 
 // TestUpperArbitrationIgnoresDeadHolder pins the crash arm of the
@@ -1900,9 +1905,7 @@ func TestOpRowLifecycle(t *testing.T) {
 		t.Fatalf("ops rows after EndOp: %+v", opsRows(t, dir))
 	}
 	// EndOp retired the claim file (row, unlink-while-held, release).
-	if _, err := os.Stat(s.opLockPath(claim.ID)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("op claim file survived EndOp: %v", err)
-	}
+	requireRetired(t, s.opLockPath(claim.ID))
 }
 
 // TestExportLeavesNoOpRows pins the export op's lifecycle around
@@ -2004,5 +2007,40 @@ func TestLeaseWaitIsCancelable(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatalf("slow ingest: %v", err)
+	}
+}
+
+// Two pulls publishing one blob at once both succeed, the blob
+// written once and never replaced (a replace a platform may refuse
+// while the target is held).
+func TestConcurrentBlobWritesPublishOnce(t *testing.T) {
+	s, err := NewStore(Config{Path: scratchDir(t), Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	content := []byte("the same bytes")
+	h := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("ab", 32)}
+	errs := make([]error, 8)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = s.writeOCIBlob(h, func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(content)), nil })
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("writer %d: %v", i, err)
+		}
+	}
+	if b, err := os.ReadFile(s.ociBlobPath(h)); err != nil || !bytes.Equal(b, content) {
+		t.Fatalf("the blob: %q %v", b, err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(s.ociBlobPath(h)))
+	if len(entries) != 1 {
+		t.Fatalf("the blob directory after concurrent writes: %v", entries)
 	}
 }

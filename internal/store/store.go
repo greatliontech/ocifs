@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -907,7 +908,10 @@ func manifestKind(raw []byte) (artifactKind, types.MediaType, error) {
 }
 
 // writeOCIBlob publishes one oci/blobs entry atomically, skipping
-// blobs already present (their content is fixed by their digest).
+// blobs already present (their content is fixed by their digest):
+// one present before the write is skipped unread, one published
+// meanwhile by a concurrent pull is the same bytes, the write never
+// replacing it.
 func (s *Store) writeOCIBlob(h v1.Hash, open func() (io.ReadCloser, error)) error {
 	path := s.ociBlobPath(h)
 	if _, err := os.Stat(path); err == nil {
@@ -920,7 +924,10 @@ func (s *Store) writeOCIBlob(h v1.Hash, open func() (io.ReadCloser, error)) erro
 		return err
 	}
 	defer rc.Close()
-	return atomicfile.Write(path, rc, 0o644)
+	if err := atomicfile.WriteNew(path, rc, 0o644); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return nil
 }
 
 // descriptorListed reports whether oci/index.json lists a descriptor

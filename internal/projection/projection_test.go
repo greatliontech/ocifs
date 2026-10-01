@@ -583,3 +583,25 @@ func TestUnrepresentableViewNameNeverReachesComparator(t *testing.T) {
 		}
 	}
 }
+
+// A clean projection's report holds an entries list, empty and
+// present (REQ-proj-report), and a copy: the caller's edits reach no
+// later reader.
+func TestReportListAlwaysPresent(t *testing.T) {
+	view, err := layer.Unify([]layer.Layer{{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := New(view, nil, Capabilities{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := p.Report()
+	if rep.Entries == nil || len(rep.Entries) != 0 {
+		t.Fatalf("a clean report's entries: %#v", rep.Entries)
+	}
+	rep.Entries = append(rep.Entries, ReportEntry{Path: "x"})
+	if len(p.Report().Entries) != 0 {
+		t.Fatal("the caller's edit reached the projection")
+	}
+}
