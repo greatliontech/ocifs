@@ -51,7 +51,7 @@ func TestParseConfig(t *testing.T) {
 
 	// A plain path resource works like a file URL.
 	cfg, err = ParseConfig("/stores/s2", []string{"image=r.io/a@sha256:abc"})
-	if err != nil || cfg.Store != "/stores/s2" {
+	if err != nil || cfg.Store != filepath.FromSlash("/stores/s2") {
 		t.Fatalf("plain path: %+v, %v", cfg, err)
 	}
 
