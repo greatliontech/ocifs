@@ -265,11 +265,11 @@ func (s *Store) EndOp(ctx context.Context, claim *OpClaim) error {
 	return retired(claim.lock.Retire())
 }
 
-// retired reads a retirement's error: an unlink the platform refuses
-// (windows, the holder's own handle) is deferred, not failed — the
-// claim has ended, the file left is an acquirable dead entry
-// (store.md, held-lock liveness) — while any other error the
-// retirement joins with it, a close failing, stands.
+// retired reads a retirement's error: an unlink refused (on windows,
+// a foreign opener holding the file without delete sharing) is
+// deferred, not failed — the claim has ended, the file left is an
+// acquirable dead entry (store.md, held-lock liveness) — while any
+// other error the retirement joins with it, a close failing, stands.
 func retired(err error) error {
 	if err == nil {
 		return nil

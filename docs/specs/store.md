@@ -168,12 +168,12 @@ cannot catch, and an unheld file is never unlinked by anyone. A dead
 claim's acquirer is that claim's final holder: it disposes the claim's
 residue and unlinks the lock file before releasing (deferring a
 reclamation instead releases without unlink — its file and row persist
-for retry; a platform that refuses unlinking open files merely defers
-the unlink step, the file left unheld an acquirable dead entry the
-next holder retires — the lock, not the file's absence, is the
-authority — the lock library opening with delete sharing where the
-platform offers it, so the holder's own handle never refuses the
-unlink).
+for retry; an unlink refused all the same — the lock library opens
+with delete sharing on `windows`, so the holder's own handle never
+refuses it, a foreign opener holding the file without that sharing
+still can — merely defers the unlink step, the file left unheld an
+acquirable dead entry the next holder retires — the lock, not the
+file's absence, is the authority).
 Rows are written only AFTER their vouching lock is held, and blocking
 claim acquisition happens only outside bookkeeping write transactions —
 inside a write transaction a claim is consulted by non-blocking try-lock

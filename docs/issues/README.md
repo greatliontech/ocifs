@@ -26,10 +26,6 @@
 - `docs/issues/store-tests-linux-gated.md` — the store's collection,
   lock-retirement-under-collection and export tests are linux-gated.
   Lands: when the three files run on the windows and darwin rows.
-- `docs/issues/lock-files-persist-on-windows.md` — gmdb's lock opens
-  without delete sharing, so a retired lock file is never unlinked
-  on windows and `locks/` grows per claim. Lands: when ocifs depends
-  on a gmdb release whose Retire unlinks on windows.
 - `docs/issues/projfs-fskit-write-arms.md` — writable mounts are
   FUSE-only; the ProjFS/FSKit backends need write-engine glue plus
   platform fidelity mechanics. Lands: per backend, when its platform

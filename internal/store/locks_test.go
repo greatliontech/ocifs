@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -17,29 +16,20 @@ import (
 	"github.com/greatliontech/gmdb/oslock"
 )
 
-// assertOnlyProbeResidue fails on any locks-tier entry that is not
-// an ACQUIRABLE soundness-probe leftover: claim files must not
-// exist, and a probe file may remain only as the deferral branch's
-// promise — an unheld, acquirable dead entry (REQ-store-layout).
-// A held leftover means a probe that never retired: a leaked lock
-// the sweep would judge live forever. The check retires what it
-// acquires, so the directory is clean afterwards — a second call
-// sees an empty tier, not the same leftovers.
-func assertOnlyProbeResidue(t *testing.T, dir string) {
+// assertLocksTierEmpty fails on any locks-tier entry: claim files
+// retire with their rows and the soundness probe retires itself,
+// each unlinking its file while held, on every platform
+// (REQ-store-layout; store.md, held-lock liveness). A leftover means
+// a claim or probe that never retired — a held one a leaked lock the
+// sweep would judge live forever.
+func assertLocksTierEmpty(t *testing.T, dir string) {
 	t.Helper()
 	ents, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("locks tier unreadable: %v", err)
 	}
 	for _, e := range ents {
-		if !strings.HasPrefix(e.Name(), "probe-") {
-			t.Fatalf("non-probe residue in locks tier: %q", e.Name())
-		}
-		l, err := oslock.TryAcquire(filepath.Join(dir, e.Name()))
-		if err != nil {
-			t.Fatalf("probe leftover %q not acquirable: %v", e.Name(), err)
-		}
-		l.Retire()
+		t.Fatalf("residue in locks tier: %q", e.Name())
 	}
 }
 
@@ -53,7 +43,7 @@ func TestLocksTierCreatedAtInit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	assertOnlyProbeResidue(t, filepath.Join(dir, "locks"))
+	assertLocksTierEmpty(t, filepath.Join(dir, "locks"))
 }
 
 // TestClaimLockPaths pins the claim-file naming (held-lock
@@ -82,7 +72,7 @@ func TestProbeSoundFilesystem(t *testing.T) {
 	if err := probeLockingSoundness(dir); err != nil {
 		t.Fatal(err)
 	}
-	assertOnlyProbeResidue(t, dir)
+	assertLocksTierEmpty(t, dir)
 }
 
 // TestProbeRefusesGrantedSecondHolder pins the refusal arm
@@ -120,7 +110,7 @@ func TestProbeUndecidedSurfaces(t *testing.T) {
 	// The undecided arm disposes its probe lock like every other
 	// arm — an undecided refusal must not accumulate held files
 	// across retries.
-	assertOnlyProbeResidue(t, dir)
+	assertLocksTierEmpty(t, dir)
 
 	// The first arm's failure carries its own label naming the
 	// acquisition step: an unopenable locks directory exhausts the
@@ -193,7 +183,7 @@ func TestProbePathsUnique(t *testing.T) {
 		t.Fatalf("probe paths not unique per run: %v", paths)
 	}
 	// The sound arm retired both probe files on the way out.
-	assertOnlyProbeResidue(t, dir)
+	assertLocksTierEmpty(t, dir)
 	for p := range paths {
 		if !strings.HasPrefix(filepath.Base(p), "probe-") {
 			t.Fatalf("probe path %q lacks the probe- prefix", p)
@@ -347,26 +337,12 @@ func TestDeregisterHoldsClaimUntilRowGone(t *testing.T) {
 	requireRetired(t, s.mountLockPath("clean"))
 }
 
-// requireRetired asserts a claim's lock file is retired: unlinked, or
-// on a platform that unlinks no open file (windows, the holder's own
-// handle refusing it) left in place unheld, so a try-lock acquires
-// it as a dead claim's file — the lock, not the file's absence,
-// being the authority (store.md, held-lock liveness).
+// requireRetired asserts a claim's lock file is retired: unlinked on
+// every platform, the holder's own handle sharing deletion on
+// windows (store.md, held-lock liveness).
 func requireRetired(t *testing.T, path string) {
 	t.Helper()
-	_, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retired lock file %s still named: stat err=%v", path, err)
 	}
-	if err != nil {
-		t.Fatalf("retired lock file %s: %v", path, err)
-	}
-	if runtime.GOOS != "windows" {
-		t.Fatalf("retired lock file %s still exists", path)
-	}
-	l, err := oslock.TryAcquire(path)
-	if err != nil {
-		t.Fatalf("retired lock file %s left held: %v", path, err)
-	}
-	l.Close()
 }

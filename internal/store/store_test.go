@@ -1483,9 +1483,7 @@ func TestReclaimDeadMounts(t *testing.T) {
 	if _, err := s.MountRecord(context.Background(), "livemount"); err != nil {
 		t.Fatalf("live row reclaimed: %v", err)
 	}
-	// The claim files retired with their rows: unlinked, or on a
-	// platform that unlinks no open file left unheld, an acquirable
-	// dead claim (the lock, not the file's absence, is the authority).
+	// The claim files retired with their rows: unlinked.
 	requireRetired(t, s.mountLockPath("deadmount"))
 }
 
