@@ -640,3 +640,73 @@ bindings {
   role: BINDING_ROLE_TESTS
   shape_hash: "6dda4c2aa08fc0603271ad4b0571404abc58cc6f6f6ed6cadfa94b22a9dab38b"
 }
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs.Image.Archive"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "b38ea15963328205e35698eac08a23d03204cb73f6457678783194bd033ccf04"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.Archive"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "578400b8f9196a123182a75f0e688a4fa5f487725452aa9826d6f161ae07f319"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestArchiveLoadsAsTheImage"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "d520ecf19652acb6ac6271116a5dfa0de705a0f78e1d7eede009546ba5daf421"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestArchiveCollectedBlobFails"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "6fd8213b3ab122f74432216b2d8a5c0b14b53f3afae76e7863d5cb93e33dff70"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestArchiveOCILayout"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "08fda151cabb09722fae1419075710f3c56d38b7ee4501d7b916444e873e0f6f"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestArchiveCommittedImage"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "79316eb2f43627d11ff320634203837739a3c5a1aacfafe10d7ac349a4ec5ee3"
+}
+
+bindings {
+  requirement_id: "REQ-api-archive"
+  content_hash: "9ffc4a204afd6c9cf8edd5da89744ecab74a8b8024408e6f3212b429d0e4c429"
+  source_hash: "37ebd8955dd327159dbb2b74663cd04edb0879713edefdd79f8a2a855ec0532e"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestArchivePinsAgainstCollection"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "4875864d8a53fc125c0ff0cdf8f7d1ed7de223bc24ba581aded14456858b6935"
+}

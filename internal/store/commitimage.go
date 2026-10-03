@@ -78,13 +78,9 @@ func (s *Store) CommitUpper(ctx context.Context, img *Image, upperRoot string) (
 		return v1.Hash{}, err
 	}
 
-	baseManifestRaw, err := os.ReadFile(s.ociBlobPath(img.Hash()))
+	baseManifest, _, err := s.retainedManifest(img.Hash())
 	if err != nil {
-		return v1.Hash{}, fmt.Errorf("base manifest %s not retained: %w", img.Hash(), err)
-	}
-	baseManifest, err := v1.ParseManifest(bytes.NewReader(baseManifestRaw))
-	if err != nil {
-		return v1.Hash{}, err
+		return v1.Hash{}, fmt.Errorf("base manifest %s: %w", img.Hash(), err)
 	}
 
 	// Config: diff IDs and history extended; the uncompressed

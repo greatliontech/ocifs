@@ -51,3 +51,10 @@
   an internal type, so a consumer cannot name a report's disposition
   or reason. Lands: when a consumer first switches on them
   exhaustively.
+- `docs/issues/oci-layout-identity-unwitnessed.md` — the OCI layout's
+  identity under the containerd image store (the manifest's digest,
+  which `Image.Archive` returns for that form) is reasoned, not
+  witnessed on a daemon of that store. Lands: when a consumer's run
+  against a daemon using the containerd image store loads an
+  `OCILayout` archive and its reported ID is compared with the
+  manifest digest returned, the log banked beside the issue.

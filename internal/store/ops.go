@@ -25,8 +25,11 @@ const opRecVersion = 1
 // Operation kinds.
 const (
 	opKindExport = "export"
-	opKindSweep  = "sweep"
-	opKindHold   = "hold"
+	// opKindArchive pins an image for an archive's span, as an export
+	// row pins its source.
+	opKindArchive = "archive"
+	opKindSweep   = "sweep"
+	opKindHold    = "hold"
 )
 
 // ErrGone refuses a hold over an image a collection took before it:

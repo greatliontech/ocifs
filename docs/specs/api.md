@@ -162,6 +162,30 @@ of its acquisition, not a reference: content collected from under it
 since (`store.md` REQ-store-gc-collect) fails the export; only a
 by-reference export acquires again.
 
+## Archive
+
+**REQ-api-archive** (behavior): The library MUST offer an archive of
+an image already acquired — pulled or committed — in the form a
+Docker daemon's image store loads, the caller naming the store's:
+for the classic store a `manifest.json` naming the image's
+configuration and its layers, the image's identity there the
+configuration's digest; for the containerd store an OCI image
+layout whose index names the image's manifest, the identity there
+the manifest's digest, the acquisition's own; in either the
+configuration's and each layer's bytes as the store retained them
+(a pulled image's the registry's, compressed as served, which the
+daemon reads by their framing; a committed image's its plain tar),
+written to a caller's writer, the identity the daemon reports as
+the loaded image's ID returned with it; no second resolution and
+no second seam run. The archive carries the image's own
+configuration, so a daemon loading it runs the image as it declares
+itself. The image is a snapshot of its acquisition, pinned for the
+archive's span (`store.md` REQ-store-gc-collect): one a collection
+took before fails the archive as gone, nothing written, and a
+re-acquisition restores it; an archive that fails after its first
+byte — the caller's context ended, its writer refusing — leaves the
+caller holding a partial stream, as any stream does.
+
 ## Hold
 
 **REQ-api-hold** (behavior): The library MUST offer a hold over an

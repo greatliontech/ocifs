@@ -2,8 +2,10 @@ package ocifs
 
 import (
 	"context"
+	"io"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/ocifs/internal/store"
 )
 
 type ExportOption func(*exportReq)
@@ -61,6 +63,29 @@ func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOptio
 // since fails the export rather than being fetched again.
 func (i *Image) Export(ctx context.Context) (string, error) {
 	return i.ofs.store.Export(ctx, i.img)
+}
+
+// ArchiveForm is the form of an archive a daemon's image store
+// loads: DockerArchive for the classic store, OCILayout for the
+// containerd store.
+type ArchiveForm = store.ArchiveForm
+
+const (
+	DockerArchive = store.DockerArchive
+	OCILayout     = store.OCILayout
+)
+
+// Archive writes this image as a daemon's image store loads it, in
+// the form: its configuration and layers as the store retained them,
+// its identity to the daemon for that form returned — the
+// configuration's digest under DockerArchive, the manifest's under
+// OCILayout — which the daemon reports as the loaded image's ID
+// (REQ-api-archive). As for Export, the acquisition that produced
+// the image is the only one; the image is pinned for the archive's
+// span, and one a collection took before fails as ErrGone, nothing
+// written.
+func (i *Image) Archive(ctx context.Context, w io.Writer, form ArchiveForm) (v1.Hash, error) {
+	return i.ofs.store.Archive(ctx, i.img, w, form)
 }
 
 // ExportTo materializes this image's unified view into the caller's
