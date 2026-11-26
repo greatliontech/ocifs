@@ -52,6 +52,7 @@ type settings struct {
 	verifier               Verifier
 	autoGC                 bool
 	gcGrace                time.Duration
+	verifyCachedExports    bool
 }
 
 // Option configures an OCIFS instance at construction time.
@@ -159,6 +160,18 @@ func WithGCGrace(d time.Duration) Option {
 	}
 }
 
+// WithVerifyCachedExports enables full tree and SHA-256 content
+// verification on cached exports and content-CAS blobs before
+// serving: pristine cached exports are served in place, dirtied
+// exports are atomically re-materialized from verified CAS blobs,
+// and corrupted CAS blobs fail closed with ErrIntegrity /
+// *IntegrityError (export.md REQ-export-verify).
+func WithVerifyCachedExports() Option {
+	return func(s *settings) {
+		s.verifyCachedExports = true
+	}
+}
+
 type OCIFS struct {
 	workDir    string
 	extraDirs  []string
@@ -187,14 +200,15 @@ func New(opts ...Option) (*OCIFS, error) {
 		includeDefaultKeychain: cfg.includeDefaultKeychain,
 	}
 	s, err := store.NewStore(store.Config{
-		Path:            cfg.workDir,
-		Auth:            kc,
-		PullPolicy:      cfg.pullPolicy,
-		DefaultPlatform: cfg.defaultPlatform,
-		Verifier:        cfg.verifier,
-		AutoGC:          cfg.autoGC,
-		GCGrace:         cfg.gcGrace,
-		Transport:       cfg.transport,
+		Path:                cfg.workDir,
+		Auth:                kc,
+		PullPolicy:          cfg.pullPolicy,
+		DefaultPlatform:     cfg.defaultPlatform,
+		Verifier:            cfg.verifier,
+		AutoGC:              cfg.autoGC,
+		GCGrace:             cfg.gcGrace,
+		Transport:           cfg.transport,
+		VerifyCachedExports: cfg.verifyCachedExports,
 	})
 	if err != nil {
 		return nil, err

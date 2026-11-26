@@ -915,6 +915,9 @@ var removeTree = forceRemoveTree
 // best-effort top-down chmod makes each directory deletable, then
 // RemoveAll finishes.
 func forceRemoveTree(p string) error {
+	if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	_ = filepath.WalkDir(p, func(q string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -956,8 +959,10 @@ func (s *Store) gcDelete(ctx context.Context, key string) error {
 var removeMountState = os.RemoveAll
 
 // removeOpTemp is removeMountState's sibling for a dead op's
-// recorded temporaries. Never reassigned outside tests.
-var removeOpTemp = os.RemoveAll
+// recorded temporaries (using forceRemoveTree so read-only 0555/0500
+// directories inside crashed export temporaries are deletable). Never
+// reassigned outside tests.
+var removeOpTemp = forceRemoveTree
 
 // dbView is the read-transaction entry every liveness-adjacent
 // verdict read goes through — a variable only so the
@@ -1127,7 +1132,7 @@ func (s *Store) DebrisSweep(ctx context.Context) (*GCResult, error) {
 				if strings.HasPrefix(e.Name(), ".export-") {
 					p := filepath.Join(exportsRoot, a.Name(), e.Name())
 					if !s.tempOwnedByLiveOp(ctx, p) {
-						if err := os.RemoveAll(p); err == nil {
+						if err := forceRemoveTree(p); err == nil {
 							res.CollectedPaths = append(res.CollectedPaths, p)
 						}
 					}

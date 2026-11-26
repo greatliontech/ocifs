@@ -113,7 +113,23 @@ errors are not reordered behind the context's.
 the store's `exports/` tier, keyed by the digest of the manifest
 actually materialized (the platform-selected child, so distinct
 platforms of one index key distinct exports); because images are
-immutable, an existing entry for a digest MUST be served as-is,
-without re-materialization. Cached exports are shared: consumers
-treat them as read-only; a consumer needing a writable tree makes
-its own copy or uses its own target directory.
+immutable, by default an existing entry for a digest MUST be served
+as-is, without re-materialization. Cached exports are shared:
+consumers treat them as read-only; a consumer needing a writable tree
+makes its own copy or uses its own target directory.
+
+**REQ-export-verify** (behavior): When verified export is enabled at
+store construction or requested on an export call, an existing
+store-managed cached export MUST be verified inside `os.Root` against
+the unified view before serving — checking that every materializable
+entry exists at its path with matching node type, Unix permissions,
+symlink target, file size, and SHA-256 content digest, and that zero
+extra entries exist anywhere in the tree, honoring context
+cancellation throughout. A pristine cached export is served in place;
+a missing or dirtied cached export is atomically re-materialized after
+verifying that every referenced content-CAS blob hashes to its digest
+(condemning any dirtied directory to an `ops`-owned `.export-*`
+sibling before removal per `store.md` REQ-store-gc-collect); and if a
+referenced content-CAS blob's bytes do not hash to its digest, export
+fails closed with a distinguishable integrity error without mutating
+the store's content tiers (REQ-export-immutable).

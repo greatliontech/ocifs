@@ -102,8 +102,9 @@ type Store struct {
 	// autoGC and gcGrace configure automatic collection
 	// (REQ-store-gc-collect); construction-time knobs
 	// (api.md REQ-api-construction).
-	autoGC  bool
-	gcGrace time.Duration
+	autoGC              bool
+	gcGrace             time.Duration
+	verifyCachedExports bool
 }
 
 // ingestLocks maps a cleaned store root to its in-process ingest
@@ -181,6 +182,11 @@ type Config struct {
 	// registry client's own transport, which wraps a given one for
 	// its retries as well.
 	Transport http.RoundTripper
+	// VerifyCachedExports requires cached exports and CAS blobs to be
+	// digest- and tree-verified before serving, atomically healing
+	// dirtied exports or failing closed with ErrIntegrity on corrupt
+	// store blobs.
+	VerifyCachedExports bool
 }
 
 // NewStore opens or creates the store at cfg.Path; a Config naming
@@ -269,18 +275,19 @@ func NewStore(cfg Config) (*Store, error) {
 	}
 
 	st := &Store{
-		path:            path,
-		auth:            cfg.Auth,
-		pullPolicy:      cfg.PullPolicy,
-		transport:       cfg.Transport,
-		defaultPlatform: platform,
-		bk:              bk,
-		cas:             contentCAS,
-		autoGC:          cfg.AutoGC,
-		gcGrace:         cfg.GCGrace,
-		ociDir:          ociDir,
-		verifier:        cfg.Verifier,
-		ingestMu:        ingestLockFor(path),
+		path:                path,
+		auth:                cfg.Auth,
+		pullPolicy:          cfg.PullPolicy,
+		transport:           cfg.Transport,
+		defaultPlatform:     platform,
+		bk:                  bk,
+		cas:                 contentCAS,
+		autoGC:              cfg.AutoGC,
+		gcGrace:             cfg.GCGrace,
+		ociDir:              ociDir,
+		verifier:            cfg.Verifier,
+		ingestMu:            ingestLockFor(path),
+		verifyCachedExports: cfg.VerifyCachedExports,
 	}
 	bk.s = st
 	// Store initialization is a debris transition: dead mount and
@@ -621,6 +628,18 @@ func (s *Store) remoteOpts(ctx context.Context) []remote.Option {
 		opts = append(opts, remote.WithTransport(s.transport))
 	}
 	return opts
+}
+
+// RemoteOpts returns go-containerregistry remote options configured
+// with ctx, the store's keychain, and any custom transport.
+func (s *Store) RemoteOpts(ctx context.Context) []remote.Option {
+	return s.remoteOpts(ctx)
+}
+
+// Transport returns the custom registry RoundTripper configured on the
+// store, or nil when using the registry client's default transport.
+func (s *Store) Transport() http.RoundTripper {
+	return s.transport
 }
 
 // fetcher fetches store content by digest from the request's

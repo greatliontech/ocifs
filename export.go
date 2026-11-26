@@ -8,11 +8,18 @@ import (
 	"github.com/greatliontech/ocifs/internal/store"
 )
 
+// IntegrityError and ErrIntegrity classify unrecoverable content-CAS
+// corruption detected during verified export (export.md REQ-export-verify).
+type IntegrityError = store.IntegrityError
+
+var ErrIntegrity = store.ErrIntegrity
+
 type ExportOption func(*exportReq)
 
 type exportReq struct {
 	target   string
 	platform *v1.Platform
+	verify   bool
 }
 
 // ExportWithTargetPath exports into the caller's own directory,
@@ -32,13 +39,24 @@ func ExportWithPlatform(p v1.Platform) ExportOption {
 	}
 }
 
+// ExportWithVerify verifies the cached export tree (or CAS blobs for
+// a caller-supplied target) against the image's unified view and
+// SHA-256 content digests for this export call, healing a dirtied
+// cached export atomically or failing closed with ErrIntegrity.
+func ExportWithVerify() ExportOption {
+	return func(r *exportReq) {
+		r.verify = true
+	}
+}
+
 // Export materializes imageRef's unified view into a real directory
 // tree per docs/specs/export.md — acquisition follows the pull
 // policy and runs the verification seam like any acquisition — and
 // returns the export root: the caller's target when one was given,
 // otherwise the store-managed cache entry for the materialized
-// manifest digest, served as-is when it already exists. Cached
-// exports are shared: treat them as read-only.
+// manifest digest, served as-is when it already exists (or verified
+// when WithVerifyCachedExports or ExportWithVerify is enabled).
+// Cached exports are shared: treat them as read-only.
 func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOption) (string, error) {
 	var r exportReq
 	for _, opt := range opts {
@@ -50,21 +68,38 @@ func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOptio
 	if err != nil {
 		return "", err
 	}
+	wrapped := o.newImage(img)
 	if r.target == "" {
-		return o.newImage(img).Export(ctx)
+		if r.verify {
+			return wrapped.ExportVerified(ctx)
+		}
+		return wrapped.Export(ctx)
 	}
-	return o.newImage(img).ExportTo(ctx, r.target)
+	if r.verify {
+		return wrapped.ExportVerifiedTo(ctx, r.target)
+	}
+	return wrapped.ExportTo(ctx, r.target)
 }
 
 // Export materializes this image's unified view into the
 // store-managed export cache and returns the export root (served
-// as-is when the entry already exists, REQ-export-cache). The image
+// as-is when the entry already exists unless WithVerifyCachedExports
+// was configured at construction, REQ-export-cache). The image
 // was resolved and verified when it was acquired; nothing is
 // resolved or verified again (REQ-api-export). The handle is a
 // snapshot of that acquisition: content collected from under it
 // since fails the export rather than being fetched again.
 func (i *Image) Export(ctx context.Context) (string, error) {
 	return i.ofs.store.Export(ctx, i.img)
+}
+
+// ExportVerified verifies an existing store-managed cached export
+// against this image's unified view and SHA-256 digests — serving it
+// in place when pristine, atomically re-materializing it from
+// verified CAS blobs when dirtied, and failing closed with
+// ErrIntegrity when CAS blobs are corrupt (REQ-export-verify).
+func (i *Image) ExportVerified(ctx context.Context) (string, error) {
+	return i.ofs.store.ExportVerified(ctx, i.img)
 }
 
 // ArchiveForm is the form of an archive a daemon's image store
@@ -100,6 +135,20 @@ func (i *Image) ExportTo(ctx context.Context, dir string) (string, error) {
 		return "", err
 	}
 	if err := i.ofs.store.ExportTo(ctx, view, dir, i.img.Hash()); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// ExportVerifiedTo materializes this image's unified view into dir
+// (which must not exist yet) after verifying all referenced CAS blobs
+// hash to their SHA-256 digests.
+func (i *Image) ExportVerifiedTo(ctx context.Context, dir string) (string, error) {
+	view, err := i.img.Unify()
+	if err != nil {
+		return "", err
+	}
+	if err := i.ofs.store.ExportVerifiedTo(ctx, view, dir, i.img.Hash()); err != nil {
 		return "", err
 	}
 	return dir, nil

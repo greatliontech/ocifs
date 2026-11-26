@@ -231,7 +231,7 @@ func main() {
 	}
 	build := exec.Command("go", "build", "-o", filepath.Join(tmp, "payload"), ".")
 	build.Dir = tmp
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("payload build: %v\n%s", err, out)
 	}

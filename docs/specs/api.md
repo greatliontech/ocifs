@@ -3,13 +3,15 @@
 The `ocifs` repository exposes two Go modules: the root `ocifs`
 module (`github.com/greatliontech/ocifs`), providing store
 initialization, credential resolution, image acquisition, resolution,
-export, archive, commit, holds, removal, and garbage collection with
-zero filesystem-mount dependencies; and the nested `mount` module
-(`github.com/greatliontech/ocifs/mount`), providing live filesystem
-projection mounting, mount-report inspection, and the `ocifs`
-(`mount/cmd/ocifs`) and `ocifs-fskit` (`mount/cmd/ocifs-fskit`) CLIs.
-This spec pins the observable behavior of both surfaces; Go shapes
-(option names, signatures) live in the code and its doc comments.
+signature-carrier discovery, deterministic image-index building and
+publishing, export, archive, commit, holds, removal, and garbage
+collection with zero filesystem-mount dependencies; and the nested
+`mount` module (`github.com/greatliontech/ocifs/mount`), providing
+live filesystem projection mounting, mount-report inspection, and the
+`ocifs` (`mount/cmd/ocifs`) and `ocifs-fskit`
+(`mount/cmd/ocifs-fskit`) CLIs. This spec pins the observable behavior
+of both surfaces; Go shapes (option names, signatures) live in the
+code and its doc comments.
 
 ## Construction
 
@@ -23,10 +25,11 @@ semantics in `store.md`); a default platform (default derived from
 the host — semantics and the darwin fallback in `store.md`);
 automatic garbage collection on or off (default on); the collection
 retention grace (default 24h) — both per `store.md`
-REQ-store-gc-collect; and a registry transport, through which every
-registry round trip goes — the registry client's own by default,
-which wraps a given one for its retries as well — for a consumer
-that serves a registry in-process or pins its client. Construction
+REQ-store-gc-collect; verified cached exports on or off (default
+off, per `export.md` REQ-export-verify); and a registry transport,
+through which every registry round trip goes — the registry client's
+own by default, which wraps a given one for its retries as well — for
+a consumer that serves a registry in-process or pins its client. Construction
 options apply only at construction and cannot mutate a constructed
 store. Construction initializes the store — including its bookkeeping
 database — and fails if the store cannot be initialized; a Close
@@ -40,10 +43,13 @@ path-segment boundary — the target equals the prefix or continues
 with `/`. A prefix never matches inside a segment: credentials
 scoped to `r.io/team` must not be sent for `r.io/teammate`, a
 foreign repository whose name merely extends the string. With no
-match, the default keychain applies if enabled, else anonymous.
-Resolution is deterministic — overlapping prefixes never resolve
-differently across calls. The same resolution is available to the
-consumer for round trips it makes itself.
+match, the default keychain applies if enabled — reading ambient
+Docker and Podman configuration, honoring caller context cancellation
+across credential helper subprocesses, rejecting path-traversal helper
+names, and bounding helper output — else anonymous. Resolution is
+deterministic — overlapping prefixes never resolve differently across
+calls. The same resolution is available to the consumer for round
+trips it makes itself.
 
 ## Image acquisition and resolution
 
@@ -256,6 +262,39 @@ can open the store, so no unjudgeable class exists to report, and
 the report's type is the library's own to name, so a consumer can
 spell what it holds the collection to. The CLI exposes the same
 verb.
+
+## Signature-carrier discovery and deterministic publishing
+
+**REQ-api-carriers** (behavior): The library MUST offer lazy,
+deterministic discovery of OCI signature carriers for a digest at its
+repository: Sigstore bundle referrers (`dev.sigstore.bundle.v0.3+json`
+attesting `https://sigstore.dev/cosign/sign/v1`, sorted by referrer
+digest), followed by legacy cosign signature referrers
+(`dev.cosign.artifact.sig.v1+json`, sorted by referrer digest,
+simple-signing layers in manifest order), followed by the legacy
+`<algorithm>-<hex>.sig` signature tag's simple-signing layers, working
+across both the OCI Referrers API and its fallback tag. Each carrier
+is fetched only as the caller advances the iterator, bounded at 4 MiB
+per carrier layer; absent tags and stale 404 referrer manifests are
+ignored as non-evidence, while malformed or oversized carriers surface
+a distinguishable rejected-carrier error without halting iteration
+over subsequent valid carriers.
+
+**REQ-api-publish** (behavior): The library MUST offer
+container-engine-free assembly and publishing of deterministic
+multi-platform OCI image indexes from per-platform directory trees:
+entries are serialized in canonical sorted slash-path PAX tar order
+owned by `0:0` at Unix epoch `0` with `0755` on directories and
+declared executables (the entrypoint included) and `0644` on all other
+regular files, independent of host permission bits or timestamps,
+refusing symlinks, special files, and case-colliding paths inside
+platform trees. Each platform image builds either from scratch
+(`65534:65534`, working directory `/`) or over an explicit
+digest-pinned base image or index matching `<os>/<arch>` (propagating
+`OSVersion` and `Variant`), assembled in sorted `<os>/<arch>` order. Publishing to an explicit tag reference returns
+`Unchanged` without re-uploading when the tag already holds the built
+digest, and refuses with a distinguishable tag-taken error when the
+tag holds another digest unless `Force` is explicitly requested.
 
 ## CLI
 
