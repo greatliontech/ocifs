@@ -19,6 +19,8 @@ github.com/greatliontech/fskit-go v0.0.0-20260620205607-69c8738759fc h1:P9RoDG/h
 github.com/greatliontech/fskit-go v0.0.0-20260620205607-69c8738759fc/go.mod h1:boXSp+IJT/d4SRQCJfd8zKmKVqNSv3w4PaANkI9K1zQ=
 github.com/greatliontech/gmdb v0.5.4 h1:+SEdjIJKoTrmMPY9/dp/UflOwHstv+IFRPeUE1QUDnk=
 github.com/greatliontech/gmdb v0.5.4/go.mod h1:CJu3Qd3W9XbT/vB8sVOUZBjrqmY9ULxVmJHSrHLeOgE=
+github.com/greatliontech/ocifs v0.13.1 h1:eOGURx4yYQqUYQR8PBBhO+XCBOXQAOGsSBZRYhDT7MM=
+github.com/greatliontech/ocifs v0.13.1/go.mod h1:mRTmjJ3W5Iloth6MNuOMw8me6jc02aVcHxrl2CkphKg=
 github.com/greatliontech/projfs-go v0.0.0-20260525064235-9bffba15968f h1:ULmJKRCC/FL9qFX1C2vlBC5ZOUnijeKaLCbrwx/iZQI=
 github.com/greatliontech/projfs-go v0.0.0-20260525064235-9bffba15968f/go.mod h1:sCgbiWNeAJbqqg8yp0ywR2XTc59q8hpZJ8nzm538dnc=
 github.com/hanwen/go-fuse/v2 v2.12.1 h1:b6NXOPCraS9NvN4vtHZXDN1nsNKdoDlyafWxWnuO30Q=

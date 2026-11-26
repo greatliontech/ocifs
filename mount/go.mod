@@ -7,7 +7,7 @@ require (
 	github.com/google/go-containerregistry v0.22.0
 	github.com/greatliontech/fskit-go v0.0.0-20260620205607-69c8738759fc
 	github.com/greatliontech/gmdb v0.5.4
-	github.com/greatliontech/ocifs v0.13.0
+	github.com/greatliontech/ocifs v0.13.1
 	github.com/greatliontech/projfs-go v0.0.0-20260525064235-9bffba15968f
 	github.com/hanwen/go-fuse/v2 v2.12.1
 	github.com/spf13/cobra v1.10.2
