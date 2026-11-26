@@ -1,6 +1,6 @@
 //go:build windows && amd64
 
-package ocifs
+package mount
 
 import (
 	"archive/tar"
@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs"
 )
 
 // TestMountWindowsEndToEnd exercises the full windows path — pull
@@ -74,14 +75,14 @@ func TestMountWindowsEndToEnd(t *testing.T) {
 	}
 
 	work := filepath.Join(t.TempDir(), "work")
-	ofs, err := New(WithWorkDir(work), WithExtraDirs([]string{"anchor"}))
+	ofs, err := ocifs.New(ocifs.WithWorkDir(work), ocifs.WithExtraDirs([]string{"anchor"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The store's handles close before the test directory goes:
 	// windows removes no open file.
 	defer ofs.Close()
-	im, err := ofs.Mount(refStr, MountWithID("win-e2e"))
+	im, err := Mount(ofs, refStr, WithID("win-e2e"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestMountWindowsEndToEnd(t *testing.T) {
 		t.Fatalf("extra dir: %v %v", fi, err)
 	}
 
-	rep, published, err := ofs.MountReport("win-e2e")
+	rep, published, err := ReportOf(ofs, "win-e2e")
 	if err != nil || rep.Entries == nil || !published {
 		t.Fatalf("report: %+v published=%v %v", rep, published, err)
 	}

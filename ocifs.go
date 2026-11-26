@@ -1,5 +1,10 @@
-// Package ocifs mounts OCI images as read-only filesystems. The
-// public surface is pinned by docs/specs/api.md; construction
+// Package ocifs acquires, verifies, caches, exports, archives, and
+// commits OCI images over a crash-safe local store. Live filesystem
+// projection mounting (FUSE, FSKit, ProjFS) lives in the sibling
+// github.com/greatliontech/ocifs/mount module so consumers of the
+// store and export surface carry zero mount-backend dependencies.
+//
+// The public surface is pinned by docs/specs/api.md; construction
 // configures the store root, credentials, pull policy, default
 // platform, and an optional verification hook
 // (docs/specs/verification-seam.md), acquisition works by reference
@@ -11,16 +16,14 @@ package ocifs
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/greatliontech/gmdb/oslock"
-	"github.com/greatliontech/ocifs/internal/projection"
 
 	"github.com/greatliontech/ocifs/internal/store"
 )
@@ -35,23 +38,41 @@ const (
 	PullNever        = store.PullNever
 )
 
-type Option func(*OCIFS)
+// settings holds construction-only configuration populated by Option
+// values inside New, making post-construction option mutation
+// unrepresentable (REQ-api-construction).
+type settings struct {
+	workDir                string
+	extraDirs              []string
+	creds                  map[string]authn.AuthConfig
+	includeDefaultKeychain bool
+	transport              http.RoundTripper
+	pullPolicy             PullPolicy
+	defaultPlatform        v1.Platform
+	verifier               Verifier
+	autoGC                 bool
+	gcGrace                time.Duration
+}
 
-var WithWorkDir = func(workDir string) Option {
-	return func(o *OCIFS) {
-		o.workDir = filepath.Clean(workDir)
+// Option configures an OCIFS instance at construction time.
+type Option func(*settings)
+
+func WithWorkDir(workDir string) Option {
+	return func(s *settings) {
+		s.workDir = filepath.Clean(workDir)
 	}
 }
 
-var WithExtraDirs = func(extraDirs []string) Option {
-	return func(o *OCIFS) {
-		o.extraDirs = extraDirs
+func WithExtraDirs(extraDirs []string) Option {
+	cloned := slices.Clone(extraDirs)
+	return func(s *settings) {
+		s.extraDirs = slices.Clone(cloned)
 	}
 }
 
-var WithAuthSource = func(prefix string, auth authn.AuthConfig) Option {
-	return func(o *OCIFS) {
-		o.authn.creds[prefix] = auth
+func WithAuthSource(prefix string, auth authn.AuthConfig) Option {
+	return func(s *settings) {
+		s.creds[prefix] = auth
 	}
 }
 
@@ -60,22 +81,22 @@ var WithAuthSource = func(prefix string, auth authn.AuthConfig) Option {
 // for its retries as well: a consumer that serves a registry
 // in-process, or pins its client, hands it here (api.md
 // REQ-api-construction).
-var WithTransport = func(rt http.RoundTripper) Option {
-	return func(o *OCIFS) {
-		o.transport = rt
+func WithTransport(rt http.RoundTripper) Option {
+	return func(s *settings) {
+		s.transport = rt
 	}
 }
 
-var WithEnableDefaultKeychain = func() Option {
-	return func(o *OCIFS) {
-		o.authn.includeDefaultKeychain = true
+func WithEnableDefaultKeychain() Option {
+	return func(s *settings) {
+		s.includeDefaultKeychain = true
 	}
 }
 
 // WithPullPolicy sets the pull policy (default PullIfNotPresent).
-var WithPullPolicy = func(p PullPolicy) Option {
-	return func(o *OCIFS) {
-		o.pullPolicy = p
+func WithPullPolicy(p PullPolicy) Option {
+	return func(s *settings) {
+		s.pullPolicy = p
 	}
 }
 
@@ -83,9 +104,9 @@ var WithPullPolicy = func(p PullPolicy) Option {
 // names none. Unset, the default derives from the host: its os/arch,
 // except on darwin, where it is linux with the host's architecture
 // (docs/specs/store.md REQ-store-platform-default).
-var WithDefaultPlatform = func(p v1.Platform) Option {
-	return func(o *OCIFS) {
-		o.defaultPlatform = p
+func WithDefaultPlatform(p v1.Platform) Option {
+	return func(s *settings) {
+		s.defaultPlatform = p
 	}
 }
 
@@ -113,31 +134,18 @@ type VerificationError = store.VerificationError
 
 // WithVerifier configures the verification seam's hook
 // (docs/specs/verification-seam.md).
-var WithVerifier = func(v Verifier) Option {
-	return func(o *OCIFS) {
-		o.verifier = v
+func WithVerifier(v Verifier) Option {
+	return func(s *settings) {
+		s.verifier = v
 	}
-}
-
-type OCIFS struct {
-	workDir         string
-	extraDirs       []string
-	authn           *ocifsKeychain
-	transport       http.RoundTripper
-	pullPolicy      PullPolicy
-	defaultPlatform v1.Platform
-	verifier        Verifier
-	store           *store.Store
-	autoGC          bool
-	gcGrace         time.Duration
 }
 
 // WithAutoGC turns automatic collection at garbage-creating
 // transitions on or off (default on — store.md
 // REQ-store-gc-collect).
-var WithAutoGC = func(on bool) Option {
-	return func(o *OCIFS) {
-		o.autoGC = on
+func WithAutoGC(on bool) Option {
+	return func(s *settings) {
+		s.autoGC = on
 	}
 }
 
@@ -145,41 +153,72 @@ var WithAutoGC = func(on bool) Option {
 // (default 24h): blobs are content-addressed and shared, so
 // unreachable content still deduplicates a future pull. Pure
 // retention policy, never load-bearing for safety.
-var WithGCGrace = func(d time.Duration) Option {
-	return func(o *OCIFS) {
-		o.gcGrace = d
+func WithGCGrace(d time.Duration) Option {
+	return func(s *settings) {
+		s.gcGrace = d
 	}
 }
 
+type OCIFS struct {
+	workDir    string
+	extraDirs  []string
+	authn      *ocifsKeychain
+	pullPolicy PullPolicy
+	store      *store.Store
+	gcGrace    time.Duration
+}
+
 func New(opts ...Option) (*OCIFS, error) {
-	// default values
-	ofs := &OCIFS{
-		workDir: filepath.Join(os.TempDir(), "ocifs"),
-		authn: &ocifsKeychain{
-			creds: make(map[string]authn.AuthConfig),
-		},
+	cfg := settings{
+		workDir:    filepath.Join(os.TempDir(), "ocifs"),
+		creds:      make(map[string]authn.AuthConfig),
 		pullPolicy: PullIfNotPresent,
 		autoGC:     true,
 		gcGrace:    24 * time.Hour,
 	}
-
-	// apply options
 	for _, opt := range opts {
-		opt(ofs)
+		if opt != nil {
+			opt(&cfg)
+		}
 	}
 
-	// initialize store
-	s, err := store.NewStore(store.Config{Path: ofs.workDir, Auth: ofs.authn, PullPolicy: ofs.pullPolicy, DefaultPlatform: ofs.defaultPlatform, Verifier: ofs.verifier, AutoGC: ofs.autoGC, GCGrace: ofs.gcGrace, Transport: ofs.transport})
+	kc := &ocifsKeychain{
+		creds:                  cfg.creds,
+		includeDefaultKeychain: cfg.includeDefaultKeychain,
+	}
+	s, err := store.NewStore(store.Config{
+		Path:            cfg.workDir,
+		Auth:            kc,
+		PullPolicy:      cfg.pullPolicy,
+		DefaultPlatform: cfg.defaultPlatform,
+		Verifier:        cfg.verifier,
+		AutoGC:          cfg.autoGC,
+		GCGrace:         cfg.gcGrace,
+		Transport:       cfg.transport,
+	})
 	if err != nil {
 		return nil, err
 	}
-	ofs.store = s
 
-	return ofs, nil
+	return &OCIFS{
+		workDir:    cfg.workDir,
+		extraDirs:  slices.Clone(cfg.extraDirs),
+		authn:      kc,
+		pullPolicy: cfg.pullPolicy,
+		store:      s,
+		gcGrace:    cfg.gcGrace,
+	}, nil
+}
+
+// MountState exposes the underlying store handle, workDir, and
+// extraDirs to github.com/greatliontech/ocifs/mount without leaking
+// internal types to external consumers.
+func (o *OCIFS) MountState(store.Internal) (st *store.Store, workDir string, extraDirs []string) {
+	return o.store, o.workDir, slices.Clone(o.extraDirs)
 }
 
 // Image is a materialized image: the platform-selected manifest and
-// its config, ready to mount or export. It remembers the store that
+// its config, ready to export or archive. It remembers the store that
 // materialized it, so an export of it is the same acquisition
 // continued — no second resolution, no second seam run. Every Image
 // is made by newImage, so none exists without its store.
@@ -210,7 +249,7 @@ type pullReq struct {
 
 // PullWithPlatform requests an explicit platform: index selection is
 // strict, and a direct manifest must match (REQ-store-platform-strict).
-var PullWithPlatform = func(p v1.Platform) PullOption {
+func PullWithPlatform(p v1.Platform) PullOption {
 	return func(r *pullReq) {
 		r.platform = &p
 	}
@@ -223,7 +262,9 @@ var PullWithPlatform = func(p v1.Platform) PullOption {
 func (o *OCIFS) Pull(ctx context.Context, imageRef string, opts ...PullOption) (*Image, error) {
 	var r pullReq
 	for _, opt := range opts {
-		opt(&r)
+		if opt != nil {
+			opt(&r)
+		}
 	}
 	img, err := o.store.Image(ctx, imageRef, r.platform)
 	if err != nil {
@@ -254,7 +295,7 @@ type resolveReq struct {
 // store's, for this call alone (api.md REQ-api-resolve): a consumer
 // re-resolving a reference it holds cached asks Always of the one
 // call. A store held at Never grants no call a policy past it.
-var ResolveUnder = func(p PullPolicy) ResolveOption {
+func ResolveUnder(p PullPolicy) ResolveOption {
 	return func(r *resolveReq) {
 		r.policy = p
 	}
@@ -271,246 +312,15 @@ var ResolveUnder = func(p PullPolicy) ResolveOption {
 func (o *OCIFS) Resolve(ctx context.Context, imageRef string, opts ...ResolveOption) (*Resolved, error) {
 	r := resolveReq{policy: o.pullPolicy}
 	for _, opt := range opts {
-		opt(&r)
+		if opt != nil {
+			opt(&r)
+		}
 	}
 	h, err := o.store.ResolveUnder(ctx, imageRef, r.policy)
 	if err != nil {
 		return nil, err
 	}
 	return &Resolved{Reference: imageRef, Digest: h}, nil
-}
-
-// mountServer is what a platform backend returns from platformMount:
-// a live projection that serves until unmounted.
-type mountServer interface {
-	Wait()
-	Unmount() error
-}
-
-type ImageMount struct {
-	ofs        *OCIFS
-	server     mountServer
-	img        *store.Image
-	mountPoint string
-	id         string
-	ctx        context.Context
-	platform   *v1.Platform
-	upperDir   string
-	upperName  string
-	// upperRoot is the resolved upper the mount serves ("" for a
-	// read-only mount); the named upper's one-writable-mount
-	// arbitration is the upper claim lock inside claim.
-	upperRoot string
-	// claim is the mount's held claim (store.md held-lock
-	// liveness): acquired before the registry row, held for the
-	// serve, retired at deregistration.
-	claim *store.MountClaim
-}
-
-func (im *ImageMount) ConfigFile() *v1.ConfigFile {
-	return im.img.ConfigFile()
-}
-
-func (im *ImageMount) Wait() {
-	im.server.Wait()
-}
-
-func (im *ImageMount) Unmount() error {
-	err := im.server.Unmount()
-	// Deregistration only when the mount actually stopped serving —
-	// a failed unmount keeps the row and the held claim, and with
-	// them the named upper's one-writable-mount refusal, in force
-	// (REQ-store-mount-registry).
-	if err == nil {
-		if derr := im.ofs.store.DeregisterMount(context.Background(), im.id, im.claim); derr != nil {
-			return derr
-		}
-		// Unmount is a garbage-creating transition
-		// (REQ-store-gc-collect).
-		im.ofs.store.AutoCollect(context.Background())
-	}
-	return err
-}
-
-func (im *ImageMount) MountPoint() string {
-	return im.mountPoint
-}
-
-type MountOption func(*ImageMount)
-
-var MountWithTargetPath = func(targetPath string) MountOption {
-	return func(im *ImageMount) {
-		im.mountPoint = targetPath
-	}
-}
-
-var MountWithID = func(id string) MountOption {
-	return func(im *ImageMount) {
-		im.id = id
-	}
-}
-
-var MountWithContext = func(ctx context.Context) MountOption {
-	return func(im *ImageMount) {
-		im.ctx = ctx
-	}
-}
-
-// MountWithPlatform mounts an explicit platform; selection semantics
-// match PullWithPlatform.
-var MountWithPlatform = func(p v1.Platform) MountOption {
-	return func(im *ImageMount) {
-		im.platform = &p
-	}
-}
-
-// MountWithUpperDir serves the writable merged projection over a
-// caller-supplied upper directory (writable.md); the upper outlives
-// the mount — unmount leaves it intact for remounting or commit
-// (REQ-api-mount-writable).
-var MountWithUpperDir = func(dir string) MountOption {
-	return func(im *ImageMount) {
-		im.upperDir = dir
-	}
-}
-
-// MountWithNamedUpper serves the writable merged projection over a
-// store-managed upper, created on first use and bound to the mounted
-// image's digest; a mount against a different base is refused
-// (REQ-api-mount-writable, REQ-writable-base-binding).
-var MountWithNamedUpper = func(name string) MountOption {
-	return func(im *ImageMount) {
-		im.upperName = name
-	}
-}
-
-// UpperPath returns the upper directory a writable mount serves
-// ("" for a read-only mount) — the path to hand to Commit.
-func (im *ImageMount) UpperPath() string { return im.upperRoot }
-
-func (o *OCIFS) Mount(imgRef string, opts ...MountOption) (*ImageMount, error) {
-	im := &ImageMount{
-		ofs: o,
-		ctx: context.Background(),
-	}
-	for _, opt := range opts {
-		opt(im)
-	}
-
-	if im.upperDir != "" && im.upperName != "" {
-		return nil, fmt.Errorf("mount takes at most one upper: MountWithUpperDir or MountWithNamedUpper")
-	}
-
-	// Acquire the image before creating any per-mount state, so a
-	// failed pull leaves no orphan under mounts/.
-	img, err := o.store.Image(im.ctx, imgRef, im.platform)
-	if err != nil {
-		return nil, err
-	}
-	im.img = img
-
-	// A named upper's serve claim comes FIRST — before the upper's
-	// tree or base binding is touched (writable.md
-	// REQ-writable-base-binding: the lock is acquired before any
-	// bookkeeping write) — so a concurrent RemoveUpper can never
-	// interleave with an upper being brought up. Ownership passes
-	// to the registration below, which releases it on any failure.
-	var upperClaim *oslock.Lock
-	if im.upperName != "" {
-		upperClaim, err = o.store.ClaimUpper(im.upperName)
-		if err != nil {
-			return nil, err
-		}
-	}
-	defer func() {
-		// Released here only if the claim never reached the
-		// registration (an error between claim and register).
-		if im.claim == nil && upperClaim != nil {
-			upperClaim.Close()
-		}
-	}()
-
-	// Resolve the upper: the caller's directory as given, or the
-	// store-managed named upper — created on first use under the
-	// held claim, its base binding validated against this image
-	// (REQ-api-mount-writable). Platform-split: the writable stage
-	// serves FUSE.
-	if err := platformResolveUpper(o, im, img); err != nil {
-		return nil, err
-	}
-
-	view, err := img.Unify()
-	if err != nil {
-		return nil, err
-	}
-
-	// Every mount owns per-mount state — the projection report's home
-	// (REQ-proj-report) — whether or not the caller supplied a
-	// mountpoint. Removed again on any later failure (im.server is
-	// set only on success); a caller-supplied target is caller-owned
-	// and never touched.
-	stateDir, mountDir, err := o.store.NewMountState(im.id)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if im.server == nil {
-			os.RemoveAll(stateDir)
-		}
-	}()
-	if im.mountPoint == "" {
-		im.mountPoint = mountDir
-	}
-
-	im.mountPoint = filepath.Clean(im.mountPoint)
-	if !filepath.IsAbs(im.mountPoint) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-		im.mountPoint = filepath.Clean(filepath.Join(cwd, im.mountPoint))
-	}
-
-	// The mount's claim and bookkeeping record (store.md held-lock
-	// liveness, REQ-store-bookkeeping mounts keyspace): lock before
-	// row, held for the serve; the projection report joins the row
-	// once built. A failed attempt leaves no row and no held claim
-	// (REQ-store-mount-registry).
-	im.id = filepath.Base(stateDir)
-	claim, err := o.store.RegisterMountRecordArbitrated(context.Background(), im.id, img.Hash(), im.upperName, im.mountPoint, upperClaim)
-	upperClaim = nil // ownership transferred, success or failure
-	if err != nil {
-		return nil, err
-	}
-	im.claim = claim
-	defer func() {
-		if im.server == nil {
-			o.store.DeregisterMount(context.Background(), im.id, im.claim)
-		}
-	}()
-
-	srv, err := platformMount(o, imgRef, img, view, im.id, stateDir, im.mountPoint, im.upperRoot)
-	if err != nil {
-		return nil, err
-	}
-	im.server = srv
-
-	return im, nil
-}
-
-// MountReport reads a mount's projection report from its
-// bookkeeping record (projection.md REQ-proj-report: enumerable by
-// the consumer through the store). The second return reports
-// whether the report has been published (store.md
-// REQ-store-bookkeeping): false means the mount is registered but
-// its projection has not yet published — an empty report then
-// promises nothing about omissions.
-func (o *OCIFS) MountReport(id string) (projection.Report, bool, error) {
-	rec, err := o.store.MountRecord(context.Background(), id)
-	if err != nil {
-		return projection.Report{}, false, err
-	}
-	return rec.Report, rec.Published, nil
 }
 
 // Keychain is the store's credential resolution (api.md
@@ -534,7 +344,7 @@ type GCOption func(*store.CollectOpts)
 // GCIgnoreGrace collects unreachable content regardless of age —
 // the wipe-now operator intent automatic collection deliberately
 // does not serve (api.md REQ-api-gc).
-var GCIgnoreGrace = func() GCOption {
+func GCIgnoreGrace() GCOption {
 	return func(o *store.CollectOpts) {
 		o.Grace = -1
 	}
@@ -554,7 +364,9 @@ type GCResult = store.GCResult
 func (o *OCIFS) GC(ctx context.Context, opts ...GCOption) (*GCResult, error) {
 	co := store.CollectOpts{Grace: o.gcGrace}
 	for _, opt := range opts {
-		opt(&co)
+		if opt != nil {
+			opt(&co)
+		}
 	}
 	return o.store.Collect(ctx, co)
 }

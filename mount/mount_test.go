@@ -1,6 +1,6 @@
 //go:build linux
 
-package ocifs
+package mount
 
 import (
 	"archive/tar"
@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 
 	"golang.org/x/sys/unix"
@@ -36,7 +37,7 @@ var fixtureMtime = time.Date(2020, 3, 4, 5, 6, 7, 0, time.UTC)
 // image reference and the work dir. The image exercises the linux
 // fidelity envelope: a directory with distinctive mode/owner/time,
 // file content, a verbatim symlink, and a FIFO.
-func fixtureEnv(t *testing.T, scratchName string) (*OCIFS, string, string) {
+func fixtureEnv(t *testing.T, scratchName string) (*ocifs.OCIFS, string, string) {
 	t.Helper()
 	skipUnderMutationCampaign(t)
 	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
@@ -103,17 +104,17 @@ func fixtureEnv(t *testing.T, scratchName string) (*OCIFS, string, string) {
 	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-"+scratchName))
 	work := filepath.Join(scratch, "work")
 
-	ofs, err := New(WithWorkDir(work), WithExtraDirs([]string{"proc", "x/y"}))
+	ofs, err := ocifs.New(ocifs.WithWorkDir(work), ocifs.WithExtraDirs([]string{"proc", "x/y"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ofs, refStr, work
 }
 
-func mountFixture(t *testing.T, scratchName string, opts ...MountOption) (*ImageMount, string, string) {
+func mountFixture(t *testing.T, scratchName string, opts ...Option) (*ImageMount, string, string) {
 	t.Helper()
 	ofs, refStr, work := fixtureEnv(t, scratchName)
-	im, err := ofs.Mount(refStr, opts...)
+	im, err := Mount(ofs, refStr, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,11 +310,11 @@ func TestMountInodesAreKernelIDs(t *testing.T) {
 	if err := im.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	ofs2, err := New(WithWorkDir(work), WithExtraDirs([]string{"proc", "x/y"}), WithPullPolicy(PullNever))
+	ofs2, err := ocifs.New(ocifs.WithWorkDir(work), ocifs.WithExtraDirs([]string{"proc", "x/y"}), ocifs.WithPullPolicy(ocifs.PullNever))
 	if err != nil {
 		t.Fatal(err)
 	}
-	im2, err := ofs2.Mount(refStr, MountWithID("re"))
+	im2, err := Mount(ofs2, refStr, WithID("re"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,13 +391,13 @@ func TestMountShortReadOnlyAtEOF(t *testing.T) {
 // mount is live.
 func TestMountReportPersisted(t *testing.T) {
 	ofs, refStr, work := fixtureEnv(t, "report")
-	im, err := ofs.Mount(refStr, MountWithID("withreport"))
+	im, err := Mount(ofs, refStr, WithID("withreport"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { im.Unmount() })
 
-	r, published, err := ofs.MountReport("withreport")
+	r, published, err := ReportOf(ofs, "withreport")
 	if err != nil {
 		t.Fatalf("report not persisted: %v", err)
 	}
@@ -430,7 +431,7 @@ func TestMountIDValidation(t *testing.T) {
 	ofs, refStr, work := fixtureEnv(t, "mountid")
 
 	for _, bad := range []string{"../evil", "a/b", `a\b`, ".", ".."} {
-		if _, err := ofs.Mount(refStr, MountWithID(bad)); err == nil {
+		if _, err := Mount(ofs, refStr, WithID(bad)); err == nil {
 			t.Fatalf("mount id %q accepted", bad)
 		}
 	}

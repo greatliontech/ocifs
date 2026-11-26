@@ -26,8 +26,8 @@ import (
 // This suite runs on a real windows machine with ProjFS enabled
 // (Enable-WindowsOptionalFeature -Online -FeatureName
 // Client-ProjFS). It validates the ProjFS column of
-// docs/specs/projection.md end to end: run `go test ./...` at the
-// repository root and report the full output.
+// docs/specs/projection.md end to end: run `go -C mount test ./...`
+// at the repository root and report the full output.
 
 type fixture struct {
 	srv        *Server

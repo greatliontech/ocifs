@@ -1,9 +1,15 @@
 # ocifs — public API surface
 
-The `ocifs` module exposes one library package (`ocifs`) and a thin
-CLI (`cmd/ocifs`). This spec pins the observable behavior of the
-public surface; Go shapes (option names, signatures) live in the
-code and its doc comments.
+The `ocifs` repository exposes two Go modules: the root `ocifs`
+module (`github.com/greatliontech/ocifs`), providing store
+initialization, credential resolution, image acquisition, resolution,
+export, archive, commit, holds, removal, and garbage collection with
+zero filesystem-mount dependencies; and the nested `mount` module
+(`github.com/greatliontech/ocifs/mount`), providing live filesystem
+projection mounting, mount-report inspection, and the `ocifs`
+(`mount/cmd/ocifs`) and `ocifs-fskit` (`mount/cmd/ocifs-fskit`) CLIs.
+This spec pins the observable behavior of both surfaces; Go shapes
+(option names, signatures) live in the code and its doc comments.
 
 ## Construction
 
@@ -21,11 +27,12 @@ REQ-store-gc-collect; and a registry transport, through which every
 registry round trip goes — the registry client's own by default,
 which wraps a given one for its retries as well — for a consumer
 that serves a registry in-process or pins its client. Construction
-initializes the store — including its bookkeeping database — and
-fails if the store cannot be initialized; a Close counterpart
-releases the database's coordination resources, and leaving a
-process-lifetime handle to exit is equally safe (the database is
-crash-safe by its own contract).
+options apply only at construction and cannot mutate a constructed
+store. Construction initializes the store — including its bookkeeping
+database — and fails if the store cannot be initialized; a Close
+counterpart releases the database's coordination resources, and
+leaving a process-lifetime handle to exit is equally safe (the
+database is crash-safe by its own contract).
 
 **REQ-api-keychain** (behavior): Credential resolution MUST pick the
 longest matching configured prefix, where a prefix matches only at a
@@ -63,10 +70,12 @@ policy alone.
 
 ## Mount
 
-Mounting produces a **projection** — presentation semantics,
-per-backend fidelity, identity, enumeration, and read-only
-enforcement are pinned in `projection.md`; this section pins only
-the consumer-facing surface around it.
+Mounting lives in the `ocifs/mount` module and produces a
+**projection** — presentation semantics, per-backend fidelity,
+identity, enumeration, projection reports (`projection.md`
+REQ-proj-report), and read-only enforcement are pinned in
+`projection.md`; this section pins only the consumer-facing surface
+around it.
 
 **REQ-api-mount-ro** (behavior): Mounting a materialized image
 without an upper MUST produce a read-only projection

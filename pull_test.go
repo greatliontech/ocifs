@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
+	"github.com/greatliontech/ocifs/internal/store"
 )
 
 func testPlatformImage(t *testing.T, p v1.Platform, file, content string) v1.Image {
@@ -156,30 +157,6 @@ func TestPullSurface(t *testing.T) {
 		t.Fatal("uncached pull succeeded under PullNever")
 	} else if !strings.Contains(err.Error(), "Never") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestFailedMountLeavesNoMountDir: a mount that fails at acquisition
-// must not strand an orphan directory under the store's mounts/
-// tier.
-func TestFailedMountLeavesNoMountDir(t *testing.T) {
-	skipUnderMutationCampaign(t)
-	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-mountfail"))
-
-	workDir := filepath.Join(scratch, "work")
-	ofs, err := New(WithWorkDir(workDir), WithPullPolicy(PullNever))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ofs.Mount("registry.invalid/absent:v1"); err == nil {
-		t.Fatal("mount of an uncached image under PullNever succeeded")
-	}
-	entries, err := os.ReadDir(filepath.Join(workDir, "mounts"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("failed mount left %d orphan entries under mounts/", len(entries))
 	}
 }
 
@@ -551,5 +528,75 @@ func TestResolveUnderPolicy(t *testing.T) {
 	}
 	if res, err := never.Resolve(context.Background(), refStr, ResolveUnder(PullNever)); err != nil || res.Digest != first {
 		t.Fatalf("Never asked of a store held at Never: %+v %v", res, err)
+	}
+}
+
+func TestConstructionClonesSettingsAndIgnoresNilOptions(t *testing.T) {
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-settings-clone"))
+	extras := []string{"mnt/a", "mnt/b"}
+	extraOpt := WithExtraDirs(extras)
+	// Mutating the caller's slice BEFORE New(extraOpt) must not reach the store.
+	extras[0] = "mutated-before-new"
+
+	ofs, err := New(
+		nil,
+		WithWorkDir(filepath.Join(scratch, "work")),
+		extraOpt,
+		WithAuthSource("r.example.io/team", authn.AuthConfig{Username: "u1", Password: "p1"}),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ofs.Close() })
+
+	// Mutating the caller's slice AFTER construction must not reach the store.
+	extras[1] = "mutated-after-new"
+	_, _, gotFirst := ofs.MountState(store.Internal{})
+	if len(gotFirst) != 2 || gotFirst[0] != "mnt/a" || gotFirst[1] != "mnt/b" {
+		t.Fatalf("extraDirs after caller mutation = %v, want [mnt/a mnt/b]", gotFirst)
+	}
+
+	// Mutating the slice returned by MountState must also leave the store intact.
+	gotFirst[0] = "tampered"
+	_, _, gotSecond := ofs.MountState(store.Internal{})
+	if len(gotSecond) != 2 || gotSecond[0] != "mnt/a" || gotSecond[1] != "mnt/b" {
+		t.Fatalf("extraDirs after MountState mutation = %v, want [mnt/a mnt/b]", gotSecond)
+	}
+
+	// Nil variadic options on operational methods must be ignored cleanly.
+	if _, err := ofs.GC(context.Background(), nil); err != nil {
+		t.Fatalf("GC with nil option: %v", err)
+	}
+
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amd64 := v1.Platform{OS: "linux", Architecture: "amd64"}
+	refStr := u.Host + "/test/nilopts:v1"
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.Write(ref, testPlatformImage(t, amd64, "k", "v")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ofs.Resolve(context.Background(), refStr, nil); err != nil {
+		t.Fatalf("Resolve with nil option: %v", err)
+	}
+	img, err := ofs.Pull(context.Background(), refStr, nil, PullWithPlatform(amd64))
+	if err != nil {
+		t.Fatalf("Pull with nil option: %v", err)
+	}
+	cfg := img.ConfigFile()
+	cfg.OS = "plan9"
+	if img.ConfigFile().OS != "linux" {
+		t.Fatalf("Image.ConfigFile() aliased internal config: got %q", img.ConfigFile().OS)
+	}
+	if _, err := ofs.Export(context.Background(), refStr, nil, ExportWithPlatform(amd64)); err != nil {
+		t.Fatalf("Export with nil option: %v", err)
 	}
 }

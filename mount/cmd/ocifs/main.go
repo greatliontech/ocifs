@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/greatliontech/ocifs"
+	"github.com/greatliontech/ocifs/mount"
 	"github.com/spf13/cobra"
 )
 
@@ -34,10 +35,7 @@ func main() {
 	rootCmd.Flags().StringVarP(&rootFlags.ImageRef, "image", "i", "", "Image to mount")
 	rootCmd.MarkFlagRequired("image")
 	rootCmd.Flags().StringVarP(&rootFlags.WorkDir, "workdir", "w", filepath.Join(os.TempDir(), "ocifs"), "Work directory")
-	extraDirs := rootCmd.Flags().StringSliceP("extra-dirs", "e", nil, "Extra directories to include in the mount")
-	if extraDirs != nil {
-		rootFlags.ExtraDirs = *extraDirs
-	}
+	rootCmd.Flags().StringSliceVarP(&rootFlags.ExtraDirs, "extra-dirs", "e", nil, "Extra directories to include in the mount")
 
 	gcCmd.Flags().StringVarP(&gcFlags.WorkDir, "workdir", "w", filepath.Join(os.TempDir(), "ocifs"), "Work directory")
 	gcCmd.Flags().BoolVar(&gcFlags.IgnoreGrace, "ignore-grace", false, "Collect unreachable content regardless of age")
@@ -113,7 +111,7 @@ func rootCmdRunE(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
 	// Mount the OCI image
-	im, err := ofs.Mount(rootFlags.ImageRef, ocifs.MountWithTargetPath(rootFlags.MountPoint))
+	im, err := mount.Mount(ofs, rootFlags.ImageRef, mount.WithTargetPath(rootFlags.MountPoint))
 	if err != nil {
 		log.Fatalf("Failed to mount OciFS: %v", err)
 	}

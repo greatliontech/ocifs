@@ -88,7 +88,7 @@ func TestCLISmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "-i", refStr, "-m", mnt, "-w", work)
+	cmd := exec.Command(bin, "-i", refStr, "-m", mnt, "-w", work, "-e", "anchor")
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -121,6 +121,9 @@ func TestCLISmoke(t *testing.T) {
 	}
 	if string(content) != "hey" {
 		t.Fatalf("greeting = %q", content)
+	}
+	if fi, err := os.Stat(filepath.Join(mnt, "anchor")); err != nil || !fi.IsDir() {
+		t.Fatalf("--extra-dirs anchor directory missing in CLI mount: %v", err)
 	}
 
 	// SIGTERM triggers unmount and a clean exit (REQ-api-cli).

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/uuid"
 	"github.com/greatliontech/gmdb"
 	"github.com/greatliontech/gmdb/oslock"
 
@@ -311,6 +312,9 @@ func (c *MountClaim) retire() {
 // up. ErrHeld refuses as already-serving; ownership passes to the
 // registration, which folds it into the mount's claim.
 func (s *Store) ClaimUpper(name string) (*oslock.Lock, error) {
+	if !validMountID(name) {
+		return nil, fmt.Errorf("upper name %q is not a single path element", name)
+	}
 	l, err := oslock.TryAcquire(s.upperLockPath(name))
 	if errors.Is(err, oslock.ErrHeld) {
 		return nil, fmt.Errorf("upper %q already serves a writable mount", name)
@@ -319,6 +323,46 @@ func (s *Store) ClaimUpper(name string) (*oslock.Lock, error) {
 		return nil, fmt.Errorf("upper %q claim: %w", name, err)
 	}
 	return l, nil
+}
+
+// ClaimMount resolves id (drawing a random UUID when empty),
+// validates it against REQ-api-mount-id, and acquires locks/mount-<id>
+// before any mounts/<id> directory operation runs so duplicate or
+// racing same-id mounts cannot detach or delete a live mount's state.
+func (s *Store) ClaimMount(id string) (string, *oslock.Lock, error) {
+	if id == "" {
+		uid, err := uuid.NewRandom()
+		if err != nil {
+			return "", nil, err
+		}
+		id = uid.String()
+	}
+	if !validMountID(id) {
+		return "", nil, fmt.Errorf("mount id %q is not a single path element", id)
+	}
+	mountLock, err := oslock.TryAcquire(s.mountLockPath(id))
+	if errors.Is(err, oslock.ErrHeld) {
+		return "", nil, fmt.Errorf("mount id %q is in use by a live mount", id)
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("mount id %q claim: %w", id, err)
+	}
+	return id, mountLock, nil
+}
+
+// AbortMountClaim disposes a ClaimMount lock when mount setup aborts
+// before RegisterMountRecordClaimed: retiring (unlink-while-held) when
+// no dead mounts row exists for id, and closing without unlink when a
+// dead row still awaits sweep reclamation.
+func (s *Store) AbortMountClaim(ctx context.Context, id string, mountLock *oslock.Lock) {
+	if mountLock == nil {
+		return
+	}
+	if s.rowExists(ctx, ksMounts, id) {
+		mountLock.Close()
+		return
+	}
+	mountLock.Retire()
 }
 
 // RegisterMountRecordArbitrated acquires the mount's claim and
@@ -333,21 +377,25 @@ func (s *Store) ClaimUpper(name string) (*oslock.Lock, error) {
 // unleased — REQ-store-gc-safe) and overwrites any dead leftover
 // row. On failure nothing is held and no row is written.
 func (s *Store) RegisterMountRecordArbitrated(ctx context.Context, id string, image v1.Hash, upperName, mountpoint string, upper *oslock.Lock) (*MountClaim, error) {
-	mountLock, err := oslock.TryAcquire(s.mountLockPath(id))
-	if errors.Is(err, oslock.ErrHeld) {
-		if upper != nil {
-			upper.Close()
-		}
-		return nil, fmt.Errorf("mount id %q is in use by a live mount", id)
-	}
+	resolvedID, mountLock, err := s.ClaimMount(id)
 	if err != nil {
 		if upper != nil {
 			upper.Close()
 		}
-		return nil, fmt.Errorf("mount id %q claim: %w", id, err)
+		return nil, err
 	}
+	return s.RegisterMountRecordClaimed(ctx, resolvedID, image, upperName, mountpoint, "", mountLock, upper)
+}
+
+// RegisterMountRecordClaimed registers the mount row using a pre-held
+// mountLock from ClaimMount (plus optional pre-held upper lock).
+// Ownership of both locks transfers unconditionally; if registration
+// fails and cleanupStateDir is non-empty, cleanupStateDir is removed
+// BEFORE releasing mountLock so no unfenced stateDir deletion races a
+// concurrent remount.
+func (s *Store) RegisterMountRecordClaimed(ctx context.Context, id string, image v1.Hash, upperName, mountpoint, cleanupStateDir string, mountLock, upper *oslock.Lock) (*MountClaim, error) {
 	claim := &MountClaim{mount: mountLock, upper: upper}
-	err = s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
+	err := s.bk.db.Update(ctx, func(tx *gmdb.Tx) error {
 		ks, err := tx.OpenKeyspace(ksMounts)
 		if err != nil {
 			return err
@@ -362,7 +410,13 @@ func (s *Store) RegisterMountRecordArbitrated(ctx context.Context, id string, im
 		return ks.Put([]byte(id), encodeMountRecord(newMountRecord(image, upperName, mountpoint)))
 	})
 	if err != nil {
-		claim.release()
+		if cleanupStateDir != "" {
+			_ = os.RemoveAll(cleanupStateDir)
+		}
+		if claim.upper != nil {
+			claim.upper.Close()
+		}
+		s.AbortMountClaim(context.WithoutCancel(ctx), id, claim.mount)
 		return nil, err
 	}
 	return claim, nil

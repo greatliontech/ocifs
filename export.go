@@ -18,7 +18,7 @@ type exportReq struct {
 // ExportWithTargetPath exports into the caller's own directory,
 // which must not exist yet, instead of the store-managed export
 // cache.
-var ExportWithTargetPath = func(dir string) ExportOption {
+func ExportWithTargetPath(dir string) ExportOption {
 	return func(r *exportReq) {
 		r.target = dir
 	}
@@ -26,7 +26,7 @@ var ExportWithTargetPath = func(dir string) ExportOption {
 
 // ExportWithPlatform exports an explicit platform; selection
 // semantics match PullWithPlatform.
-var ExportWithPlatform = func(p v1.Platform) ExportOption {
+func ExportWithPlatform(p v1.Platform) ExportOption {
 	return func(r *exportReq) {
 		r.platform = &p
 	}
@@ -42,7 +42,9 @@ var ExportWithPlatform = func(p v1.Platform) ExportOption {
 func (o *OCIFS) Export(ctx context.Context, imageRef string, opts ...ExportOption) (string, error) {
 	var r exportReq
 	for _, opt := range opts {
-		opt(&r)
+		if opt != nil {
+			opt(&r)
+		}
 	}
 	img, err := o.store.Image(ctx, imageRef, r.platform)
 	if err != nil {

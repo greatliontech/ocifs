@@ -51,8 +51,10 @@ REQ-store-bookkeeping) with, per entry, the view path as its exact
 bytes, a disposition (`omitted` or `altered` for view entries;
 `residual` for the read-only residuals REQ-proj-ro declares, whose path
 is then the foreign path), a symbolic reason, and optional free-text
-detail; publication is transactional, and a projection that observes
-residuals republishes with the accumulated rows.
+detail, exposed through types and constants the consumer can name so a
+consumer can switch exhaustively on dispositions and reasons;
+publication is transactional, and a projection that observes residuals
+republishes with the accumulated rows.
 
 ## Out-of-process serving
 

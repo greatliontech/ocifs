@@ -8,8 +8,8 @@ import (
 
 // LocalRef renders a committed image's digest as its acquirable
 // reference under the store's local namespace (docs/specs/store.md
-// REQ-store-local-images) — usable with Pull, Mount, and Export like
-// any reference, never touching the network.
+// REQ-store-local-images) — usable with Pull, mount.Mount, and Export
+// like any reference, never touching the network.
 func LocalRef(h v1.Hash) string {
 	return store.LocalRef(h)
 }
@@ -25,7 +25,7 @@ type commitReq struct {
 // CommitWithUpperDir commits the caller-supplied upper directory;
 // the caller owns the base pairing (docs/specs/writable.md
 // REQ-writable-base-binding).
-var CommitWithUpperDir = func(dir string) CommitOption {
+func CommitWithUpperDir(dir string) CommitOption {
 	return func(r *commitReq) {
 		r.upperDir = dir
 	}
@@ -33,7 +33,7 @@ var CommitWithUpperDir = func(dir string) CommitOption {
 
 // CommitWithNamedUpper commits a store-managed upper; its base
 // binding is validated against the resolved base image.
-var CommitWithNamedUpper = func(name string) CommitOption {
+func CommitWithNamedUpper(name string) CommitOption {
 	return func(r *commitReq) {
 		r.upperName = name
 	}
@@ -41,7 +41,7 @@ var CommitWithNamedUpper = func(name string) CommitOption {
 
 // CommitWithPlatform resolves the base with an explicit platform;
 // selection semantics match PullWithPlatform.
-var CommitWithPlatform = func(p v1.Platform) CommitOption {
+func CommitWithPlatform(p v1.Platform) CommitOption {
 	return func(r *commitReq) {
 		r.platform = &p
 	}

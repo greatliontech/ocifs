@@ -1,15 +1,10 @@
 //go:build linux
 
-package ocifs
+package mount
 
 import (
-	"archive/tar"
 	"bytes"
 	"fmt"
-	"io"
-	"log"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,26 +12,19 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/registry"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 	"golang.org/x/sys/unix"
 )
 
-// acceptanceMount builds a writable mount over the caller-owned
-// fixture image plus a fresh upper.
-func acceptanceMount(t *testing.T, name string) (*ImageMount, *OCIFS, string) {
+func acceptanceMount(t *testing.T, name string) (*ImageMount, *ocifs.OCIFS, string) {
 	t.Helper()
 	ofs, refStr := writableFixtureEnv(t, name)
 	upperDir := filepath.Join(".scratch", "ocifs-"+name, "up")
 	if err := os.MkdirAll(upperDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	im, err := ofs.Mount(refStr, MountWithUpperDir(upperDir))
+	im, err := Mount(ofs, refStr, WithUpperDir(upperDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,9 +32,6 @@ func acceptanceMount(t *testing.T, name string) (*ImageMount, *OCIFS, string) {
 	return im, ofs, refStr
 }
 
-// TestAcceptanceExecAndMmap pins the exec and mmap paths: a binary
-// written through the mount executes from it, and mapped pages read
-// back written content (REQ-proj-content over the write path).
 func TestAcceptanceExecAndMmap(t *testing.T) {
 	if os.Getenv("OCIFS_MMAP_CHILD_PATH") != "" {
 		mmapChild(t)
@@ -55,7 +40,6 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	im, ofs, refStr := acceptanceMount(t, "wexec")
 	mnt := im.MountPoint()
 
-	// Exec: a shell script written and chmodded through the mount.
 	script := filepath.Join(mnt, "hello.sh")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho exec-ok\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -63,19 +47,11 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	if err := os.Chmod(script, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Mount-resident files are exec'd through a host-backed shell:
-	// exec.Command's vfork suspends the parent thread — invisibly to
-	// the Go runtime — until the child's execve commits, and
-	// committing a mount-resident binary needs THIS process's FUSE
-	// server; a concurrent GC stop-the-world then deadlocks the
-	// whole process. The shell (host-backed) commits immediately and
-	// re-execs the mount file in the detached child.
 	out, err := execViaHostShell(script).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "exec-ok") {
 		t.Fatalf("exec from mount: %q %v", out, err)
 	}
 
-	// Exec a real ELF copied through the mount (the mmap-exec path).
 	shPath, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skipf("no sh binary to copy: %v", err)
@@ -94,13 +70,10 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Remount before every read assertion: the kernel page cache
-	// could otherwise serve just-written pages without a FUSE read —
-	// the fresh mount forces the provider's read and mmap paths.
 	if err := im.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	im2, err := ofs.Mount(refStr, MountWithUpperDir(im.UpperPath()))
+	im2, err := Mount(ofs, refStr, WithUpperDir(im.UpperPath()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,17 +92,6 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 		t.Fatalf("ELF exec from mount: %q %v", out, err)
 	}
 
-	// mmap read-back through the fresh mount, from a CHILD process.
-	// Like exec above, the serving process must never touch its own
-	// mount through page faults: a fault on a FUSE-backed mapping is
-	// invisible to the Go runtime, so a concurrent GC stop-the-world
-	// waits on the faulting thread while the server goroutine that
-	// would satisfy it is frozen — a whole-process deadlock (observed
-	// as intermittent full-suite timeouts). Plain read/write
-	// syscalls through the mount are safe; mapping, exec, and a
-	// child's pre-exec chdir (cmd.Dir) into the mount are not.
-	// Userns children (CLONE_NEWUSER) are exempt: that flag disables
-	// vfork, so the container/capability arms below fork plainly.
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -144,19 +106,11 @@ func TestAcceptanceExecAndMmap(t *testing.T) {
 	}
 }
 
-// execViaHostShell runs a mount-resident program through a
-// host-backed /bin/sh so the vfork window never depends on this
-// process's own FUSE server (see the exec comment in
-// TestAcceptanceExecAndMmap). Argv passthrough — no shell quoting
-// surface: the path and args reach the child verbatim as $0/$@.
 func execViaHostShell(path string, args ...string) *exec.Cmd {
 	argv := append([]string{"-c", `exec "$0" "$@"`, path}, args...)
 	return exec.Command("/bin/sh", argv...)
 }
 
-// mmapChild maps the file at OCIFS_MMAP_CHILD_PATH and compares it
-// against the expected content — in a separate process, whose page
-// faults the parent's FUSE server serves like any foreign consumer's.
 func mmapChild(t *testing.T) {
 	p := os.Getenv("OCIFS_MMAP_CHILD_PATH")
 	want := []byte(os.Getenv("OCIFS_MMAP_CHILD_WANT"))
@@ -176,8 +130,6 @@ func mmapChild(t *testing.T) {
 	fmt.Println("mmap-ok")
 }
 
-// TestAcceptanceConcurrentBuild runs a parallel make on the mount —
-// deferring loudly where the toolchain is absent.
 func TestAcceptanceConcurrentBuild(t *testing.T) {
 	makeBin, err := exec.LookPath("make")
 	if err != nil {
@@ -205,10 +157,6 @@ func TestAcceptanceConcurrentBuild(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// cd-then-exec through the host shell: cmd.Dir into the mount
-	// would chdir inside the vfork window — the same self-access
-	// deadlock as exec'ing a mount-resident file (see
-	// TestAcceptanceExecAndMmap's exec comment).
 	cmd := exec.Command("/bin/sh", "-c", `CDPATH= cd "$0" && exec "$1" -j4`, proj, makeBin)
 	cmd.Env = append(os.Environ(), "CC="+ccBin)
 	out, err := cmd.CombinedOutput()
@@ -221,9 +169,6 @@ func TestAcceptanceConcurrentBuild(t *testing.T) {
 	}
 }
 
-// usernsSupported probes unprivileged user-namespace creation,
-// once; a false answer may also mean an LSM denial — either way the
-// workload cannot run here.
 var usernsOnce = struct {
 	done bool
 	ok   bool
@@ -243,12 +188,6 @@ func usernsSupported() bool {
 	return usernsOnce.ok
 }
 
-// TestAcceptanceContainerExec chroots into the writable mount inside
-// an unprivileged user namespace — the dominant single-uid
-// deployment (container root mapped to the caller) — writes as
-// ns-root, verifying install-like writes land through the mount
-// (REQ-writable-fidelity's user-namespace case). Hermetic: the
-// payload is a static binary compiled on the spot.
 func TestAcceptanceContainerExec(t *testing.T) {
 	if !usernsSupported() {
 		t.Skip("deferred: unprivileged user namespaces unavailable")
@@ -256,9 +195,6 @@ func TestAcceptanceContainerExec(t *testing.T) {
 	im, _, _ := acceptanceMount(t, "wctr")
 	mnt := im.MountPoint()
 
-	// Provision the "container": a static payload binary compiled on
-	// the spot (the Go toolchain runs this test, so it is present)
-	// that behaves install-like — mkdir, write, chmod, read back.
 	payloadSrc := `package main
 
 import (
@@ -321,19 +257,12 @@ func main() {
 	if err != nil || !strings.Contains(string(out), "container-ok") {
 		t.Fatalf("container exec: %v\n%s", err, out)
 	}
-	// The install landed on the upper through the mount.
 	b, err := os.ReadFile(filepath.Join(mnt, "usr", "pkg", "manifest"))
 	if err != nil || string(b) != "v1" {
 		t.Fatalf("installed file: %q %v", b, err)
 	}
 }
 
-// TestAcceptanceCapabilityXattr stores security.capability through
-// the mount as user-namespace root — the kernel checks CAP_SETFCAP
-// before any filesystem sees the store, so the realistic caller IS
-// ns-root — reads it back in-namespace, and commits it into a
-// genuine layer record (REQ-writable-fidelity end to end; the
-// unprivileged provider escapes what its own host uid cannot store).
 func TestAcceptanceCapabilityXattr(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("privileged run: the escape arm needs a refused store")
@@ -348,7 +277,6 @@ func TestAcceptanceCapabilityXattr(t *testing.T) {
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Store as ns-root: setcap holds CAP_SETFCAP in its namespace.
 	if _, err := exec.LookPath("setcap"); err != nil {
 		t.Skip("deferred: no setcap binary on this machine")
 	}
@@ -365,9 +293,6 @@ func TestAcceptanceCapabilityXattr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setcap in userns through the mount: %v\n%s", err, out)
 	}
-	// Read back the way the deployment does: getcap inside the same
-	// namespace mapping (the kernel converts namespaced capability
-	// blobs per-reader; raw init-ns reads are not the contract).
 	getcapInNS := func(path string) string {
 		cmd := exec.Command("getcap", path)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -385,13 +310,11 @@ func TestAcceptanceCapabilityXattr(t *testing.T) {
 		t.Fatalf("capability read-back through the mount: %q", got)
 	}
 
-	// Commit: the capability lands as a genuine layer record and
-	// serves from the committed image identically.
-	committed, err := ofs.Commit(t.Context(), refStr, CommitWithUpperDir(im.UpperPath()))
+	committed, err := ofs.Commit(t.Context(), refStr, ocifs.CommitWithUpperDir(im.UpperPath()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cim, err := ofs.Mount(LocalRef(committed.Digest()))
+	cim, err := Mount(ofs, ocifs.LocalRef(committed.Digest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,10 +324,7 @@ func TestAcceptanceCapabilityXattr(t *testing.T) {
 	if err := cim.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	// A SECOND mount serves the layer through the persisted index
-	// document — the binary-safe encoding, not the first mount's
-	// in-memory parse.
-	cim2, err := ofs.Mount(LocalRef(committed.Digest()))
+	cim2, err := Mount(ofs, ocifs.LocalRef(committed.Digest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,9 +334,6 @@ func TestAcceptanceCapabilityXattr(t *testing.T) {
 	}
 }
 
-// TestAcceptancePackageManager runs a real package-manager install
-// in a container rooted on the mount — env-gated: it needs a
-// network-pulled image and explicit opt-in.
 func TestAcceptancePackageManager(t *testing.T) {
 	img := os.Getenv("OCIFS_ACCEPTANCE_IMAGE")
 	if img == "" {
@@ -426,7 +343,7 @@ func TestAcceptancePackageManager(t *testing.T) {
 		t.Skip("deferred: unprivileged user namespaces unavailable")
 	}
 	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-wpkg"))
-	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
+	ofs, err := ocifs.New(ocifs.WithWorkDir(filepath.Join(scratch, "work")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +351,7 @@ func TestAcceptancePackageManager(t *testing.T) {
 	if err := os.MkdirAll(upperDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	im, err := ofs.Mount(img, MountWithUpperDir(upperDir))
+	im, err := Mount(ofs, img, WithUpperDir(upperDir))
 	if err != nil {
 		t.Fatalf("mounting %s: %v", img, err)
 	}
@@ -452,106 +369,4 @@ func TestAcceptancePackageManager(t *testing.T) {
 		t.Fatalf("package manager in container: %v\n%s", err, out)
 	}
 	t.Logf("apk: %s", out)
-}
-
-// TestExportPrivilegedOwnership exercises export's privileged chown
-// arm inside a WIDE user namespace (subuid-delegated via
-// unshare --map-auto): the mapped root applies DISTINCT recorded
-// ownership natively, and recorded setuid survives — pinning both
-// the chown itself and the chown-before-chmod ordering (a
-// wrongly-ordered chown by root would clear the bit). The folded
-// issue's third pin (chown to ids outside the mapping is EINVAL) is
-// structural under any mapping and needs no test.
-func TestExportPrivilegedOwnership(t *testing.T) {
-	if os.Getenv("OCIFS_USERNS_EXPORT_CHILD") != "" {
-		exportPrivilegedChild(t)
-		return
-	}
-	if err := exec.Command("unshare", "--user", "--map-root-user", "--map-auto", "true").Run(); err != nil {
-		t.Skipf("deferred: wide user-namespace mappings unavailable (unshare --map-auto: %v)", err)
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("unshare", "--user", "--map-root-user", "--map-auto", exe,
-		"-test.run", "^TestExportPrivilegedOwnership$", "-test.v")
-	cmd.Env = append(os.Environ(), "OCIFS_USERNS_EXPORT_CHILD=1")
-	out, err := cmd.CombinedOutput()
-	if err != nil || !strings.Contains(string(out), "child-ownership-ok") {
-		t.Fatalf("userns export child: %v\n%s", err, out)
-	}
-}
-
-// exportPrivilegedChild runs as wide-mapped ns-root: exports an
-// image with distinct recorded ownership and a setuid entry,
-// asserting both are applied natively.
-func exportPrivilegedChild(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Fatal("child expected to run as ns-root")
-	}
-	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
-	defer srv.Close()
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	for _, hdr := range []tar.Header{
-		{Name: "owned", Typeflag: tar.TypeReg, Mode: 0o644, Uid: 12, Gid: 34, Size: 2},
-		{Name: "suidbin", Typeflag: tar.TypeReg, Mode: 0o4755, Uid: 12, Gid: 34, Size: 2},
-	} {
-		h := hdr
-		if err := tw.WriteHeader(&h); err != nil {
-			t.Fatal(err)
-		}
-		io.WriteString(tw, "xx")
-	}
-	tw.Close()
-	tarData := buf.Bytes()
-	l, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(tarData)), nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	img, err := mutate.AppendLayers(empty.Image, l)
-	if err != nil {
-		t.Fatal(err)
-	}
-	refStr := u.Host + "/test/uns-export:v1"
-	ref, err := name.ParseReference(refStr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := remote.Write(ref, img); err != nil {
-		t.Fatal(err)
-	}
-	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-wexport-uns"))
-	ofs, err := New(WithWorkDir(filepath.Join(scratch, "work")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ofs.Pull(t.Context(), refStr); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(scratch, "out")
-	if _, err := ofs.Export(t.Context(), refStr, ExportWithTargetPath(target)); err != nil {
-		t.Fatalf("export as wide ns-root: %v", err)
-	}
-	var st syscall.Stat_t
-	if err := syscall.Lstat(filepath.Join(target, "owned"), &st); err != nil {
-		t.Fatal(err)
-	}
-	if st.Uid != 12 || st.Gid != 34 {
-		t.Fatalf("recorded ownership not applied natively: %d:%d", st.Uid, st.Gid)
-	}
-	if err := syscall.Lstat(filepath.Join(target, "suidbin"), &st); err != nil {
-		t.Fatal(err)
-	}
-	if st.Uid != 12 || st.Mode&0o6777 != 0o4755 {
-		t.Fatalf("setuid ordering: uid %d mode %o", st.Uid, st.Mode&0o7777)
-	}
-	fmt.Println("child-ownership-ok")
 }

@@ -7,12 +7,14 @@ tasks:
     silent: true
 
   test:
-    desc: Run tests
-    cmd: go test -cover ./...
+    desc: Run tests in both ocifs and ocifs/mount
+    cmds:
+      - GOWORK=off go test -cover ./...
+      - go -C mount test -cover ./...
     silent: true
 
   mutate:
-    desc: Mutation-test the working-tree delta (oracle scratch bracketed)
+    desc: Mutation-test the working-tree delta in root ocifs (oracle scratch bracketed)
     env:
       # mount(2) is a system-global side effect the observation
       # bracket cannot contain: a mutant of mount-orchestration code
@@ -22,8 +24,8 @@ tasks:
       # normal suite and hand probes instead.
       OCIFS_MUTATION_CAMPAIGN: "1"
     cmds:
-      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection .scratch/fusefs .scratch/fskitfs .scratch/export .scratch/upper .scratch/commit
+      - mkdir -p .scratch/layer .scratch/store .scratch/cas .scratch/projection .scratch/export .scratch/upper .scratch/commit
       - >-
         gomutant run --changed HEAD --timeout 0
         --bracket-path .scratch/layer --bracket-path .scratch/store --bracket-path .scratch/cas
-        --bracket-path .scratch/projection --bracket-path .scratch/fusefs --bracket-path .scratch/fskitfs --bracket-path .scratch/export --bracket-path .scratch/upper --bracket-path .scratch/commit
+        --bracket-path .scratch/projection --bracket-path .scratch/export --bracket-path .scratch/upper --bracket-path .scratch/commit

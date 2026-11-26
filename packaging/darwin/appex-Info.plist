@@ -27,11 +27,11 @@
 	<dict>
 		<key>EXExtensionPointIdentifier</key>
 		<string>com.apple.fskit.fsmodule</string>
-		<!-- MUST equal principalClass in cmd/ocifs-fskit/main_darwin.go. -->
+		<!-- MUST equal principalClass in mount/cmd/ocifs-fskit/main_darwin.go. -->
 		<key>EXExtensionPrincipalClass</key>
 		<string>OcifsFS</string>
 		<!-- The `mount -F -t <FSShortName>` type name; MUST equal
-		     fskitShortName in mount_darwin.go. -->
+		     fskitShortName in mount/mount_darwin.go. -->
 		<key>FSShortName</key>
 		<string>OcifsFS</string>
 		<!-- The store root arrives as a URL-backed path resource. -->

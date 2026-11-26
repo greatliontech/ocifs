@@ -1,32 +1,28 @@
 //go:build linux
 
-package ocifs
+package mount
 
 import (
 	"errors"
 	"fmt"
-
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"os"
 	"path/filepath"
 	"testing"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/greatliontech/ocifs"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
-// TestChurnSoak runs the full lifecycle loop with automatic
-// collection on and zero grace — pull, writable mount, write,
-// unmount, commit, remove, collect — and requires every cycle's
-// image to serve whole while the store never accretes.
 func TestChurnSoak(t *testing.T) {
 	skipUnderMutationCampaign(t)
-	ofs, refStr := writableFixtureEnv(t, "wchurn", WithAutoGC(true), WithGCGrace(0))
+	ofs, refStr := writableFixtureEnv(t, "wchurn", ocifs.WithAutoGC(true), ocifs.WithGCGrace(0))
 	scratch := filepath.Join(".scratch", "ocifs-wchurn")
 
 	var lastCommitted v1.Hash
 	for cycle := 0; cycle < 5; cycle++ {
 		upDir := scratchtest.In(t, filepath.Join(scratch, fmt.Sprintf("up%d", cycle)))
-		im, err := ofs.Mount(refStr, MountWithUpperDir(upDir))
+		im, err := Mount(ofs, refStr, WithUpperDir(upDir))
 		if err != nil {
 			t.Fatalf("cycle %d mount: %v", cycle, err)
 		}
@@ -37,12 +33,11 @@ func TestChurnSoak(t *testing.T) {
 		if err := im.Unmount(); err != nil {
 			t.Fatalf("cycle %d unmount: %v", cycle, err)
 		}
-		committed, err := ofs.Commit(t.Context(), refStr, CommitWithUpperDir(upDir))
+		committed, err := ofs.Commit(t.Context(), refStr, ocifs.CommitWithUpperDir(upDir))
 		if err != nil {
 			t.Fatalf("cycle %d commit: %v", cycle, err)
 		}
-		// The fresh commit mounts and serves its delta.
-		cim, err := ofs.Mount(LocalRef(committed.Digest()))
+		cim, err := Mount(ofs, ocifs.LocalRef(committed.Digest()))
 		if err != nil {
 			t.Fatalf("cycle %d committed mount: %v", cycle, err)
 		}
@@ -53,29 +48,24 @@ func TestChurnSoak(t *testing.T) {
 		if err := cim.Unmount(); err != nil {
 			t.Fatal(err)
 		}
-		// The previous cycle's commit is removed; zero grace plus
-		// the removal transition reclaims it while THIS cycle's
-		// commit and the base stay rooted and serving.
 		if lastCommitted != (v1.Hash{}) {
 			if err := ofs.RemoveImage(t.Context(), lastCommitted.String()); err != nil {
 				t.Fatalf("cycle %d remove prior: %v", cycle, err)
 			}
-			if _, err := ofs.Mount(LocalRef(lastCommitted)); err == nil {
+			if _, err := Mount(ofs, ocifs.LocalRef(lastCommitted)); err == nil {
 				t.Fatalf("cycle %d: removed prior commit still mounts", cycle)
 			}
 		}
 		lastCommitted = committed.Digest()
 	}
 
-	// Teardown: remove the last commit and the base ref; a
-	// grace-ignored pass leaves the content tiers empty.
 	if err := ofs.RemoveImage(t.Context(), lastCommitted.String()); err != nil {
 		t.Fatal(err)
 	}
 	if err := ofs.RemoveRef(t.Context(), refStr); err != nil {
 		t.Fatal(err)
 	}
-	res, err := ofs.GC(t.Context(), GCIgnoreGrace())
+	res, err := ofs.GC(t.Context(), ocifs.GCIgnoreGrace())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +87,6 @@ func TestChurnSoak(t *testing.T) {
 	}
 }
 
-// tierEmpty reports whether a digest tier holds no blobs.
 func tierEmpty(root string) (bool, error) {
 	algos, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {

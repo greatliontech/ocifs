@@ -1,0 +1,101 @@
+name: Release
+
+# The release gate: a tag is cut only after the CI workflow succeeded on
+# the pushed commit. Root `vX.Y.Z` is minted by go-release.yml; once
+# `mount/go.mod` pins that released root tag (with zero replace
+# directives and passing standalone `GOWORK=off` vet), `release-mount`
+# mints the matching `mount/vX.Y.Z` submodule tag via the same releaser
+# app token so external `go get` and `go install` of `ocifs/mount` work.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: greatliontech/actions/.github/workflows/go-release.yml@main
+    permissions:
+      contents: write
+    secrets: inherit
+
+  release-mount:
+    needs: release
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check eligibility for mount submodule release
+        id: check
+        shell: bash
+        run: |
+          git fetch origin main --tags
+          if [ "$(git rev-parse origin/main)" != "${{ github.event.workflow_run.head_sha }}" ]; then
+            echo "superseded: origin/main moved past the judged commit"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          root_tag="$( (git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true) | head -n1 )"
+          if [ -z "$root_tag" ]; then
+            echo "no root vX.Y.Z tag exists yet"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mount_tag="mount/$root_tag"
+          if git rev-parse -q --verify "refs/tags/$mount_tag" >/dev/null; then
+            echo "$mount_tag already exists"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -E '^[[:space:]]*replace([[:space:]]|\()' mount/go.mod; then
+            echo "refusing $mount_tag: mount/go.mod contains a replace directive" >&2
+            exit 1
+          fi
+          req_ver="$(awk '$1 == "github.com/greatliontech/ocifs" {print $2}' mount/go.mod)"
+          if [ "$req_ver" != "$root_tag" ]; then
+            echo "mount/go.mod requires ocifs $req_ver (latest root tag is $root_tag); bump mount/go.mod to $root_tag to mint $mount_tag"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          GOWORK=off go -C mount vet ./...
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 GOWORK=off go -C mount vet ./...
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOWORK=off go -C mount vet ./...
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "mount_tag=$mount_tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@v2
+        if: steps.check.outputs.release == 'true'
+        id: app-token
+        with:
+          app-id: ${{ vars.GLT_RELEASER_APP_ID }}
+          private-key: ${{ secrets.GLT_RELEASER_APP_KEY }}
+      - name: Mint mount submodule release
+        if: steps.check.outputs.release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MOUNT_TAG: ${{ steps.check.outputs.mount_tag }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh release create "$MOUNT_TAG" \
+            --repo "${{ github.repository }}" \
+            --target "$TARGET_SHA" \
+            --title "$MOUNT_TAG" \
+            --generate-notes

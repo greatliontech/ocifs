@@ -6,7 +6,7 @@
 // stale-mount reap resolves absolute paths internally for
 // mount-table comparison only, never handing them to a test.
 // Dir serves the internal package test suites, which all live two
-// levels below the repo root; suites elsewhere choose their own
+// levels below their module root; suites elsewhere choose their own
 // relative path through In.
 package scratchtest
 

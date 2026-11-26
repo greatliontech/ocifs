@@ -1,4 +1,4 @@
-package ocifs
+package mount
 
 import (
 	"os"

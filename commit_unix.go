@@ -23,7 +23,9 @@ import (
 func (o *OCIFS) Commit(ctx context.Context, baseRef string, opts ...CommitOption) (*Image, error) {
 	var r commitReq
 	for _, opt := range opts {
-		opt(&r)
+		if opt != nil {
+			opt(&r)
+		}
 	}
 	if (r.upperDir == "") == (r.upperName == "") {
 		return nil, fmt.Errorf("commit needs exactly one upper: CommitWithUpperDir or CommitWithNamedUpper")

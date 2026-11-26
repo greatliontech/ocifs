@@ -706,9 +706,9 @@ bindings {
   content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
   source_hash: "2db2b35a2cda38f9cd275d3f82a1a62a509cacfb6a1acf654cc0afae4616b596"
   backend: "go"
-  symbol: "github.com/greatliontech/ocifs.TestMountIDReusableAfterUnmount"
+  symbol: "github.com/greatliontech/ocifs/mount.TestMountIDReusableAfterUnmount"
   role: BINDING_ROLE_TESTS
-  shape_hash: "3326624954ed0b8dc300564e1ff80c7d219d293c1800fb16819bfa356e660d99"
+  shape_hash: "5149fb1fef5a853b5bbd1e4c8ed9c3fac5f8d9d40f089d216d2ca94cdba8ea06"
 }
 
 bindings {
@@ -1169,4 +1169,34 @@ bindings {
   symbol: "github.com/greatliontech/ocifs/internal/store.TestCondemnedExportGoneBeforeRemoval"
   role: BINDING_ROLE_TESTS
   shape_hash: "2aa7e080ff6dd19d1118fb2d8b7696a3ebfb3286ebce518c4b80218a86c49b95"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  source_hash: "2db2b35a2cda38f9cd275d3f82a1a62a509cacfb6a1acf654cc0afae4616b596"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.Store.ClaimMount"
+  role: BINDING_ROLE_IMPLEMENTS
+  shape_hash: "0063fb171362c01edc2ecf1d9d87286d63563e8d6dcf2fea240b5bdacd07ef4d"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  source_hash: "2db2b35a2cda38f9cd275d3f82a1a62a509cacfb6a1acf654cc0afae4616b596"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/internal/store.TestClaimMountAndNewMountStateLivenessOrder"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "721cfbec4f5f2e0bae1adea9b2f2e10318b4aceb29bf34d91eefa0f6ecec3a14"
+}
+
+bindings {
+  requirement_id: "REQ-store-mount-registry"
+  content_hash: "ce089e920d310ccca73bde00bb99f4e27e8382048cf74bdefeca630a92392b14"
+  source_hash: "2db2b35a2cda38f9cd275d3f82a1a62a509cacfb6a1acf654cc0afae4616b596"
+  backend: "go"
+  symbol: "github.com/greatliontech/ocifs/mount.TestDuplicateLiveMountIDRefusedWithoutDetachingLiveMount"
+  role: BINDING_ROLE_TESTS
+  shape_hash: "eddf479d61e0324ccc34cdc4f670bbb93af57808790a7fc08f4aac501c840ca0"
 }

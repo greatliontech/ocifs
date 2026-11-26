@@ -149,6 +149,12 @@ func ingestLockFor(root string) *sync.Mutex {
 	return m.(*sync.Mutex)
 }
 
+// Internal is a token type permitting sibling packages under the
+// github.com/greatliontech/ocifs/... import subtree (such as the
+// separate ocifs/mount module) to retrieve a *Store handle without
+// exposing internal types to external consumers.
+type Internal struct{}
+
 // Config is a store's construction, whole: everything a consumer
 // configures, taken once — a consumer sets nothing after the store
 // is shared.
@@ -294,6 +300,17 @@ func NewStore(cfg Config) (*Store, error) {
 // id can place the state outside the mounts/ tier
 // (api.md REQ-api-mount-id).
 func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) {
+	return s.prepareMountState(id, false)
+}
+
+// NewMountStateClaimed prepares mounts/<id> when the caller already
+// holds locks/mount-<id> via ClaimMount(id), so detachStaleMount and
+// directory setup execute strictly under the held mount claim.
+func (s *Store) NewMountStateClaimed(id string) (stateDir, mountDir string, err error) {
+	return s.prepareMountState(id, true)
+}
+
+func (s *Store) prepareMountState(id string, alreadyClaimed bool) (stateDir, mountDir string, err error) {
 	if id == "" {
 		uid, err := uuid.NewRandom()
 		if err != nil {
@@ -310,21 +327,17 @@ func (s *Store) NewMountState(id string) (stateDir, mountDir string, err error) 
 		if !errors.Is(err, os.ErrExist) {
 			return "", "", err
 		}
-		// A rowless state directory is scaffolding the next mount of
-		// this id adopts — never a refusal; a LIVE row is an active
-		// mount and refuses (re-checked transactionally at
-		// registration — REQ-store-mount-registry). Detach comes
-		// FIRST, unconditionally: a leftover kernel mount from a
-		// killed predecessor would wedge the ReadDir below, and
-		// detach is idempotent on a bare directory.
-		detachStaleMount(mountDir)
-		// Fail fast on a live id: the claim lock is the verdict
-		// (held-lock liveness; held and undecided both read live);
-		// registration re-arbitrates by acquiring it for real. A
-		// dead row is left for the registration to overwrite.
-		if s.mountClaimHeld(id) {
+		// Check liveness FIRST — before detachStaleMount — because
+		// mountClaimHeld only inspects locks/mount-<id> (never a
+		// potentially wedged mountDir), whereas detaching first would
+		// lazy-unmount a live serving mount of the same id.
+		if !alreadyClaimed && s.mountClaimHeld(id) {
 			return "", "", fmt.Errorf("mount id %q is in use by a live mount", id)
 		}
+		// Now proven dead: detach any leftover kernel mount from a
+		// killed predecessor before ReadDir so a dead FUSE endpoint
+		// cannot wedge directory inspection.
+		detachStaleMount(mountDir)
 		entries, err := os.ReadDir(mountDir)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return "", "", err

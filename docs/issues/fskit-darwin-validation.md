@@ -1,7 +1,7 @@
 # FSKit backend awaits its darwin Tier-2 mount validation
 
 The darwin backend is authored and its portable core is pinned on
-linux: the Volume/FileSystem implementation (`internal/fskitfs`)
+linux: the Volume/FileSystem implementation (`mount/internal/fskitfs`)
 runs the full read-only contract in the linux suite — identity,
 attributes with fallbacks, enumeration cookies and the constant
 verifier, short-read-at-EOF content, EROFS from every mutating
@@ -12,7 +12,7 @@ network gone. `GOOS=darwin` builds are clean.
 What no linux test can reach is the platform half: FSKit spawning
 the signed extension, NSExtensionMain hosting the Go runtime,
 ObjC-bridge dispatch into the Volume, and the orchestrated
-`mount -F -t OcifsFS` path in `mount_darwin.go`. fskit-go's own
+`mount -F -t OcifsFS` path in `mount/mount_darwin.go`. fskit-go's own
 Tier-2 status is unproven (its validation README says the bootstrap
 has never run on a real Mac), so this validation is a double
 experiment: the binding's bootstrap and ocifs's module together.
@@ -43,7 +43,7 @@ To validate, on macOS 15.4+ with a paid Apple Developer team:
 
 Held-lock liveness adds a decision this arc must make before
 landing: the mount's claim lock is held by the REGISTRANT (the
-ocifs.Mount caller), while on darwin the SERVING process is the
+mount.Mount caller), while on darwin the SERVING process is the
 FSKit appex — registrant death releases the claim and a sweeper
 would reclaim state under a live appex serve. The identity scheme
 this replaced judged the same registrant, so nothing regressed,

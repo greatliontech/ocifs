@@ -14,6 +14,23 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// ReapMounts lazily detaches every mount whose mountpoint lies under
+// (or is) dir, then verifies none remain.
+func ReapMounts(dir string) error {
+	return reapMounts(dir)
+}
+
+// CanonicalBase resolves dir to the kernel-canonical absolute path
+// the mount table reports, resolving symlinks on ancestors only.
+func CanonicalBase(dir string) (string, error) {
+	return canonicalBase(dir)
+}
+
+// MountTable returns the mountpoints currently at or under base.
+func MountTable(base string) ([]string, error) {
+	return mountTable(base)
+}
+
 // reapMounts lazily detaches every mount whose mountpoint lies under
 // (or is) dir, then verifies none remain. A test process killed
 // mid-mount leaves kernel FUSE mounts whose server is gone; any path

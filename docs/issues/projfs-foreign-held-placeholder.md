@@ -2,7 +2,7 @@
 
 projection.md's read-only contract has the projected placeholder
 state removed at unmount, foreign files and their spine excepted.
-The windows backend's residue sweep (`internal/projfsfs/serve_windows.go`)
+The windows backend's residue sweep (`mount/internal/projfsfs/serve_windows.go`)
 removes each placeholder, clears a read-only attribute metadata dirt
 left and retries once; a placeholder a foreign process holds open
 without delete sharing answers the removal with a sharing violation

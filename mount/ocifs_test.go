@@ -1,6 +1,6 @@
 //go:build linux
 
-package ocifs
+package mount
 
 import (
 	"archive/tar"
@@ -20,12 +20,13 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/greatliontech/ocifs"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 // TestMountLocalImage mounts an image served by an in-process
 // registry on a loopback socket and reads it back through the FUSE
-// mountpoint: the full pull → store → unify → mount path with no
+// mountpoint: the full pull -> store -> unify -> mount path with no
 // external network.
 func TestMountLocalImage(t *testing.T) {
 	skipUnderMutationCampaign(t)
@@ -85,11 +86,11 @@ func TestMountLocalImage(t *testing.T) {
 		}
 	}
 
-	ofs, err := New(WithWorkDir(workDir))
+	ofs, err := ocifs.New(ocifs.WithWorkDir(workDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	im, err := ofs.Mount(refStr, MountWithTargetPath(mnt))
+	im, err := Mount(ofs, refStr, WithTargetPath(mnt))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +121,31 @@ func TestMountLocalImage(t *testing.T) {
 		t.Fatal("config file not accessible")
 	}
 
-	var hash v1.Hash = im.img.Hash()
+	var hash v1.Hash = im.Digest()
 	if hash == (v1.Hash{}) {
 		t.Fatal("empty image hash")
+	}
+}
+
+// TestFailedMountLeavesNoMountDir: a mount that fails at acquisition
+// must not strand an orphan directory under the store's mounts/ tier.
+func TestFailedMountLeavesNoMountDir(t *testing.T) {
+	skipUnderMutationCampaign(t)
+	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-mountfail"))
+
+	workDir := filepath.Join(scratch, "work")
+	ofs, err := ocifs.New(ocifs.WithWorkDir(workDir), ocifs.WithPullPolicy(ocifs.PullNever))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Mount(ofs, "registry.invalid/absent:v1"); err == nil {
+		t.Fatal("mount of an uncached image under PullNever succeeded")
+	}
+	entries, err := os.ReadDir(filepath.Join(workDir, "mounts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("failed mount left %d orphan entries under mounts/", len(entries))
 	}
 }

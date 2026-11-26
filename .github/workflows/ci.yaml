@@ -1,6 +1,7 @@
 # The suite on every operating system pb builds for: the store and
 # the export are witnessed where they run, what a platform cannot
-# mount skipping as the suite says.
+# mount skipping as the suite says, and the records tier checks the
+# stipulator corpus and bindings across both modules.
 name: CI
 
 on:
@@ -18,12 +19,37 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            mount/go.sum
+            go.work.sum
+      - name: Verify module boundaries and absence of replace directives
+        shell: bash
+        run: |
+          if grep -E 'go-fuse|fskit-go|projfs-go|purego|spf13/cobra|spf13/pflag|go-winio' go.mod go.sum; then
+            echo "root ocifs module must not depend on mount or CLI libraries" >&2
+            exit 1
+          fi
+          if grep -E '^[[:space:]]*replace([[:space:]]|\()' go.mod mount/go.mod; then
+            echo "published go.mod files must not contain replace directives" >&2
+            exit 1
+          fi
+          root_go="$(awk '/^go / {print $2}' go.mod)"
+          mount_go="$(awk '/^go / {print $2}' mount/go.mod)"
+          work_go="$(awk '/^go / {print $2}' go.work)"
+          if [ "$root_go" != "$mount_go" ] || [ "$root_go" != "$work_go" ]; then
+            echo "go version mismatch: root=$root_go mount=$mount_go work=$work_go" >&2
+            exit 1
+          fi
       # The acceptance arms enter a user namespace; Ubuntu 24.04
       # restricts unprivileged ones through AppArmor for unconfined
       # programs. A host without the knob has no such restriction.
@@ -33,5 +59,54 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - run: go vet ./...
-      - run: go test -cover ./... -count=1 -timeout=30m
+      - name: Vet root module standalone (GOWORK=off) and mount module
+        run: |
+          GOWORK=off go vet ./...
+          go -C mount vet ./...
+        shell: bash
+      - name: Test root and mount modules with -race (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          GOWORK=off go test -race -cover ./... -count=1 -timeout=30m
+          go -C mount test -race -cover ./... -count=1 -timeout=30m
+      - name: Test root and mount modules (macOS / Windows)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          GOWORK=off go test -cover ./... -count=1 -timeout=30m
+          go -C mount test -cover ./... -count=1 -timeout=30m
+      - name: Verify standalone mount build when pinned to current root tag
+        shell: bash
+        run: |
+          latest_tag="$( (git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true) | head -n1 )"
+          req_ver="$(awk '$1 == "github.com/greatliontech/ocifs" {print $2}' mount/go.mod)"
+          if [ -n "$latest_tag" ] && [ "$req_ver" = "$latest_tag" ] && \
+             git diff --quiet "$latest_tag" HEAD -- ':(exclude)mount' ':(exclude)go.work' ':(exclude)go.work.sum'; then
+            GOWORK=off go -C mount vet ./...
+          fi
+
+  records:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            mount/go.sum
+            go.work.sum
+      - run: go install github.com/greatliontech/stipulator/cmd/stipulator@v0.78.0
+      - run: stipulator compile
+      - name: Every binding current and resolved
+        shell: bash
+        run: |
+          stipulator verify --no-test --view bindings > bindings.txt
+          if grep -E 'REQ-' bindings.txt | grep -vE ' current +resolved ' | grep -q .; then
+            echo "bindings not current and resolved:" >&2
+            grep -E 'REQ-' bindings.txt | grep -vE ' current +resolved ' >&2
+            exit 1
+          fi
+          grep -cE ' current +resolved ' bindings.txt

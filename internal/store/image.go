@@ -21,7 +21,10 @@ func (i *Image) Hash() v1.Hash {
 }
 
 func (i *Image) ConfigFile() *v1.ConfigFile {
-	return i.conf
+	if i.conf == nil {
+		return nil
+	}
+	return i.conf.DeepCopy()
 }
 
 // Layers returns the image's recorded layer entries, base to top.

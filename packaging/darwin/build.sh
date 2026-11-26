@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build and code-sign ocifs.app: the host bundle carrying the ocifs
-# CLI and the OcifsFS FSKit app extension (cmd/ocifs-fskit). Run on
+# CLI and the OcifsFS FSKit app extension (mount/cmd/ocifs-fskit). Run on
 # macOS 15.4+ with Go and Xcode command-line tools. Mirrors the
 # fskit-go validation bundle recipe.
 #
@@ -33,8 +33,8 @@ APPEX=$APP/Contents/PlugIns/OcifsFS.appex
 echo "==> building binaries (native arch, no cgo)"
 rm -rf "$OUT"
 mkdir -p "$APPEX/Contents/MacOS" "$APP/Contents/MacOS"
-CGO_ENABLED=0 go build -o "$APPEX/Contents/MacOS/OcifsFS" ./cmd/ocifs-fskit
-CGO_ENABLED=0 go build -o "$APP/Contents/MacOS/ocifs" ./cmd/ocifs
+(cd mount && CGO_ENABLED=0 go build -o "../$APPEX/Contents/MacOS/OcifsFS" ./cmd/ocifs-fskit)
+(cd mount && CGO_ENABLED=0 go build -o "../$APP/Contents/MacOS/ocifs" ./cmd/ocifs)
 
 echo "==> assembling bundle"
 cp "$HERE/appex-Info.plist" "$APPEX/Contents/Info.plist"

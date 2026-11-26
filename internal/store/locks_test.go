@@ -346,3 +346,104 @@ func requireRetired(t *testing.T, path string) {
 		t.Fatalf("retired lock file %s still named: stat err=%v", path, err)
 	}
 }
+
+func TestClaimUpperRejectsInvalidIDs(t *testing.T) {
+	outer := scratchDir(t)
+	dir := filepath.Join(outer, "store")
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	escaped := filepath.Join(outer, "escaped-lock")
+	for _, bad := range []string{
+		"",
+		".",
+		"..",
+		"a/b",
+		`a\b`,
+		"bad\x00id",
+		"bad\nid",
+		"a/../ingest",
+		"a/../mount-foo",
+		"a/../../escaped-lock",
+	} {
+		l, err := s.ClaimUpper(bad)
+		if err == nil {
+			l.Close()
+			t.Fatalf("ClaimUpper(%q) succeeded, want single-path-element rejection", bad)
+		}
+		if !strings.Contains(err.Error(), "not a single path element") {
+			t.Fatalf("ClaimUpper(%q) = %v, want single-path-element error", bad, err)
+		}
+	}
+	assertLocksTierEmpty(t, filepath.Join(dir, "locks"))
+	if _, err := os.Stat(escaped); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("traversal created file outside store at %s: err=%v", escaped, err)
+	}
+}
+
+func TestImageConfigFileDeepCopy(t *testing.T) {
+	img := &Image{conf: &v1.ConfigFile{
+		OS:           "linux",
+		Architecture: "amd64",
+		Config:       v1.Config{Entrypoint: []string{"/bin/plugin"}},
+	}}
+	got := img.ConfigFile()
+	got.OS = "windows"
+	got.Config.Entrypoint[0] = "/tampered"
+
+	again := img.ConfigFile()
+	if again.OS != "linux" || again.Config.Entrypoint[0] != "/bin/plugin" {
+		t.Fatalf("ConfigFile() aliased internal state: %+v", again)
+	}
+	if (*Image)(nil).safeNilConfig() != nil {
+		t.Fatal("nil config should return nil")
+	}
+}
+
+func (i *Image) safeNilConfig() *v1.ConfigFile {
+	var empty Image
+	return empty.ConfigFile()
+}
+
+func TestClaimMountAndNewMountStateLivenessOrder(t *testing.T) {
+	dir := scratchDir(t)
+	s, err := NewStore(Config{Path: dir, Auth: anonKeychain{}, PullPolicy: PullNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	// Invalid IDs are rejected without creating lock files.
+	for _, bad := range []string{".", "..", "a/b", `a\b`, "a/../ingest"} {
+		if _, _, err := s.ClaimMount(bad); err == nil || !strings.Contains(err.Error(), "not a single path element") {
+			t.Fatalf("ClaimMount(%q) = %v, want single-path-element error", bad, err)
+		}
+	}
+	assertLocksTierEmpty(t, filepath.Join(dir, "locks"))
+
+	// Claiming an ID, preparing its state dir, then rejecting a second
+	// ClaimMount and an unclaimed NewMountState while held.
+	id, lock, err := s.ClaimMount("m-held")
+	if err != nil || id != "m-held" {
+		t.Fatalf("ClaimMount(m-held) = %q, %v", id, err)
+	}
+	stateDir, _, err := s.NewMountStateClaimed(id)
+	if err != nil {
+		lock.Retire()
+		t.Fatal(err)
+	}
+	if _, _, err := s.ClaimMount("m-held"); err == nil || !strings.Contains(err.Error(), "in use by a live mount") {
+		lock.Retire()
+		t.Fatalf("second ClaimMount(m-held) = %v, want in-use error", err)
+	}
+	if _, _, err := s.NewMountState("m-held"); err == nil || !strings.Contains(err.Error(), "in use by a live mount") {
+		lock.Retire()
+		t.Fatalf("unclaimed NewMountState(m-held) while held = %v, want in-use error", err)
+	}
+	_ = os.RemoveAll(stateDir)
+	s.AbortMountClaim(context.Background(), id, lock)
+	assertLocksTierEmpty(t, filepath.Join(dir, "locks"))
+}

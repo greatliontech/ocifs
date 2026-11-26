@@ -60,7 +60,7 @@ func TestCommitSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	img, err := ofs.Commit(context.Background(), refStr, CommitWithUpperDir(upDir))
+	img, err := ofs.Commit(context.Background(), refStr, nil, CommitWithUpperDir(upDir))
 	if err != nil {
 		t.Fatal(err)
 	}

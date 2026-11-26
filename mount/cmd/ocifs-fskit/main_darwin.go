@@ -22,7 +22,7 @@ import (
 	"github.com/ebitengine/purego"
 	fskit "github.com/greatliontech/fskit-go"
 
-	"github.com/greatliontech/ocifs/internal/fskitfs"
+	"github.com/greatliontech/ocifs/mount/internal/fskitfs"
 )
 
 // principalClass MUST match EXExtensionPrincipalClass in the appex

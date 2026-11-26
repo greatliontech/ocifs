@@ -1,6 +1,6 @@
 //go:build linux
 
-package ocifs
+package mount
 
 import (
 	"archive/tar"
@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,16 +23,13 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/greatliontech/gmdb/oslock"
+	"github.com/greatliontech/ocifs"
 	"github.com/greatliontech/ocifs/internal/scratchtest"
 )
 
 var wfixMtime = time.Date(2022, 5, 6, 7, 8, 9, 0, time.UTC)
 
-// writableFixtureEnv pushes an image whose entries the invoking user
-// owns — default_permissions enforces PRESENTED attributes, so an
-// unprivileged caller can only write beneath entries it could own
-// (the uid-0 image case is the user-namespace deployment).
-func writableFixtureEnv(t *testing.T, scratchName string, extra ...Option) (*OCIFS, string) {
+func writableFixtureEnv(t *testing.T, scratchName string, extra ...ocifs.Option) (*ocifs.OCIFS, string) {
 	t.Helper()
 	skipUnderMutationCampaign(t)
 	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
@@ -83,18 +81,14 @@ func writableFixtureEnv(t *testing.T, scratchName string, extra ...Option) (*OCI
 		t.Fatal(err)
 	}
 	scratch := scratchtest.In(t, filepath.Join(".scratch", "ocifs-"+scratchName))
-	opts := append([]Option{WithWorkDir(filepath.Join(scratch, "work"))}, extra...)
-	ofs, err := New(opts...)
+	opts := append([]ocifs.Option{ocifs.WithWorkDir(filepath.Join(scratch, "work"))}, extra...)
+	ofs, err := ocifs.New(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ofs, refStr
 }
 
-// TestWritableMountSurface pins REQ-api-mount-writable end to end:
-// mount over an upper, mutate through the mount, unmount leaving the
-// upper intact, remount observing the changes, commit, and mount the
-// committed image read-only observing the same tree.
 func TestWritableMountSurface(t *testing.T) {
 	ofs, refStr := writableFixtureEnv(t, "wsurf")
 	upperDir := filepath.Join(".scratch", "ocifs-wsurf", "up")
@@ -102,13 +96,12 @@ func TestWritableMountSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Both upper forms at once: refused.
-	if _, err := ofs.Mount(refStr, MountWithUpperDir(upperDir), MountWithNamedUpper("x")); err == nil ||
+	if _, err := Mount(ofs, refStr, WithUpperDir(upperDir), WithNamedUpper("x")); err == nil ||
 		!strings.Contains(err.Error(), "at most one upper") {
 		t.Fatalf("double upper: %v", err)
 	}
 
-	im, err := ofs.Mount(refStr, MountWithUpperDir(upperDir))
+	im, err := Mount(ofs, refStr, WithUpperDir(upperDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +123,7 @@ func TestWritableMountSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The upper outlives the mount; a remount presents the changes.
-	im2, err := ofs.Mount(refStr, MountWithUpperDir(upperDir))
+	im2, err := Mount(ofs, refStr, WithUpperDir(upperDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,13 +143,12 @@ func TestWritableMountSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Commit the upper and mount the result read-only.
 	ctx := t.Context()
-	committed, err := ofs.Commit(ctx, refStr, CommitWithUpperDir(upperDir))
+	committed, err := ofs.Commit(ctx, refStr, ocifs.CommitWithUpperDir(upperDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cim, err := ofs.Mount(LocalRef(committed.Digest()))
+	cim, err := Mount(ofs, ocifs.LocalRef(committed.Digest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,19 +172,14 @@ func TestWritableMountSurface(t *testing.T) {
 	}
 }
 
-// TestWritableNamedUpper pins the store-managed arm: creation on
-// first use, base binding refusing a different image, and commit by
-// name.
 func TestWritableNamedUpper(t *testing.T) {
 	ofs, refStr := writableFixtureEnv(t, "wnamed")
 
-	im, err := ofs.Mount(refStr, MountWithNamedUpper("scratchpad"))
+	im, err := Mount(ofs, refStr, WithNamedUpper("scratchpad"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// One writable mount at a time per named upper: a second is
-	// refused while the first serves, admitted after unmount.
-	if _, err := ofs.Mount(refStr, MountWithNamedUpper("scratchpad")); err == nil ||
+	if _, err := Mount(ofs, refStr, WithNamedUpper("scratchpad")); err == nil ||
 		!strings.Contains(err.Error(), "already serves") {
 		t.Fatalf("second writable mount: %v", err)
 	}
@@ -203,7 +189,7 @@ func TestWritableNamedUpper(t *testing.T) {
 	if err := im.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	im2, err := ofs.Mount(refStr, MountWithNamedUpper("scratchpad"))
+	im2, err := Mount(ofs, refStr, WithNamedUpper("scratchpad"))
 	if err != nil {
 		t.Fatalf("remount after unmount: %v", err)
 	}
@@ -212,20 +198,15 @@ func TestWritableNamedUpper(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	committed, err := ofs.Commit(ctx, refStr, CommitWithNamedUpper("scratchpad"))
+	committed, err := ofs.Commit(ctx, refStr, ocifs.CommitWithNamedUpper("scratchpad"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same named upper refuses a different base: the committed
-	// image is a different digest.
-	if _, err := ofs.Mount(LocalRef(committed.Digest()), MountWithNamedUpper("scratchpad")); err == nil ||
+	if _, err := Mount(ofs, ocifs.LocalRef(committed.Digest()), WithNamedUpper("scratchpad")); err == nil ||
 		!strings.Contains(err.Error(), "bound to base") {
 		t.Fatalf("foreign base accepted: %v", err)
 	}
-	// The refusal released the upper claim it took before the
-	// binding check — a leaked claim would refuse this remount (and
-	// RemoveUpper) forever in this process.
-	im3, err := ofs.Mount(refStr, MountWithNamedUpper("scratchpad"))
+	im3, err := Mount(ofs, refStr, WithNamedUpper("scratchpad"))
 	if err != nil {
 		t.Fatalf("upper claim leaked by refused mount: %v", err)
 	}
@@ -234,24 +215,19 @@ func TestWritableNamedUpper(t *testing.T) {
 	}
 }
 
-// TestMountIDReusableAfterUnmount pins the reuse clause of
-// REQ-store-mount-registry: a clean unmount releases the id — the
-// rowless state directory is adopted by the next mount, not
-// refused.
 func TestMountIDReusableAfterUnmount(t *testing.T) {
 	ofs, refStr := writableFixtureEnv(t, "wreuse")
-	im, err := ofs.Mount(refStr, MountWithID("reused-id"))
+	im, err := Mount(ofs, refStr, WithID("reused-id"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := im.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	// The row is gone with the unmount (deregistration).
-	if _, _, err := ofs.MountReport("reused-id"); err == nil {
+	if _, _, err := ReportOf(ofs, "reused-id"); err == nil {
 		t.Fatal("mount row survived clean unmount")
 	}
-	im2, err := ofs.Mount(refStr, MountWithID("reused-id"))
+	im2, err := Mount(ofs, refStr, WithID("reused-id"))
 	if err != nil {
 		t.Fatalf("id reuse after clean unmount: %v", err)
 	}
@@ -260,13 +236,60 @@ func TestMountIDReusableAfterUnmount(t *testing.T) {
 	}
 }
 
-// TestNamedUpperClaimPrecedesUpperCreation pins writable.md
-// REQ-writable-base-binding's ordering: the upper's serve claim is
-// acquired BEFORE any bookkeeping write for the upper, so a mount
-// refused by a held claim leaves no upper tree and no binding —
-// nothing a concurrent RemoveUpper holding that same claim could
-// race against. The holder is simulated directly on the claim file
-// the spec names (locks/upper-<name>).
+func TestDuplicateLiveMountIDRefusedWithoutDetachingLiveMount(t *testing.T) {
+	ofs, refStr := writableFixtureEnv(t, "wduplive")
+	im, err := Mount(ofs, refStr, WithID("live-id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if im != nil {
+			if err := im.Unmount(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
+	if got, err := os.ReadFile(filepath.Join(im.MountPoint(), "etc", "keep")); err != nil || string(got) != "keep" {
+		t.Fatalf("initial live mount content = %q, %v; want keep", got, err)
+	}
+
+	// Sequential duplicate mount with the same ID must fail without
+	// detaching the live mount's kernel mountpoint or deleting mounts/live-id.
+	if _, err := Mount(ofs, refStr, WithID("live-id")); err == nil || !strings.Contains(err.Error(), "in use by a live mount") {
+		t.Fatalf("sequential duplicate live ID = %v, want in-use error", err)
+	}
+
+	// Concurrent duplicate mounts with the same ID must also all fail cleanly.
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if m, err := Mount(ofs, refStr, WithID("live-id")); err == nil {
+				_ = m.Unmount()
+				t.Errorf("concurrent duplicate live ID succeeded")
+			} else if !strings.Contains(err.Error(), "in use by a live mount") {
+				t.Errorf("concurrent duplicate live ID = %v, want in-use error", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// The original live mount must still serve its files intact.
+	got, err := os.ReadFile(filepath.Join(im.MountPoint(), "etc", "keep"))
+	if err != nil {
+		t.Fatalf("live mount detached or stateDir deleted by duplicate ID attempt: %v", err)
+	}
+	if string(got) != "keep" {
+		t.Fatalf("live mount content = %q, want keep", got)
+	}
+	if err := im.Unmount(); err != nil {
+		t.Fatal(err)
+	}
+	im = nil
+}
+
 func TestNamedUpperClaimPrecedesUpperCreation(t *testing.T) {
 	ofs, refStr := writableFixtureEnv(t, "wupperclaim")
 	work := filepath.Join(".scratch", "ocifs-wupperclaim", "work")
@@ -274,26 +297,21 @@ func TestNamedUpperClaimPrecedesUpperCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ofs.Mount(refStr, MountWithNamedUpper("ux")); err == nil ||
+	if _, err := Mount(ofs, refStr, WithNamedUpper("ux")); err == nil ||
 		!strings.Contains(err.Error(), "already serves") {
-		// The substring binds the refusal to the upper-claim
-		// mechanism: a mis-derived work path would fail some other
-		// way and pass vacuously.
 		t.Fatalf("mount against a held upper claim: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(work, "uppers", "ux")); !os.IsNotExist(err) {
 		t.Fatalf("refused mount created the upper tree: %v", err)
 	}
 	holder.Close()
-	im, err := ofs.Mount(refStr, MountWithNamedUpper("ux"))
+	im, err := Mount(ofs, refStr, WithNamedUpper("ux"))
 	if err != nil {
 		t.Fatalf("mount after release: %v", err)
 	}
 	if err := im.Unmount(); err != nil {
 		t.Fatal(err)
 	}
-	// The claim retired with the unmount: the file is gone and the
-	// name is immediately claimable.
 	if _, err := os.Stat(filepath.Join(work, "locks", "upper-ux")); !os.IsNotExist(err) {
 		t.Fatalf("upper claim file survived unmount: %v", err)
 	}
