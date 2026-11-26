@@ -88,7 +88,7 @@ func TestVerifyPortableDetectsAllTamperingClasses(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// 3. Symlink target tampering on Unix.
+		// 3. Symlink target and (on Darwin) symlink mode tampering on Unix.
 		symPath := filepath.Join(outDir, "bin", "current")
 		if err := os.Remove(symPath); err != nil {
 			t.Fatal(err)
@@ -96,12 +96,29 @@ func TestVerifyPortableDetectsAllTamperingClasses(t *testing.T) {
 		if err := os.Symlink("wrong", symPath); err != nil {
 			t.Fatal(err)
 		}
-		if err := Verify(context.Background(), root, view); !errors.Is(err, ErrDirtyExport) {
-			t.Fatalf("symlink drift = %v, want ErrDirtyExport", err)
+		if err := lchmod(root, "bin/current", 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := Verify(context.Background(), root, view); !errors.Is(err, ErrDirtyExport) || !strings.Contains(err.Error(), "target") {
+			t.Fatalf("symlink target drift = %v, want ErrDirtyExport on target", err)
 		}
 		_ = os.Remove(symPath)
 		if err := os.Symlink("tool", symPath); err != nil {
 			t.Fatal(err)
+		}
+		if runtime.GOOS == "darwin" {
+			if err := lchmod(root, "bin/current", 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := Verify(context.Background(), root, view); !errors.Is(err, ErrDirtyExport) || !strings.Contains(err.Error(), "mode") {
+				t.Fatalf("darwin symlink mode drift = %v, want ErrDirtyExport on mode", err)
+			}
+		}
+		if err := lchmod(root, "bin/current", 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := Verify(context.Background(), root, view); err != nil {
+			t.Fatalf("restored tree failed Verify: %v", err)
 		}
 	}
 
@@ -109,11 +126,19 @@ func TestVerifyPortableDetectsAllTamperingClasses(t *testing.T) {
 	if err := os.Remove(toolPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := Verify(context.Background(), root, view); !errors.Is(err, ErrDirtyExport) {
-		t.Fatalf("missing entry = %v, want ErrDirtyExport", err)
+	if err := Verify(context.Background(), root, view); !errors.Is(err, ErrDirtyExport) || !strings.Contains(err.Error(), "missing entry") {
+		t.Fatalf("missing entry = %v, want ErrDirtyExport on missing entry", err)
 	}
 	if err := os.WriteFile(toolPath, payload, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(toolPath, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Verify(context.Background(), root, view); err != nil {
+		t.Fatalf("restored tree after missing-entry check failed Verify: %v", err)
 	}
 
 	// 5. Missing/zero or non-sha256 digest in view must fail closed on the digest guard itself.
